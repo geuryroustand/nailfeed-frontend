@@ -1,0 +1,31 @@
+"use client"
+
+import { useEffect } from "react"
+import { Button } from "@/components/ui/button"
+
+export default function Error({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string }
+  reset: () => void
+}) {
+  useEffect(() => {
+    console.error(error)
+  }, [error])
+
+  return (
+    <div className="container flex flex-col items-center justify-center min-h-[70vh] py-12">
+      <div className="flex flex-col items-center justify-center">
+        <h2 className="text-2xl font-semibold mb-2">Something went wrong</h2>
+        <p className="text-muted-foreground mb-6">Sorry, an error occurred while loading this page.</p>
+        <div className="flex gap-4">
+          <Button onClick={reset}>Try again</Button>
+          <Button variant="outline" asChild>
+            <a href="/">Go home</a>
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}

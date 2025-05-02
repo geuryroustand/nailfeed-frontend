@@ -1,4 +1,4 @@
-export default function NotFound() {
+export default function GlobalNotFound() {
   return (
     <div className="container flex flex-col items-center justify-center min-h-[70vh] py-12">
       <div className="flex flex-col items-center justify-center">
