@@ -1,0 +1,314 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
+import { motion } from "framer-motion"
+import { useCollections, type Collection } from "@/context/collections-context"
+import { Button } from "@/components/ui/button"
+import { ArrowLeft, Grid, Columns, Bookmark, Heart, MessageCircle, Share2, Lock, Users } from "lucide-react"
+import Header from "@/components/header"
+import BottomNav from "@/components/bottom-nav"
+import { Toaster } from "@/components/ui/toaster"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import Link from "next/link"
+
+// Sample posts data - in a real app, you would fetch this from an API
+const allPosts = [
+  {
+    id: 1,
+    username: "nailartist",
+    userImage: "/serene-woman-gaze.png",
+    image: "/glitter-french-elegance.png",
+    description: "French manicure with a twist! ✨ Added some glitter for that extra sparkle. What do you think?",
+    likes: 234,
+    comments: [],
+    timestamp: "2h ago",
+  },
+  {
+    id: 2,
+    username: "trendynails",
+    userImage: "/painted-nails-close-up.png",
+    image: "/geometric-harmony.png",
+    description: "Geometric vibes today! 📐 These took forever but I'm so happy with how they turned out.",
+    likes: 187,
+    comments: [],
+    timestamp: "5h ago",
+  },
+  {
+    id: 3,
+    username: "artsynails",
+    userImage: "/diverse-avatars.png",
+    image: "/vibrant-floral-nails.png",
+    description: "Spring is in the air! 🌸 Loving these floral designs for the season.",
+    likes: 312,
+    comments: [],
+    timestamp: "1d ago",
+  },
+  {
+    id: 4,
+    username: "nailpro",
+    userImage: "/diverse-avatars.png",
+    image: "/abstract-pastel-swirls.png",
+    description: "Abstract art but make it nails 🎨 Pastel swirls are my current obsession!",
+    likes: 156,
+    comments: [],
+    timestamp: "2d ago",
+  },
+  {
+    id: 5,
+    username: "nailpro",
+    userImage: "/diverse-avatars.png",
+    image: "/vibrant-abstract-nails.png",
+    description: "Bold and bright abstract design for a client today! She loved it! 💅",
+    likes: 278,
+    comments: [],
+    timestamp: "3d ago",
+  },
+  {
+    id: 6,
+    username: "luxurynails",
+    userImage: "/painted-nails-close-up.png",
+    image: "/shimmering-gold-flakes.png",
+    description: "Luxury gold flakes for a touch of elegance ✨ Perfect for special occasions!",
+    likes: 423,
+    comments: [],
+    timestamp: "4d ago",
+  },
+]
+
+export default function SharedCollectionPage() {
+  const params = useParams()
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const { collections } = useCollections()
+  const [collection, setCollection] = useState<Collection | null>(null)
+  const [posts, setPosts] = useState<any[]>([])
+  const [viewMode, setViewMode] = useState<"grid" | "masonry">("grid")
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [canEdit, setCanEdit] = useState(false)
+
+  useEffect(() => {
+    if (params.id) {
+      const token = searchParams.get("token")
+
+      // In a real app, you would validate the token with your backend
+      if (!token) {
+        router.push("/")
+        return
+      }
+
+      const foundCollection = collections.find((c) => c.id === params.id)
+      if (foundCollection) {
+        setCollection(foundCollection)
+
+        // Check if the user has edit permission
+        const userShare = foundCollection.shares.find((share) => share.type === "user" && share.isActive)
+        setCanEdit(userShare?.permission === "edit")
+
+        // Filter posts that are in this collection
+        const collectionPosts = allPosts.filter((post) => foundCollection.postIds.includes(post.id))
+        setPosts(collectionPosts)
+      } else {
+        // In a real app, you would fetch the shared collection from the backend
+        // For now, we'll just redirect to home
+        router.push("/")
+      }
+    }
+  }, [params.id, collections, router, searchParams])
+
+  const handleSaveCollection = () => {
+    // In a real app, you would implement the logic to save this collection to the user's account
+    alert("This would save the collection to your account")
+  }
+
+  if (!collection) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500 mx-auto"></div>
+          <p className="mt-4 text-gray-500">Loading shared collection...</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <main className="min-h-screen bg-gray-50">
+      {/* Mobile Header - visible on mobile only */}
+      <div className="md:hidden">
+        <Header />
+      </div>
+
+      <div className="container max-w-4xl mx-auto px-4 pt-2 pb-16 md:py-8">
+        {/* Shared collection banner */}
+        <div className="bg-gradient-to-r from-pink-100 to-purple-100 rounded-xl p-4 mb-6">
+          <div className="flex items-center">
+            <div className="flex-1">
+              <h2 className="text-lg font-semibold">Shared Collection</h2>
+              <p className="text-sm text-gray-600">
+                This collection was shared with you by <span className="font-medium">nailartist</span>
+              </p>
+            </div>
+            {!isAuthenticated && (
+              <Button
+                onClick={() => router.push("/auth")}
+                className="bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600"
+              >
+                Sign up to save
+              </Button>
+            )}
+            {isAuthenticated && (
+              <Button onClick={handleSaveCollection} variant="outline" className="flex items-center">
+                <Bookmark className="h-4 w-4 mr-2" />
+                Save to my collections
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center mb-6">
+          <Button variant="ghost" size="sm" className="mr-4" onClick={() => router.back()}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div className="flex-1">
+            <div className="flex items-center">
+              <h1 className="text-2xl font-bold">{collection.name}</h1>
+              {collection.isPrivate && (
+                <div className="ml-2 bg-gray-100 text-gray-600 text-xs py-1 px-2 rounded-full flex items-center">
+                  <Lock className="h-3 w-3 mr-1" />
+                  Private
+                </div>
+              )}
+              <div className="ml-2 bg-blue-100 text-blue-600 text-xs py-1 px-2 rounded-full flex items-center">
+                <Users className="h-3 w-3 mr-1" />
+                Shared
+              </div>
+              {canEdit && (
+                <div className="ml-2 bg-green-100 text-green-600 text-xs py-1 px-2 rounded-full flex items-center">
+                  Can edit
+                </div>
+              )}
+            </div>
+            {collection.description && <p className="text-gray-500 mt-1">{collection.description}</p>}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between mb-6">
+          <p className="text-sm text-gray-500">
+            {collection.postIds.length} {collection.postIds.length === 1 ? "item" : "items"}
+          </p>
+          <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`h-8 w-8 p-0 ${viewMode === "grid" ? "bg-white text-pink-500 shadow-sm" : ""}`}
+              onClick={() => setViewMode("grid")}
+            >
+              <Grid className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`h-8 w-8 p-0 ${viewMode === "masonry" ? "bg-white text-pink-500 shadow-sm" : ""}`}
+              onClick={() => setViewMode("masonry")}
+            >
+              <Columns className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        {posts.length === 0 ? (
+          <div className="text-center py-16 bg-white rounded-xl shadow-sm">
+            <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+              <Bookmark className="h-8 w-8 text-gray-300" />
+            </div>
+            <h2 className="text-xl font-semibold mb-2">No items in this collection</h2>
+            <p className="text-gray-500 mb-6 max-w-md mx-auto">This collection is empty</p>
+          </div>
+        ) : (
+          <div
+            className={
+              viewMode === "grid" ? "grid grid-cols-2 md:grid-cols-3 gap-4" : "columns-2 md:columns-3 gap-4 space-y-4"
+            }
+          >
+            {posts.map((post) => (
+              <SharedPostItem key={post.id} post={post} viewMode={viewMode} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Mobile Bottom Nav - visible on mobile only */}
+      <div className="md:hidden">
+        <BottomNav activeTab="home" />
+      </div>
+
+      <Toaster />
+    </main>
+  )
+}
+
+interface SharedPostItemProps {
+  post: any
+  viewMode: "grid" | "masonry"
+}
+
+function SharedPostItem({ post, viewMode }: SharedPostItemProps) {
+  const [liked, setLiked] = useState(false)
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className={`relative group rounded-lg overflow-hidden ${viewMode === "masonry" ? "mb-4 break-inside-avoid" : ""}`}
+    >
+      <Link href={`/post/${post.id}`}>
+        <img
+          src={post.image || "/placeholder.svg"}
+          alt={post.description}
+          className="w-full h-full object-cover aspect-square"
+        />
+      </Link>
+
+      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-200">
+        <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <div className="flex items-center mb-2">
+            <Avatar className="h-6 w-6 mr-2">
+              <AvatarImage src={post.userImage || "/placeholder.svg"} alt={post.username} />
+              <AvatarFallback>{post.username.substring(0, 2).toUpperCase()}</AvatarFallback>
+            </Avatar>
+            <span className="text-white text-sm font-medium">{post.username}</span>
+          </div>
+          <div className="flex items-center text-white space-x-3">
+            <button
+              className="flex items-center space-x-1"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setLiked(!liked)
+              }}
+            >
+              <Heart className={`h-4 w-4 ${liked ? "fill-pink-500 text-pink-500" : ""}`} />
+              <span className="text-xs">{liked ? post.likes + 1 : post.likes}</span>
+            </button>
+            <div className="flex items-center space-x-1">
+              <MessageCircle className="h-4 w-4" />
+              <span className="text-xs">{post.comments.length}</span>
+            </div>
+            <button
+              className="flex items-center space-x-1 ml-auto"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                // Share functionality
+              }}
+            >
+              <Share2 className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
