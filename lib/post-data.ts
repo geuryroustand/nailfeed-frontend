@@ -37,71 +37,28 @@ export type PaginatedPostsResponse = {
   hasMore: boolean
 }
 
-// Rate limiting tracking
-const RATE_LIMIT = {
-  isLimited: false,
-  resetTime: 0,
-  consecutiveErrors: 0,
-}
-
 // Function to get paginated posts - tries API first, falls back to sample data
 export async function getPosts(limit = 3, cursor = 0): Promise<PaginatedPostsResponse> {
   console.log(`Getting posts with limit ${limit} and cursor ${cursor}`)
 
-  // Check if we should use sample data based on environment variable or active rate limiting
-  if (process.env.USE_SAMPLE_DATA === "true" || RATE_LIMIT.isLimited) {
-    console.log(
-      RATE_LIMIT.isLimited
-        ? `Using sample data due to active rate limiting (resets in ${Math.max(
-            0,
-            Math.floor((RATE_LIMIT.resetTime - Date.now()) / 1000),
-          )} seconds)`
-        : "Using sample data based on environment variable",
-    )
+  // Check if we should use sample data based on environment variable
+  if (process.env.USE_SAMPLE_DATA === "true") {
+    console.log("Using sample data based on environment variable")
     return getFallbackPosts(limit, cursor)
   }
 
   try {
     // Try to fetch posts from Strapi - no caching
     console.log("Fetching posts from Strapi without caching")
-    const response = await fetchPostsFromStrapi(limit, cursor)
-
-    // Reset consecutive errors counter on success
-    RATE_LIMIT.consecutiveErrors = 0
-
-    return response
+    return await fetchPostsFromStrapi(limit, cursor)
   } catch (error) {
     console.error("Error fetching posts from Strapi:", error)
 
     // Check if it's a rate limit error
     if (error instanceof Error && (error.message.includes("Too Many Requests") || error.message.includes("429"))) {
       console.log("Rate limit exceeded, using fallback data")
-
-      // Set rate limiting for 60 seconds (adjust based on actual API rate limit window)
-      RATE_LIMIT.isLimited = true
-      RATE_LIMIT.resetTime = Date.now() + 60000 // 1 minute cooldown
-
-      // Schedule reset of rate limit flag
-      setTimeout(() => {
-        RATE_LIMIT.isLimited = false
-        console.log("Rate limit period expired, will try API again on next request")
-      }, 60000)
     } else {
-      // Increment consecutive errors counter
-      RATE_LIMIT.consecutiveErrors++
-
-      // If we've had multiple consecutive errors, temporarily use fallback data
-      if (RATE_LIMIT.consecutiveErrors >= 3) {
-        RATE_LIMIT.isLimited = true
-        RATE_LIMIT.resetTime = Date.now() + 120000 // 2 minute cooldown
-
-        setTimeout(() => {
-          RATE_LIMIT.isLimited = false
-          RATE_LIMIT.consecutiveErrors = 0
-        }, 120000)
-
-        console.log("Multiple consecutive errors, cooling down API requests for 2 minutes")
-      }
+      console.log("Other API error, using fallback data")
     }
 
     return getFallbackPosts(limit, cursor)
@@ -112,22 +69,21 @@ export async function getPosts(limit = 3, cursor = 0): Promise<PaginatedPostsRes
 async function fetchPostsFromStrapi(limit = 3, cursor = 0): Promise<PaginatedPostsResponse> {
   try {
     // Use a smaller page size to reduce the chance of hitting rate limits
-    const pageSize = Math.min(limit, 1) // Even smaller page size (1) to reduce rate limiting
+    const pageSize = Math.min(limit, 2) // Even smaller page size (2) to reduce rate limiting
     const page = cursor > 0 ? Math.ceil(cursor / pageSize) + 1 : 1
 
     // Use the exact endpoint specified with pagination and specific populate parameters
-    // Reduce the fields we're requesting to minimize payload size
-    const endpoint = `/api/posts?pagination[page]=${page}&populate[mediaItems][populate][file][fields][0]=formats&populate[user][fields][0]=username&populate[user][populate][profileImage][fields][0]=formats&pagination[pageSize]=${pageSize}`
+    const endpoint = `/api/posts?pagination[page]=${page}&populate[mediaItems][populate][file][fields][0]=formats&populate[user][fields][0]=username&populate[user][fields][1]=displayName&populate[user][populate][profileImage][fields][0]=formats&pagination[pageSize]=${pageSize}`
     console.log(`Fetching from endpoint: ${endpoint}`)
 
     // Try with apiClient and retry logic with more conservative settings
     console.log("Using apiClient with conservative retry logic")
     const response = await fetchWithRetry(() => apiClient.get(endpoint, { cache: "no-store" }, true), {
-      maxRetries: 0, // No retries to avoid triggering rate limits
-      initialDelay: 5000, // Increased delay
+      maxRetries: 1, // Reduced to 1 retry only
+      initialDelay: 3000, // Increased delay
       maxDelay: 10000,
       backoffFactor: 2,
-      retryStatusCodes: [500, 502, 503, 504], // Removed 429 (rate limit) to handle differently
+      retryStatusCodes: [408, 500, 502, 503, 504], // Removed 429 (rate limit) to handle differently
       onRetry: (attempt, delay, error) => {
         console.log(`Retrying fetch (attempt ${attempt}) after ${delay}ms due to error:`, error)
       },
@@ -614,57 +570,24 @@ function getFallbackPosts(limit = 3, cursor = 0): PaginatedPostsResponse {
 export async function getPostById(idOrDocumentId: number | string): Promise<Post | null> {
   console.log(`Getting post with ID or documentId: ${idOrDocumentId}`)
 
-  // Check if we should use sample data based on environment variable or active rate limiting
-  if (process.env.USE_SAMPLE_DATA === "true" || RATE_LIMIT.isLimited) {
-    console.log(
-      RATE_LIMIT.isLimited
-        ? "Using sample data due to active rate limiting"
-        : "Using sample data based on environment variable",
-    )
+  // Check if we should use sample data based on environment variable
+  if (process.env.USE_SAMPLE_DATA === "true") {
+    console.log("Using sample data based on environment variable")
     return getFallbackPostById(idOrDocumentId)
   }
 
   try {
     // Try to fetch the post from Strapi
     console.log("Fetching post from Strapi")
-    const post = await fetchPostFromStrapi(idOrDocumentId)
-
-    // Reset consecutive errors counter on success
-    RATE_LIMIT.consecutiveErrors = 0
-
-    return post
+    return await fetchPostFromStrapi(idOrDocumentId)
   } catch (error) {
     console.error(`Error fetching post with ID/documentId ${idOrDocumentId} from Strapi:`, error)
 
     // Check if it's a rate limit error
     if (error instanceof Error && (error.message.includes("Too Many Requests") || error.message.includes("429"))) {
       console.log("Rate limit exceeded, using fallback data")
-
-      // Set rate limiting for 60 seconds
-      RATE_LIMIT.isLimited = true
-      RATE_LIMIT.resetTime = Date.now() + 60000
-
-      // Schedule reset of rate limit flag
-      setTimeout(() => {
-        RATE_LIMIT.isLimited = false
-        console.log("Rate limit period expired, will try API again on next request")
-      }, 60000)
     } else {
-      // Increment consecutive errors counter
-      RATE_LIMIT.consecutiveErrors++
-
-      // If we've had multiple consecutive errors, temporarily use fallback data
-      if (RATE_LIMIT.consecutiveErrors >= 3) {
-        RATE_LIMIT.isLimited = true
-        RATE_LIMIT.resetTime = Date.now() + 120000 // 2 minute cooldown
-
-        setTimeout(() => {
-          RATE_LIMIT.isLimited = false
-          RATE_LIMIT.consecutiveErrors = 0
-        }, 120000)
-
-        console.log("Multiple consecutive errors, cooling down API requests for 2 minutes")
-      }
+      console.log("Other API error, using fallback data")
     }
 
     return getFallbackPostById(idOrDocumentId)
@@ -688,11 +611,11 @@ async function fetchPostFromStrapi(idOrDocumentId: number | string): Promise<Pos
 
     // Use apiClient with retry logic
     const response = await fetchWithRetry(() => apiClient.get(endpoint, { cache: "no-store" }, true), {
-      maxRetries: 0, // No retries to avoid triggering rate limits
+      maxRetries: 1,
       initialDelay: 2000,
       maxDelay: 5000,
       backoffFactor: 2,
-      retryStatusCodes: [500, 502, 503, 504],
+      retryStatusCodes: [408, 500, 502, 503, 504],
       onRetry: (attempt, delay, error) => {
         console.log(`Retrying fetch (attempt ${attempt}) after ${delay}ms due to error:`, error)
       },
@@ -719,132 +642,128 @@ async function fetchPostFromStrapi(idOrDocumentId: number | string): Promise<Pos
       postData = postsArray[0]
     }
 
-    return transformPostData(postData)
+    // Transform the post data using the same logic as in processPostsResponse
+    try {
+      // Extract user information with fallbacks
+      const user = postData.user || {}
+      const username = user.username || "Unknown User"
+
+      // Extract profile image with fallbacks
+      let userImage = "/serene-woman-gaze.png"
+
+      // Handle the nested profile image structure
+      if (user.profileImage) {
+        if (user.profileImage.formats) {
+          // Get the best format available
+          const formats = user.profileImage.formats
+          userImage = normalizeImageUrl(
+            formats.medium?.url ||
+              formats.small?.url ||
+              formats.thumbnail?.url ||
+              formats.large?.url ||
+              user.profileImage.url,
+          )
+        } else if (user.profileImage.url) {
+          userImage = normalizeImageUrl(user.profileImage.url)
+        } else if (typeof user.profileImage === "string") {
+          userImage = normalizeImageUrl(user.profileImage)
+        }
+      }
+
+      // Extract media items
+      let mediaItems = []
+      const image = postData.image
+      if (postData.mediaItems) {
+        if (Array.isArray(postData.mediaItems)) {
+          // Handle Strapi v5 nested media structure
+          mediaItems = postData.mediaItems.map((item) => {
+            // Get the file URL from the nested structure
+            let url = "/abstract-pastel-swirls.png" // Fallback
+
+            if (item.file && item.file.formats) {
+              // Get the best format available
+              const imageUrl = getImageFormat(item.file.formats)
+              if (imageUrl) {
+                url = normalizeImageUrl(imageUrl)
+              }
+            } else if (item.url) {
+              // Direct URL case
+              url = normalizeImageUrl(item.url)
+            }
+
+            return {
+              id: item.id || `media-${Math.random()}`,
+              type: item.type || "image",
+              url: url,
+              file: item.file, // Keep the original file object with formats
+            }
+          })
+        } else if (postData.mediaItems.data && Array.isArray(postData.mediaItems.data)) {
+          // Nested in data array (Strapi format)
+          mediaItems = postData.mediaItems.data.map((item) => {
+            const mediaData = item.attributes || item
+            return {
+              id: item.id || `media-${Math.random()}`,
+              type: mediaData.type || (mediaData.url?.includes(".mp4") ? "video" : "image"),
+              url:
+                mediaData.url ||
+                mediaData.formats?.medium?.url ||
+                mediaData.formats?.small?.url ||
+                mediaData.formats?.thumbnail?.url ||
+                "/abstract-pastel-swirls.png",
+              file: mediaData.file || mediaData, // Keep the original file object with formats
+            }
+          })
+        }
+      }
+
+      // If we still don't have media items but have an image, create a media item from it
+      if (mediaItems.length === 0 && image) {
+        mediaItems = [
+          {
+            id: `legacy-image-${Math.random()}`,
+            type: "image",
+            url: image,
+          },
+        ]
+      }
+
+      // Extract comments with fallbacks - simplified to avoid API errors
+      const comments = []
+
+      // Extract tags with fallbacks - simplified to avoid API errors
+      const tags = []
+
+      return {
+        id: postData.id || Math.random(),
+        documentId: postData.documentId || postData.id?.toString() || "",
+        userId: user.id || null,
+        username,
+        userImage,
+        image, // Keep for backward compatibility
+        mediaItems,
+        contentType:
+          mediaItems.length > 1
+            ? "media-gallery"
+            : mediaItems.length === 1
+              ? mediaItems[0].type === "video"
+                ? "video"
+                : "image"
+              : "text",
+        galleryLayout: mediaItems.length > 1 ? "grid" : undefined,
+        description: postData.description || "",
+        likes: postData.likesCount || 0,
+        comments,
+        timestamp: formatTimestamp(postData.createdAt || postData.publishedAt || new Date().toISOString()),
+        tags,
+      }
+    } catch (error) {
+      console.error("Error transforming post:", error)
+      return null
+    }
   } catch (error) {
     console.error(`Error in fetchPostFromStrapi for ID/documentId ${idOrDocumentId}:`, error)
     throw error
-  }
-}
-
-// Helper function to transform post data
-function transformPostData(postData: any): Post | null {
-  try {
-    // Extract user information with fallbacks
-    const user = postData.user || {}
-    const username = user.username || "Unknown User"
-
-    // Extract profile image with fallbacks
-    let userImage = "/serene-woman-gaze.png"
-
-    // Handle the nested profile image structure
-    if (user.profileImage) {
-      if (user.profileImage.formats) {
-        // Get the best format available
-        const formats = user.profileImage.formats
-        userImage = normalizeImageUrl(
-          formats.medium?.url ||
-            formats.small?.url ||
-            formats.thumbnail?.url ||
-            formats.large?.url ||
-            user.profileImage.url,
-        )
-      } else if (user.profileImage.url) {
-        userImage = normalizeImageUrl(user.profileImage.url)
-      } else if (typeof user.profileImage === "string") {
-        userImage = normalizeImageUrl(user.profileImage)
-      }
-    }
-
-    // Extract media items
-    let mediaItems = []
-    const image = postData.image
-    if (postData.mediaItems) {
-      if (Array.isArray(postData.mediaItems)) {
-        // Handle Strapi v5 nested media structure
-        mediaItems = postData.mediaItems.map((item) => {
-          // Get the file URL from the nested structure
-          let url = "/abstract-pastel-swirls.png" // Fallback
-
-          if (item.file && item.file.formats) {
-            // Get the best format available
-            const imageUrl = getImageFormat(item.file.formats)
-            if (imageUrl) {
-              url = normalizeImageUrl(imageUrl)
-            }
-          } else if (item.url) {
-            // Direct URL case
-            url = normalizeImageUrl(item.url)
-          }
-
-          return {
-            id: item.id || `media-${Math.random()}`,
-            type: item.type || "image",
-            url: url,
-            file: item.file, // Keep the original file object with formats
-          }
-        })
-      } else if (postData.mediaItems.data && Array.isArray(postData.mediaItems.data)) {
-        // Nested in data array (Strapi format)
-        mediaItems = postData.mediaItems.data.map((item) => {
-          const mediaData = item.attributes || item
-          return {
-            id: item.id || `media-${Math.random()}`,
-            type: mediaData.type || (mediaData.url?.includes(".mp4") ? "video" : "image"),
-            url:
-              mediaData.url ||
-              mediaData.formats?.medium?.url ||
-              mediaData.formats?.small?.url ||
-              mediaData.formats?.thumbnail?.url ||
-              "/abstract-pastel-swirls.png",
-            file: mediaData.file || mediaData, // Keep the original file object with formats
-          }
-        })
-      }
-    }
-
-    // If we still don't have media items but have an image, create a media item from it
-    if (mediaItems.length === 0 && image) {
-      mediaItems = [
-        {
-          id: `legacy-image-${Math.random()}`,
-          type: "image",
-          url: image,
-        },
-      ]
-    }
-
-    // Extract comments with fallbacks - simplified to avoid API errors
-    const comments = []
-
-    // Extract tags with fallbacks - simplified to avoid API errors
-    const tags = []
-
-    return {
-      id: postData.id || Math.random(),
-      documentId: postData.documentId || postData.id?.toString() || "",
-      userId: user.id || null,
-      username,
-      userImage,
-      image, // Keep for backward compatibility
-      mediaItems,
-      contentType:
-        mediaItems.length > 1
-          ? "media-gallery"
-          : mediaItems.length === 1
-            ? mediaItems[0].type === "video"
-              ? "video"
-              : "image"
-            : "text",
-      galleryLayout: mediaItems.length > 1 ? "grid" : undefined,
-      description: postData.description || "",
-      likes: postData.likesCount || 0,
-      comments,
-      timestamp: formatTimestamp(postData.createdAt || postData.publishedAt || new Date().toISOString()),
-      tags,
-    }
-  } catch (error) {
-    console.error("Error transforming post:", error)
-    return null
   }
 }
 

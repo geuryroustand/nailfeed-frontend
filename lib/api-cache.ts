@@ -1,116 +1,169 @@
-// API Cache management
-type CachedItem = {
-  data: any
+/**
+ * Simple in-memory cache for API responses - DISABLED AS REQUESTED
+ * All caching functionality is commented out
+ */
+
+interface CacheEntry<T> {
+  data: T
   timestamp: number
+  expiry: number
 }
 
 class ApiCache {
-  private cache = new Map<string, CachedItem>()
-  private defaultTTL = 5 * 60 * 1000 // 5 minutes default TTL
+  private cache: Map<string, CacheEntry<any>> = new Map()
+  private defaultTTL: number = 15 * 60 * 1000 // 15 minutes in milliseconds (not used)
 
-  // Rate limiting state
-  private rateLimitState = {
-    isLimited: false,
-    resetTime: 0,
-    consecutiveErrors: 0,
-  }
+  /**
+   * Get a value from the cache - DISABLED
+   * @param key Cache key
+   * @returns Always returns undefined since caching is disabled
+   */
+  get<T>(key: string): T | undefined {
+    // Caching disabled as requested
+    return undefined
 
-  constructor(defaultTTL?: number) {
-    if (defaultTTL) {
-      this.defaultTTL = defaultTTL
+    /* Original code commented out
+    const entry = this.cache.get(key)
+
+    if (!entry) {
+      return undefined
     }
-  }
 
-  // Get an item from cache
-  get(key: string): any | null {
-    const item = this.cache.get(key)
-    if (!item) return null
-
-    // Check if item is expired
-    if (Date.now() - item.timestamp > this.defaultTTL) {
+    // Check if the entry has expired
+    if (Date.now() > entry.expiry) {
       this.cache.delete(key)
-      return null
+      return undefined
     }
 
-    return item.data
+    return entry.data as T
+    */
   }
 
-  // Set an item in cache
-  set(key: string, data: any, ttl?: number): void {
-    const expiryTime = ttl || this.defaultTTL
+  /**
+   * Set a value in the cache - DISABLED
+   * @param key Cache key
+   * @param value Value to cache
+   * @param ttl Time to live in milliseconds (optional)
+   */
+  set<T>(key: string, value: T, ttl: number = this.defaultTTL): void {
+    // Caching disabled as requested
+    return
+
+    /* Original code commented out
     this.cache.set(key, {
-      data,
+      data: value,
       timestamp: Date.now(),
+      expiry: Date.now() + ttl,
     })
-
-    // Set up automatic cleanup after TTL
-    setTimeout(() => {
-      this.cache.delete(key)
-    }, expiryTime)
+    */
   }
 
-  // Clear entire cache or specific key
-  clear(key?: string): void {
-    if (key) {
-      this.cache.delete(key)
-    } else {
-      this.cache.clear()
+  /**
+   * Check if a key exists in the cache - DISABLED
+   * @param key Cache key
+   * @returns Always returns false since caching is disabled
+   */
+  has(key: string): boolean {
+    // Caching disabled as requested
+    return false
+
+    /* Original code commented out
+    const entry = this.cache.get(key)
+    if (!entry) {
+      return false
     }
-  }
 
-  // Check if we're currently rate limited
-  isRateLimited(): boolean {
-    if (!this.rateLimitState.isLimited) return false
-
-    // Check if rate limit period has expired
-    if (Date.now() > this.rateLimitState.resetTime) {
-      this.rateLimitState.isLimited = false
+    // Check if the entry has expired
+    if (Date.now() > entry.expiry) {
+      this.cache.delete(key)
       return false
     }
 
     return true
+    */
   }
 
-  // Set rate limit state
-  setRateLimit(durationMs = 30000): void {
-    this.rateLimitState.isLimited = true
-    this.rateLimitState.resetTime = Date.now() + durationMs
+  /**
+   * Delete a key from the cache - DISABLED
+   * @param key Cache key
+   */
+  delete(key: string): void {
+    // Caching disabled as requested
+    return
 
-    // Auto-reset after duration
-    setTimeout(() => {
-      this.rateLimitState.isLimited = false
-      console.log("Rate limit period expired, will try API again on next request")
-    }, durationMs)
+    /* Original code commented out
+    this.cache.delete(key)
+    */
   }
 
-  // Track consecutive errors
-  trackError(isRateLimitError: boolean): void {
-    if (isRateLimitError) {
-      this.setRateLimit()
-      return
+  /**
+   * Clear all entries from the cache - DISABLED
+   */
+  clear(): void {
+    // Caching disabled as requested
+    return
+
+    /* Original code commented out
+    this.cache.clear()
+    */
+  }
+
+  /**
+   * Get the number of entries in the cache - DISABLED
+   */
+  get size(): number {
+    // Caching disabled as requested
+    return 0
+
+    /* Original code commented out
+    // Clean up expired entries first
+    this.cleanExpired()
+    return this.cache.size
+    */
+  }
+
+  /**
+   * Clean up expired entries - DISABLED
+   */
+  cleanExpired(): void {
+    // Caching disabled as requested
+    return
+
+    /* Original code commented out
+    const now = Date.now()
+    for (const [key, entry] of this.cache.entries()) {
+      if (now > entry.expiry) {
+        this.cache.delete(key)
+      }
     }
-
-    this.rateLimitState.consecutiveErrors++
-
-    // If we've had multiple consecutive errors, temporarily use fallback data
-    if (this.rateLimitState.consecutiveErrors >= 3) {
-      this.setRateLimit(60000) // 1 minute cooldown
-      this.rateLimitState.consecutiveErrors = 0
-      console.log("Multiple consecutive errors, cooling down API requests for 1 minute")
-    }
-  }
-
-  // Reset error counter on successful request
-  trackSuccess(): void {
-    this.rateLimitState.consecutiveErrors = 0
-  }
-
-  // Get time remaining in rate limit (in seconds)
-  getRateLimitRemainingTime(): number {
-    if (!this.rateLimitState.isLimited) return 0
-    return Math.max(0, Math.floor((this.rateLimitState.resetTime - Date.now()) / 1000))
+    */
   }
 }
 
 // Export a singleton instance
 export const apiCache = new ApiCache()
+
+/**
+ * Wrapper function to get data from cache or fetch it - MODIFIED TO ALWAYS FETCH
+ * @param cacheKey Cache key (not used)
+ * @param fetchFn Function to fetch data
+ * @param ttl Time to live in milliseconds (not used)
+ * @returns The data from the fetch function
+ */
+export async function getCachedOrFetch<T>(cacheKey: string, fetchFn: () => Promise<T>, ttl?: number): Promise<T> {
+  // Caching disabled as requested - always fetch fresh data
+  console.log(`Cache disabled, fetching fresh data for: ${cacheKey}`)
+  try {
+    return await fetchFn()
+  } catch (error) {
+    console.error(`Error fetching data for ${cacheKey}:`, error)
+
+    // Check if it's a rate limit error
+    if (error instanceof Error && (error.message.includes("Too Many Requests") || error.message.includes("429"))) {
+      console.error("Rate limit exceeded")
+      throw new Error("Too Many Requests")
+    }
+
+    throw error
+  }
+}

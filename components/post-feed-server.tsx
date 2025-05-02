@@ -8,8 +8,8 @@ export default async function PostFeedServer() {
     console.log("PostFeedServer: Fetching posts")
 
     // Fetch initial posts from the server with a smaller batch size to reduce rate limiting
-    // Using an even smaller batch size (1) to minimize API pressure
-    const { posts, nextCursor, hasMore } = await getPosts(1, 0)
+    // Using an even smaller batch size (2) since caching is disabled
+    const { posts, nextCursor, hasMore } = await getPosts(2, 0)
 
     console.log(`PostFeedServer: Fetched ${posts.length} posts`)
 

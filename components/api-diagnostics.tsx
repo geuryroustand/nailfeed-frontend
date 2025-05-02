@@ -1,12 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getEnvironmentInfo } from "@/lib/api-status-actions"
 
 export default function ApiDiagnostics() {
   const [isVisible, setIsVisible] = useState(false)
@@ -15,13 +14,6 @@ export default function ApiDiagnostics() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [requestDetails, setRequestDetails] = useState<any>(null)
-  const [envInfo, setEnvInfo] = useState<{
-    apiUrl: string
-    appUrl: string
-    appEnv: string
-    hasApiToken: boolean
-    vercelEnv: string
-  } | null>(null)
 
   // Default API URL from environment or hardcoded fallback
   const defaultApiUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
@@ -29,22 +21,6 @@ export default function ApiDiagnostics() {
   const [endpoint, setEndpoint] = useState("/api/posts")
   const [queryParams, setQueryParams] = useState("populate=*&pagination[page]=1&pagination[pageSize]=5")
   const [token, setToken] = useState(process.env.NEXT_PUBLIC_APP_ENV || "")
-
-  // Fetch environment info from server action
-  useEffect(() => {
-    async function fetchEnvInfo() {
-      try {
-        const info = await getEnvironmentInfo()
-        setEnvInfo(info)
-      } catch (err) {
-        console.error("Failed to fetch environment info:", err)
-      }
-    }
-
-    if (isVisible) {
-      fetchEnvInfo()
-    }
-  }, [isVisible])
 
   const constructFullUrl = () => {
     // Ensure proper URL construction with double slashes
@@ -273,17 +249,13 @@ export default function ApiDiagnostics() {
             </TabsContent>
 
             <TabsContent value="env" className="space-y-2">
-              {envInfo ? (
-                <div className="text-xs space-y-1">
-                  <p>API URL: {envInfo.apiUrl}</p>
-                  <p>App URL: {envInfo.appUrl}</p>
-                  <p>Token exists: {envInfo.hasApiToken ? "Yes" : "No"}</p>
-                  <p>App Env: {envInfo.appEnv}</p>
-                  <p>Vercel Env: {envInfo.vercelEnv}</p>
-                </div>
-              ) : (
-                <div className="text-xs">Loading environment information...</div>
-              )}
+              <div className="text-xs space-y-1">
+                <p>API URL: {process.env.NEXT_PUBLIC_API_URL || "Not set"}</p>
+                <p>App URL: {process.env.NEXT_PUBLIC_APP_URL || "Not set"}</p>
+                <p>Token exists: {process.env.NEXT_PUBLIC_APP_ENV ? "Yes" : "No"}</p>
+                <p>App Env: {process.env.NEXT_PUBLIC_APP_ENV || "Not set"}</p>
+                <p>Environment: {process.env.NEXT_PUBLIC_VERCEL_ENV || process.env.NEXT_PUBLIC_APP_ENV || "Not set"}</p>
+              </div>
             </TabsContent>
           </Tabs>
 

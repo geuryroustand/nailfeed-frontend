@@ -1,5 +1,3 @@
-import { getUserByUsername, getUserEngagement, uploadFile } from "../secure-api-actions"
-
 export type UserProfileResponse = {
   id: number
   username: string
@@ -106,10 +104,28 @@ export const UserService = {
   /**
    * Get a user's profile by username
    */
-  async getUserByUsername(username: string): Promise<UserProfileResponse | null> {
+  async getUserByUsername(username: string, token?: string): Promise<UserProfileResponse | null> {
     try {
-      // Use the server action to get the user
-      const data = await getUserByUsername(username)
+      const apiUrl = getApiUrl()
+
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      }
+
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`
+      }
+
+      const response = await safeApiRequest(
+        `${apiUrl}/api/users?filters[username][$eq]=${username}&populate[0]=profileImage&populate[1]=coverImage`,
+        {
+          method: "GET",
+          headers,
+          next: { tags: [`user-${username}`] },
+        },
+      )
+
+      const data = await response.json()
       return data.results?.[0] || null
     } catch (error) {
       console.error(`Error fetching user ${username}:`, error)
@@ -154,6 +170,9 @@ export const UserService = {
    */
   async uploadFile(token: string, file: File): Promise<any> {
     try {
+      const apiUrl = getApiUrl()
+      console.log(`Uploading file to: ${apiUrl}/api/upload`)
+
       // Create a new FormData instance
       const formData = new FormData()
 
@@ -162,8 +181,30 @@ export const UserService = {
 
       console.log(`File details: name=${file.name}, size=${file.size}, type=${file.type}`)
 
-      // Use the server action to upload the file
-      const data = await uploadFile(formData)
+      // Try with JWT token
+      console.log("Attempting upload with JWT token")
+      const response = await fetch(`${apiUrl}/api/upload`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+        // Add these options to help with fetch issues
+        mode: "cors",
+        credentials: "same-origin",
+      })
+
+      // Log the response status
+      console.log(`Upload response status with JWT token: ${response.status}`)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error(`API error with JWT token (${response.status}): ${errorText}`)
+        throw new Error(`Failed to upload file: ${response.status} - ${errorText}`)
+      }
+
+      const data = await response.json()
+      console.log(`Upload successful with JWT token, received data:`, data)
       return data
     } catch (error) {
       console.error("Error uploading file:", error)
@@ -304,10 +345,28 @@ export const UserService = {
   /**
    * Get user engagement metrics
    */
-  async getUserEngagement(username: string): Promise<{ likes: number; comments: number; saves: number } | null> {
+  async getUserEngagement(
+    username: string,
+    token?: string,
+  ): Promise<{ likes: number; comments: number; saves: number } | null> {
     try {
-      // Use the server action to get user engagement
-      return await getUserEngagement(username)
+      const apiUrl = getApiUrl()
+
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      }
+
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`
+      }
+
+      const response = await safeApiRequest(`${apiUrl}/api/users/engagement/${username}`, {
+        method: "GET",
+        headers,
+        next: { tags: [`user-engagement-${username}`] },
+      })
+
+      return await response.json()
     } catch (error) {
       console.error(`Error fetching engagement for ${username}:`, error)
       return null

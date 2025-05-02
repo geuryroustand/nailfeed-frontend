@@ -5,17 +5,7 @@ import type React from "react"
 import { useState, useRef, useEffect } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import {
-  Heart,
-  MessageCircle,
-  MoreHorizontal,
-  CornerDownRight,
-  X,
-  Smile,
-  Send,
-  ChevronDown,
-  ChevronUp,
-} from "lucide-react"
+import { MessageCircle, MoreHorizontal, CornerDownRight, X, Smile, Send, ChevronDown, ChevronUp } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import Link from "next/link"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -28,8 +18,7 @@ import { cn } from "@/lib/utils"
 import { focusWithoutScroll } from "@/lib/focus-utils"
 import { Input } from "@/components/ui/input"
 import { EnhancedAvatar } from "@/components/ui/enhanced-avatar"
-// First, update the imports at the top of the file to include our new actions
-import { reactToPost, getUserReactionToPost } from "@/lib/post-actions"
+import { ReactionButton } from "./reaction-button"
 
 interface PostProps {
   post: {
@@ -267,82 +256,24 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
   const { toast } = useToast()
   const [replyTo, setReplyTo] = useState<{ id: number; username: string } | null>(null)
 
-  // Then, update the handleLikeClick function inside the Post component
-  const handleLikeClick = async () => {
-    // If we have a userId, use it, otherwise use a placeholder
-    const userId = "currentuser" // In a real app, this would come from auth context
-
-    // Call the server action to react to the post
-    const result = await reactToPost(post.id, userId, reaction === "like" ? null : "like")
-
-    if (result.success) {
-      setReaction((prevReaction) => {
-        const newReaction = prevReaction === "like" ? null : "like"
-        if (newReaction === null) {
-          setLikeCount(likeCount - 1)
-        } else if (prevReaction === null) {
-          setLikeCount(likeCount + 1)
-        }
-        return newReaction
-      })
-    } else {
-      // Show error toast
-      toast({
-        title: "Error",
-        description: result.message || "Failed to like post",
-        variant: "destructive",
-      })
-    }
-  }
-
-  // Update the handleReaction function
-  const handleReaction = async (reactionType: Reaction) => {
-    // If we have a userId, use it, otherwise use a placeholder
-    const userId = "currentuser" // In a real app, this would come from auth context
-
-    // Call the server action to react to the post
-    const result = await reactToPost(post.id, userId, reaction === reactionType ? null : reactionType)
-
-    if (result.success) {
-      setReaction((prevReaction) => {
-        const newReaction = prevReaction === reactionType ? null : reactionType
-
-        // If removing a reaction, decrease the count
-        if (newReaction === null && prevReaction !== null) {
-          setLikeCount(likeCount - 1)
-        }
-        // If adding a new reaction where there was none, increase the count
-        else if (newReaction !== null && prevReaction === null) {
-          setLikeCount(likeCount + 1)
-        }
-        // If changing reaction type, count stays the same
-
-        return newReaction
-      })
-    } else {
-      // Show error toast
-      toast({
-        title: "Error",
-        description: result.message || "Failed to react to post",
-        variant: "destructive",
-      })
-    }
-  }
-
-  // Add a new useEffect to fetch the user's current reaction when the post loads
-  useEffect(() => {
-    const fetchUserReaction = async () => {
-      // If we have a userId, use it, otherwise use a placeholder
-      const userId = "currentuser" // In a real app, this would come from auth context
-
-      const result = await getUserReactionToPost(post.id, userId)
-      if (result.success && result.reactionType) {
-        setReaction(result.reactionType as Reaction)
+  const handleLikeClick = () => {
+    setReaction((prevReaction) => {
+      const newReaction = prevReaction === "like" ? null : "like"
+      if (newReaction === null) {
+        setLikeCount(likeCount - 1)
+      } else if (prevReaction === null) {
+        setLikeCount(likeCount + 1)
       }
-    }
+      return newReaction
+    })
+  }
 
-    fetchUserReaction()
-  }, [post.id])
+  const handleReaction = (reactionType: Reaction) => {
+    setReaction((prevReaction) => {
+      const newReaction = prevReaction === reactionType ? null : reactionType
+      return newReaction
+    })
+  }
 
   const adjustTextareaHeight = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     const textarea = event.target
@@ -684,52 +615,13 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
 
         {/* Action buttons */}
         <div className="flex items-center justify-between py-1 relative">
-          <div className="relative flex-1">
-            <button
-              ref={likeButtonRef}
-              className={`flex items-center justify-center w-full py-2 rounded-md hover:bg-gray-100 transition-colors ${
-                reaction ? getReactionColor(reaction) : "text-gray-500"
-              }`}
-              onClick={handleLikeClick}
-              onMouseEnter={() => setShowReactions(true)}
-            >
-              {reaction ? (
-                <span className="mr-2 text-lg">{getReactionEmoji(reaction)}</span>
-              ) : (
-                <Heart className="h-5 w-5 mr-2" />
-              )}
-              <span className="text-sm font-medium">{reaction ? getReactionText(reaction) : "Like"}</span>
-            </button>
-
-            {/* Reactions panel */}
-            <AnimatePresence>
-              {showReactions && (
-                <motion.div
-                  ref={reactionsRef}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  transition={{ duration: 0.2 }}
-                  className="absolute bottom-full left-0 mb-2 bg-white rounded-full shadow-lg p-1 flex z-10"
-                  onMouseLeave={() => setShowReactions(false)}
-                >
-                  {(["like", "love", "haha", "wow", "sad", "angry"] as Reaction[]).map((reactionType) => (
-                    <motion.button
-                      key={reactionType}
-                      whileHover={{ scale: 1.2 }}
-                      whileTap={{ scale: 0.9 }}
-                      className="p-1 mx-1 rounded-full hover:bg-gray-100 transition-colors"
-                      onClick={() => handleReaction(reactionType)}
-                    >
-                      <span className="text-2xl" role="img" aria-label={reactionType}>
-                        {getReactionEmoji(reactionType)}
-                      </span>
-                    </motion.button>
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+          <ReactionButton
+            postId={post.id}
+            onReactionChange={(type) => {
+              // This is called when the reaction changes
+              console.log(`Reaction changed to: ${type}`)
+            }}
+          />
 
           <button
             className="flex items-center justify-center flex-1 py-2 rounded-md hover:bg-gray-100 transition-colors text-gray-500"

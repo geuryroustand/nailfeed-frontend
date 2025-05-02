@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useRef } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { Heart, MessageCircle, MoreHorizontal, CornerDownRight, X, Smile, Send, ArrowLeft } from "lucide-react"
+import { MessageCircle, MoreHorizontal, CornerDownRight, X, Smile, Send, ArrowLeft } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import Link from "next/link"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input"
 import { EnhancedAvatar } from "@/components/ui/enhanced-avatar"
 import type { Post } from "@/lib/post-data"
 import type { MediaItem } from "@/types/media"
+import { ReactionButton } from "./reaction-button"
 
 interface PostDetailViewProps {
   post: Post
@@ -566,52 +567,13 @@ export default function PostDetailView({ post }: PostDetailViewProps) {
 
         {/* Action buttons */}
         <div className="flex items-center justify-between py-3 relative">
-          <div className="relative flex-1">
-            <button
-              ref={likeButtonRef}
-              className={`flex items-center justify-center w-full py-2 rounded-md hover:bg-gray-100 transition-colors ${
-                reaction ? getReactionColor(reaction) : "text-gray-500"
-              }`}
-              onClick={handleLikeClick}
-              onMouseEnter={() => setShowReactions(true)}
-            >
-              {reaction ? (
-                <span className="mr-2 text-lg">{getReactionEmoji(reaction)}</span>
-              ) : (
-                <Heart className="h-5 w-5 mr-2" />
-              )}
-              <span className="text-sm font-medium">{reaction ? getReactionText(reaction) : "Like"}</span>
-            </button>
-
-            {/* Reactions panel */}
-            <AnimatePresence>
-              {showReactions && (
-                <motion.div
-                  ref={reactionsRef}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  transition={{ duration: 0.2 }}
-                  className="absolute bottom-full left-0 mb-2 bg-white rounded-full shadow-lg p-1 flex z-10"
-                  onMouseLeave={() => setShowReactions(false)}
-                >
-                  {(["like", "love", "haha", "wow", "sad", "angry"] as Reaction[]).map((reactionType) => (
-                    <motion.button
-                      key={reactionType}
-                      whileHover={{ scale: 1.2 }}
-                      whileTap={{ scale: 0.9 }}
-                      className="p-1 mx-1 rounded-full hover:bg-gray-100 transition-colors"
-                      onClick={() => handleReaction(reactionType)}
-                    >
-                      <span className="text-2xl" role="img" aria-label={reactionType}>
-                        {getReactionEmoji(reactionType)}
-                      </span>
-                    </motion.button>
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+          <ReactionButton
+            postId={post.id}
+            onReactionChange={(type) => {
+              // This is called when the reaction changes
+              console.log(`Reaction changed to: ${type}`)
+            }}
+          />
 
           <button
             className="flex items-center justify-center flex-1 py-2 rounded-md hover:bg-gray-100 transition-colors text-gray-500"

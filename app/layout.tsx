@@ -9,6 +9,7 @@ import { CollectionsProvider } from "@/context/collections-context"
 import { ProfileProvider } from "@/context/profile-context"
 import ClientHeaderWrapper from "@/components/client-header-wrapper"
 import ApiStatusIndicator from "@/components/api-status-indicator"
+import { ReactionProvider } from "@/context/reaction-context"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -26,7 +27,11 @@ export default function RootLayout({
               <CollectionsProvider>
                 <MoodProvider>
                   <ClientHeaderWrapper />
-                  {children}
+                  {/* Wrap with ReactionProvider */}
+                  <ReactionProvider>
+                    {/* Your existing layout content */}
+                    {children}
+                  </ReactionProvider>
                   <ApiStatusIndicator />
                   <Toaster />
                 </MoodProvider>
