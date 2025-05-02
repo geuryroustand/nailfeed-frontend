@@ -1,12 +1,12 @@
-// This file contains server-side only code
 import { cookies } from "next/headers"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
 
 // Get auth token with priority order: user JWT > API token
 export function getServerAuthToken(): string | null {
-  // Try to get user JWT from cookies first
-  const cookieToken = cookies().get("jwt")?.value
+  // Try to get user JWT from cookies first (server-side)
+  const cookieStore = cookies()
+  const cookieToken = cookieStore.get("jwt")?.value
   if (cookieToken) return cookieToken
 
   // Fall back to server-side API token (not exposed to client)

@@ -1,7 +1,5 @@
 "use client"
 
-import { cookies } from "next/headers"
-
 // Base URL for API requests
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
 
@@ -38,14 +36,13 @@ const constructUrl = (endpoint: string): string => {
   return `${baseUrl}${path}`
 }
 
-// Helper function to get auth token from cookies only
+// Helper function to get auth token from client-side cookies
 const getAuthToken = (): string | null => {
-  // Try to get from cookies first
-  try {
-    const cookieToken = cookies().get("jwt")?.value
-    if (cookieToken) return cookieToken
-  } catch (e) {
-    // Ignore errors when cookies() is called on the client side
+  // Client-side cookie access
+  const cookies = document.cookie.split(";")
+  const jwtCookie = cookies.find((cookie) => cookie.trim().startsWith("jwt="))
+  if (jwtCookie) {
+    return jwtCookie.split("=")[1].trim()
   }
 
   // No token found in cookies

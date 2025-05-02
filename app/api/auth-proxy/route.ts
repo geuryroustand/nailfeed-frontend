@@ -1,3 +1,4 @@
+import { cookies } from "next/headers"
 import { type NextRequest, NextResponse } from "next/server"
 
 // Base URL for API requests
@@ -26,8 +27,9 @@ export async function POST(request: NextRequest) {
       headers["Authorization"] = `Bearer ${apiToken}`
     }
 
-    // Get the JWT from cookies if it exists
-    const jwt = request.cookies.get("jwt")?.value
+    // Get the JWT from cookies if it exists (server-side)
+    const cookieStore = cookies()
+    const jwt = cookieStore.get("jwt")?.value
     if (jwt) {
       headers["Authorization"] = `Bearer ${jwt}`
     }
