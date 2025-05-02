@@ -1,3 +1,5 @@
+export const dynamic = "force-static"
+
 export default function NotFound() {
   return (
     <div className="container flex flex-col items-center justify-center min-h-[70vh] py-12">
