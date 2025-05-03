@@ -1,25 +1,25 @@
-import { Suspense } from "react"
-import FeaturedStories from "@/components/featured-stories"
-import PostFeedServer from "@/components/post-feed-server"
-import BottomNav from "@/components/bottom-nav"
-import Sidebar from "@/components/sidebar"
-import TrendingSection from "@/components/trending-section"
-import { Toaster } from "@/components/ui/toaster"
-import AuthCTA from "@/components/auth-cta"
-import TestimonialCarousel from "@/components/testimonial-carousel"
-import AdvancedSearch from "@/components/search/advanced-search"
-import SearchResults from "@/components/search/search-results"
-import { SearchProvider } from "@/context/search-context"
+import { Suspense } from "react";
+import FeaturedStories from "@/components/featured-stories";
+import PostFeedServer from "@/components/post-feed-server";
+import BottomNav from "@/components/bottom-nav";
+import Sidebar from "@/components/sidebar";
+import TrendingSection from "@/components/trending-section";
+import AuthCTA from "@/components/auth-cta";
+import TestimonialCarousel from "@/components/testimonial-carousel";
+import { ClientWrapper } from "@/components/client-wrapper";
+import { SearchWrapper } from "@/components/search-wrapper";
 
 // Loading fallbacks
-const LoadingFallback = () => <div className="animate-pulse h-64 bg-gray-200 rounded-xl"></div>
+const LoadingFallback = () => (
+  <div className="animate-pulse h-64 bg-gray-200 rounded-xl"></div>
+);
 
 export default function HomePage() {
   // We'll determine authentication status on the server in a real app
-  const isAuthenticated = false
+  const isAuthenticated = false;
 
   return (
-    <SearchProvider>
+    <ClientWrapper>
       <main className="min-h-screen bg-gray-50">
         <div className="flex">
           {/* Desktop Sidebar - hidden on mobile */}
@@ -30,16 +30,7 @@ export default function HomePage() {
           {/* Main Content - adjusted for desktop */}
           <div className="w-full md:pl-64 lg:pl-72">
             <div className="container max-w-5xl mx-auto px-4 pt-2 pb-16 md:py-8">
-              <div className="mb-6">
-                <AdvancedSearch
-                  onSearch={(filters) => {
-                    console.log("Search filters:", filters)
-                    // The actual filtering is handled by the SearchContext
-                  }}
-                />
-              </div>
-
-              <SearchResults />
+              <SearchWrapper />
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Left column - Featured and Feed */}
@@ -71,9 +62,7 @@ export default function HomePage() {
         <div className="md:hidden">
           <BottomNav activeTab="home" />
         </div>
-
-        <Toaster />
       </main>
-    </SearchProvider>
-  )
+    </ClientWrapper>
+  );
 }

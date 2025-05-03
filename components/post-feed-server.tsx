@@ -1,62 +1,90 @@
-import { getPosts } from "@/lib/post-data"
-import PostFeed from "@/components/post-feed"
-import { Suspense } from "react"
-import SampleDataNotice from "@/components/sample-data-notice"
+import PostFeed from "@/components/post-feed";
+import { Suspense } from "react";
+import SampleDataNotice from "@/components/sample-data-notice";
+import { Post } from "@/lib/post-data";
 
-export default async function PostFeedServer() {
-  try {
-    console.log("PostFeedServer: Fetching posts")
+// Static data for testing
+const staticPosts: Post[] = [
+  {
+    id: 1,
+    documentId: "post1",
+    username: "nailartist1",
+    userImage: "/diverse-avatars.png",
+    image: "/sample-nails-1.jpg",
+    mediaItems: [
+      {
+        id: 1,
+        type: "image",
+        url: "/sample-nails-1.jpg",
+      },
+    ],
+    contentType: "image",
+    description: "Beautiful spring nails with floral design",
+    likes: 120,
+    comments: [
+      {
+        id: 1,
+        username: "user1",
+        text: "Love these!",
+        likes: 5,
+        reactions: {},
+      },
+    ],
+    timestamp: "2024-03-15T10:00:00Z",
+    tags: ["spring", "floral", "pink"],
+  },
+  {
+    id: 2,
+    documentId: "post2",
+    username: "nailartist2",
+    userImage: "/diverse-avatars.png",
+    image: "/sample-nails-2.jpg",
+    mediaItems: [
+      {
+        id: 2,
+        type: "image",
+        url: "/sample-nails-2.jpg",
+      },
+    ],
+    contentType: "image",
+    description: "Elegant French manicure with gold accents",
+    likes: 95,
+    comments: [
+      {
+        id: 2,
+        username: "user2",
+        text: "So classy!",
+        likes: 3,
+        reactions: {},
+      },
+    ],
+    timestamp: "2024-03-14T15:30:00Z",
+    tags: ["french", "gold", "elegant"],
+  },
+];
 
-    // Fetch initial posts from the server with a smaller batch size to reduce rate limiting
-    // Using an even smaller batch size (2) since caching is disabled
-    const { posts, nextCursor, hasMore } = await getPosts(2, 0)
+export default function PostFeedServer() {
+  // Comment out data fetching for now
+  // try {
+  //   console.log("PostFeedServer: Fetching posts")
+  //   const { posts, nextCursor, hasMore } = await getPosts(2, 0)
+  //   console.log(`PostFeedServer: Fetched ${posts.length} posts`)
+  //   const usingSampleData = process.env.USE_SAMPLE_DATA === "true"
 
-    console.log(`PostFeedServer: Fetched ${posts.length} posts`)
-
-    // Check if we're using sample data
-    const usingSampleData = process.env.USE_SAMPLE_DATA === "true"
-
-    return (
-      <Suspense fallback={<PostFeedSkeleton />}>
-        {usingSampleData && <SampleDataNotice />}
-        <PostFeed initialPosts={posts} initialNextCursor={nextCursor} initialHasMore={hasMore} />
-      </Suspense>
-    )
-  } catch (error) {
-    console.error("Error in PostFeedServer:", error)
-
-    let errorMessage = "We're experiencing technical difficulties. Using fallback data."
-
-    // Check if it's a rate limit error
-    if (error instanceof Error && (error.message.includes("Too Many Requests") || error.message.includes("429"))) {
-      errorMessage = "API rate limit exceeded. Using fallback data until the limit resets."
-    }
-
-    // If there's an error, return the PostFeed with fallback data
-    // and a message about the issue
-    return (
-      <div>
-        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                <path
-                  fillRule="evenodd"
-                  d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-yellow-700">{errorMessage}</p>
-            </div>
-          </div>
-        </div>
-        <SampleDataNotice />
-        <PostFeed initialPosts={[]} initialNextCursor={null} initialHasMore={false} />
-      </div>
-    )
-  }
+  return (
+    <Suspense fallback={<PostFeedSkeleton />}>
+      <SampleDataNotice />
+      <PostFeed
+        initialPosts={staticPosts}
+        initialNextCursor={null}
+        initialHasMore={false}
+      />
+    </Suspense>
+  );
+  // } catch (error) {
+  //   console.error("Error in PostFeedServer:", error)
+  //   // ... error handling code ...
+  // }
 }
 
 function PostFeedSkeleton() {
@@ -74,5 +102,5 @@ function PostFeedSkeleton() {
         </div>
       ))}
     </div>
-  )
+  );
 }

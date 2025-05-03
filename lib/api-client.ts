@@ -1,7 +1,4 @@
-"use client"
-
-// Base URL for API requests
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
+import { API_CONFIG, constructApiUrl, getAuthHeaders } from "./config";
 
 // Cache configuration - DISABLED AS REQUESTED
 // const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes in milliseconds
@@ -9,7 +6,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backen
 
 // Function to clear cache for specific endpoints or all cache - DISABLED
 export const clearCache = (endpoint?: string) => {
-  console.log("Cache is disabled, nothing to clear")
+  console.log("Cache is disabled, nothing to clear");
   /* Original code commented out
   if (endpoint) {
     // Clear specific endpoint
@@ -22,284 +19,295 @@ export const clearCache = (endpoint?: string) => {
     console.log("Cleared all API cache")
   }
   */
-}
+};
 
-// Helper function to construct URLs with the correct format
-const constructUrl = (endpoint: string): string => {
-  // Remove trailing slash from API_BASE_URL if it exists
-  const baseUrl = API_BASE_URL.endsWith("/") ? API_BASE_URL.slice(0, -1) : API_BASE_URL
-
-  // Remove leading slash from endpoint if it exists
-  const path = endpoint.startsWith("/") ? endpoint : `/${endpoint}`
-
-  // Combine them to ensure we have the correct format
-  return `${baseUrl}${path}`
-}
-
-// Helper function to get auth token from client-side cookies
-const getAuthToken = (): string | null => {
-  // Client-side cookie access
-  const cookies = document.cookie.split(";")
-  const jwtCookie = cookies.find((cookie) => cookie.trim().startsWith("jwt="))
-  if (jwtCookie) {
-    return jwtCookie.split("=")[1].trim()
+// Helper function to get auth token from cookies (works on both client and server)
+const getAuthToken = async (): Promise<string | undefined> => {
+  if (typeof window !== "undefined") {
+    // Client-side cookie access
+    const cookies = document.cookie.split(";");
+    const jwtCookie = cookies.find((cookie) =>
+      cookie.trim().startsWith("jwt=")
+    );
+    if (jwtCookie) {
+      const token = jwtCookie.split("=")[1].trim();
+      // Check if token is valid (not expired and has correct format)
+      if (isValidToken(token)) {
+        console.log("Found valid JWT token in client-side cookies");
+        return token;
+      } else {
+        console.log("Found invalid JWT token, removing it");
+        // Remove invalid token
+        document.cookie =
+          "jwt=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+      }
+    }
+    console.log("No valid JWT token found in client-side cookies");
+  } else {
+    // Server-side cookie access
+    const { cookies } = require("next/headers");
+    const cookieStore = await cookies();
+    const jwtCookie = cookieStore.get("jwt");
+    if (jwtCookie) {
+      const token = jwtCookie.value;
+      if (isValidToken(token)) {
+        console.log("Found valid JWT token in server-side cookies");
+        return token;
+      } else {
+        console.log("Found invalid JWT token, removing it");
+        // Remove invalid token
+        cookieStore.delete("jwt");
+      }
+    }
+    console.log("No valid JWT token found in server-side cookies");
   }
+  return undefined;
+};
 
-  // No token found in cookies
-  return null
+// Helper function to check if a token is valid
+function isValidToken(token: string): boolean {
+  try {
+    // Check if token has the correct format (header.payload.signature)
+    const parts = token.split(".");
+    if (parts.length !== 3) {
+      return false;
+    }
+
+    // Decode the payload to check expiration
+    const payload = JSON.parse(atob(parts[1]));
+    const expirationTime = payload.exp * 1000; // Convert to milliseconds
+    const currentTime = Date.now();
+
+    // Check if token is expired
+    if (currentTime > expirationTime) {
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error validating token:", error);
+    return false;
+  }
 }
 
 // API client with methods for different HTTP verbs
 export const apiClient = {
   // GET request with fallback to public endpoint if authentication fails
-  async get(endpoint: string, options: RequestInit = {}, bypassCache = false) {
-    const url = constructUrl(endpoint)
-
-    // CACHE DISABLED - Always bypass cache
-    /* Original code commented out
-    // Check cache first if not bypassing
-    if (!bypassCache) {
-      const cachedData = cache[url]
-      if (cachedData && Date.now() - cachedData.timestamp < CACHE_DURATION) {
-        console.log(`Cache hit for ${url}`)
-        return cachedData.data
-      }
-    }
-    */
-
-    console.log(`Making GET request to ${url} (cache disabled)`)
-
+  async get(endpoint: string, options: RequestInit = {}) {
     try {
-      // Get auth token
-      const token = getAuthToken()
-      console.log(`Auth token available: ${token ? "Yes" : "No"}`)
+      const token = await getAuthToken();
+      console.log("Auth token available:", token ? "Yes" : "No");
+      console.log(
+        "Public API token available:",
+        API_CONFIG.PUBLIC_API_TOKEN ? "Yes" : "No"
+      );
 
-      // Set headers
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
-        ...options.headers,
-      }
+      // Get headers with proper token validation
+      const headers = getAuthHeaders(token);
+      console.log("Using headers:", headers);
 
-      // Add authorization header if token exists
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`
-      }
+      const url = constructApiUrl(endpoint);
+      console.log(`Making GET request to ${url}`);
 
-      // Make the request
-      const response = await fetch(url, {
-        method: "GET",
-        headers,
+      // Ensure credentials are included
+      const requestOptions: RequestInit = {
         ...options,
-        cache: "no-store", // Ensure we don't use browser cache
-      })
+        headers: {
+          ...headers,
+          ...options.headers,
+        },
+        credentials: "include",
+      };
 
-      // Handle rate limiting explicitly
-      if (response.status === 429) {
-        console.error("Rate limit exceeded for API request")
-        throw new Error("Too Many Requests")
-      }
+      const response = await fetch(url, requestOptions);
 
-      // If we get a 403 and we sent an auth token, try again without auth
-      // This handles the case where the endpoint might be public but doesn't accept auth tokens
-      if (response.status === 403 && token) {
-        console.log("Got 403 with auth token, trying without auth...")
+      // If we get a 401, remove any user token and retry with public token
+      if (response.status === 401) {
+        console.log(
+          "Got 401, removing any user token and retrying with public token"
+        );
 
-        // Remove Authorization header
-        const publicHeaders = { ...headers }
-        delete publicHeaders["Authorization"]
+        // Remove any user token
+        if (token) {
+          if (typeof window !== "undefined") {
+            document.cookie =
+              "jwt=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+          } else {
+            const { cookies } = require("next/headers");
+            const cookieStore = await cookies();
+            cookieStore.delete("jwt");
+          }
+        }
+
+        // Retry with public token
+        const publicHeaders = getAuthHeaders();
+        console.log("Retrying with public token headers:", publicHeaders);
 
         const publicResponse = await fetch(url, {
-          method: "GET",
-          headers: publicHeaders,
           ...options,
-          cache: "no-store",
-        })
+          headers: {
+            ...publicHeaders,
+            ...options.headers,
+          },
+          credentials: "include",
+        });
 
-        if (publicResponse.ok) {
-          const data = await publicResponse.json()
-
-          // CACHE DISABLED - Don't cache the response
-          /* Original code commented out
-          // Cache the response
-          if (!bypassCache) {
-            cache[url] = { data, timestamp: Date.now() }
-          }
-          */
-
-          return data
+        if (!publicResponse.ok) {
+          const errorText = await publicResponse.text();
+          console.error(
+            `API error with public token (${publicResponse.status}): ${errorText}`
+          );
+          throw new Error(`API error (${publicResponse.status}): ${errorText}`);
         }
+
+        return await publicResponse.json();
       }
 
       if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`API error: ${response.status} ${response.statusText} - ${errorText}`)
+        const errorText = await response.text();
+        console.error(
+          `GET request failed: ${response.status} ${response.statusText}`
+        );
+        console.error("Error response:", errorText);
+        console.error("Request URL:", url);
+        console.error("Request headers:", requestOptions.headers);
+        throw new Error(
+          `API request failed: ${response.status} ${response.statusText}`
+        );
       }
 
-      const data = await response.json()
-
-      // CACHE DISABLED - Don't cache the response
-      /* Original code commented out
-      // Cache the response
-      if (!bypassCache) {
-        cache[url] = { data, timestamp: Date.now() }
-        console.log(`Cached response for ${url}`)
-      }
-      */
-
-      return data
+      return await response.json();
     } catch (error) {
-      console.error(`Error fetching ${url}:`, error)
-      throw error
+      console.error("Error in apiClient.get:", error);
+      throw error;
     }
   },
 
   // POST request
   async post(endpoint: string, data: any = {}, options: RequestInit = {}) {
-    const url = constructUrl(endpoint)
-    console.log(`Making POST request to ${url}`)
+    const url = constructApiUrl(endpoint);
+    console.log(`Making POST request to ${url}`);
 
     try {
       // Get auth token
-      const token = getAuthToken()
+      const token = await getAuthToken();
+      console.log(`Auth token available: ${token ? "Yes" : "No"}`);
+      console.log(
+        `Public API token available: ${
+          API_CONFIG.PUBLIC_API_TOKEN ? "Yes" : "No"
+        }`
+      );
 
       // Set headers
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
-        ...options.headers,
-      }
-
-      // Add authorization header if token exists
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`
-      }
+      const headers = getAuthHeaders(token);
+      console.log("Using headers:", headers);
 
       // Make the request
       const response = await fetch(url, {
         method: "POST",
-        headers,
+        headers: {
+          ...headers,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(data),
         ...options,
-      })
-
-      // Handle rate limiting explicitly
-      if (response.status === 429) {
-        console.error("Rate limit exceeded for API request")
-        throw new Error("Too Many Requests")
-      }
+        cache: "no-store",
+      });
 
       if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`API error: ${response.status} ${response.statusText} - ${errorText}`)
+        const errorText = await response.text();
+        console.error(`API error (${response.status}): ${errorText}`);
+        throw new Error(`API error (${response.status}): ${errorText}`);
       }
 
-      const responseData = await response.json()
-
-      // CACHE DISABLED - No need to clear cache
-      // clearCache()
-
-      return responseData
+      return await response.json();
     } catch (error) {
-      console.error(`Error posting to ${url}:`, error)
-      throw error
+      console.error(`API POST request failed for ${url}:`, error);
+      throw error;
     }
   },
 
   // PUT request
   async put(endpoint: string, data: any = {}, options: RequestInit = {}) {
-    const url = constructUrl(endpoint)
-    console.log(`Making PUT request to ${url}`)
+    const url = constructApiUrl(endpoint);
+    console.log(`Making PUT request to ${url}`);
 
     try {
       // Get auth token
-      const token = getAuthToken()
+      const token = await getAuthToken();
+      console.log(`Auth token available: ${token ? "Yes" : "No"}`);
+      console.log(
+        `Public API token available: ${
+          API_CONFIG.PUBLIC_API_TOKEN ? "Yes" : "No"
+        }`
+      );
 
       // Set headers
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
-        ...options.headers,
-      }
-
-      // Add authorization header if token exists
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`
-      }
+      const headers = getAuthHeaders(token);
+      console.log("Using headers:", headers);
 
       // Make the request
       const response = await fetch(url, {
         method: "PUT",
-        headers,
+        headers: {
+          ...headers,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(data),
         ...options,
-      })
-
-      // Handle rate limiting explicitly
-      if (response.status === 429) {
-        console.error("Rate limit exceeded for API request")
-        throw new Error("Too Many Requests")
-      }
+        cache: "no-store",
+      });
 
       if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`API error: ${response.status} ${response.statusText} - ${errorText}`)
+        const errorText = await response.text();
+        console.error(`API error (${response.status}): ${errorText}`);
+        throw new Error(`API error (${response.status}): ${errorText}`);
       }
 
-      const responseData = await response.json()
-
-      // CACHE DISABLED - No need to clear cache
-      // clearCache()
-
-      return responseData
+      return await response.json();
     } catch (error) {
-      console.error(`Error putting to ${url}:`, error)
-      throw error
+      console.error(`API PUT request failed for ${url}:`, error);
+      throw error;
     }
   },
 
   // DELETE request
   async delete(endpoint: string, options: RequestInit = {}) {
-    const url = constructUrl(endpoint)
-    console.log(`Making DELETE request to ${url}`)
+    const url = constructApiUrl(endpoint);
+    console.log(`Making DELETE request to ${url}`);
 
     try {
       // Get auth token
-      const token = getAuthToken()
+      const token = await getAuthToken();
+      console.log(`Auth token available: ${token ? "Yes" : "No"}`);
+      console.log(
+        `Public API token available: ${
+          API_CONFIG.PUBLIC_API_TOKEN ? "Yes" : "No"
+        }`
+      );
 
       // Set headers
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
-        ...options.headers,
-      }
-
-      // Add authorization header if token exists
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`
-      }
+      const headers = getAuthHeaders(token);
+      console.log("Using headers:", headers);
 
       // Make the request
       const response = await fetch(url, {
         method: "DELETE",
         headers,
         ...options,
-      })
-
-      // Handle rate limiting explicitly
-      if (response.status === 429) {
-        console.error("Rate limit exceeded for API request")
-        throw new Error("Too Many Requests")
-      }
+        cache: "no-store",
+      });
 
       if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`API error: ${response.status} ${response.statusText} - ${errorText}`)
+        const errorText = await response.text();
+        console.error(`API error (${response.status}): ${errorText}`);
+        throw new Error(`API error (${response.status}): ${errorText}`);
       }
 
-      // CACHE DISABLED - No need to clear cache
-      // clearCache()
-
-      return await response.json()
+      return await response.json();
     } catch (error) {
-      console.error(`Error deleting ${url}:`, error)
-      throw error
+      console.error(`API DELETE request failed for ${url}:`, error);
+      throw error;
     }
   },
-}
+};

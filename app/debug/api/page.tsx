@@ -1,29 +1,38 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { apiCache } from "@/lib/api-cache"
-import { clearCache } from "@/lib/api-client"
-import ApiDiagnostics from "@/components/api-diagnostics"
+import { useState, Suspense } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { apiCache } from "@/lib/api-cache";
+import { clearCache } from "@/lib/api-client";
+import ApiDiagnostics from "@/components/api-diagnostics";
+import DebugApiContent from "@/components/debug/debug-api-content";
+import { useSearchParams } from "next/navigation";
 
-export default function ApiDebugPage() {
-  const [message, setMessage] = useState<string>("")
-
+function SearchContent() {
+  const searchParams = useSearchParams();
+  const [message, setMessage] = useState<string>("");
   const handleClearAllCache = () => {
     // Clear the API client cache
-    clearCache()
+    clearCache();
 
     // Clear the API cache
-    apiCache.clear()
+    apiCache.clear();
 
-    setMessage("All API caches cleared successfully!")
+    setMessage("All API caches cleared successfully!");
 
     // Force reload after a short delay
     setTimeout(() => {
-      window.location.reload()
-    }, 1000)
-  }
+      window.location.reload();
+    }, 1000);
+  };
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -33,28 +42,29 @@ export default function ApiDebugPage() {
         <Card>
           <CardHeader>
             <CardTitle>Cache Management</CardTitle>
-            <CardDescription>Clear API caches to fetch fresh data from the server</CardDescription>
+            <CardDescription>
+              Clear API caches to fetch fresh data from the server
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <p className="mb-4">
-              The application uses in-memory caching to reduce API calls. If you're seeing stale data or incorrect image
-              URLs, clearing the cache can help resolve these issues.
+              {message && <div className="text-green-500 mb-4">{message}</div>}
+              <Button onClick={handleClearAllCache}>Clear All Caches</Button>
             </p>
-            {message && (
-              <div className="bg-green-50 border-l-4 border-green-400 p-4 mb-4">
-                <p className="text-green-700">{message}</p>
-              </div>
-            )}
           </CardContent>
-          <CardFooter>
-            <Button onClick={handleClearAllCache} variant="destructive">
-              Clear All API Caches
-            </Button>
-          </CardFooter>
         </Card>
 
         <ApiDiagnostics />
+        <DebugApiContent />
       </div>
     </div>
-  )
+  );
+}
+
+export default function DebugApiPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <SearchContent />
+    </Suspense>
+  );
 }

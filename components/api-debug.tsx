@@ -1,45 +1,44 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { API_CONFIG, constructApiUrl, getAuthHeaders } from "@/lib/config";
 
 export default function ApiDebug() {
-  const [isVisible, setIsVisible] = useState(false)
-  const [apiResponse, setApiResponse] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [isVisible, setIsVisible] = useState(false);
+  const [apiResponse, setApiResponse] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const testApi = async () => {
-    setIsLoading(true)
-    setError(null)
+    setIsLoading(true);
+    setError(null);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
-      const token = process.env.NEXT_PUBLIC_APP_ENV || ""
+      console.log(
+        "Testing API with token:",
+        API_CONFIG.PUBLIC_API_TOKEN ? "exists" : "not found"
+      );
 
-      console.log("Testing API with token:", token ? "exists" : "not found")
-
-      const response = await fetch(`${apiUrl}/api/posts?populate=*`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
+      const response = await fetch(constructApiUrl("/api/posts?populate=*"), {
+        headers: getAuthHeaders(),
+      });
 
       if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`API error (${response.status}): ${errorText}`)
+        const errorText = await response.text();
+        throw new Error(`API error (${response.status}): ${errorText}`);
       }
 
-      const data = await response.json()
-      setApiResponse(JSON.stringify(data, null, 2))
+      const data = await response.json();
+      setApiResponse(JSON.stringify(data, null, 2));
     } catch (err) {
-      console.error("API test failed:", err)
-      setError(err instanceof Error ? err.message : String(err))
+      console.error("API test failed:", err);
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   if (!isVisible) {
     return (
@@ -48,7 +47,7 @@ export default function ApiDebug() {
           Debug API
         </Button>
       </div>
-    )
+    );
   }
 
   return (
@@ -63,12 +62,16 @@ export default function ApiDebug() {
         <CardContent>
           <div className="space-y-4">
             <div className="text-xs">
-              <p>API URL: {process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"}</p>
-              <p>Token exists: {process.env.NEXT_PUBLIC_APP_ENV ? "Yes" : "No"}</p>
-              <p>App Env: {process.env.NEXT_PUBLIC_APP_ENV || "Not set"}</p>
+              <p>API URL: {API_CONFIG.BASE_URL || "Not set"}</p>
+              <p>Token exists: {API_CONFIG.PUBLIC_API_TOKEN ? "Yes" : "No"}</p>
             </div>
 
-            <Button onClick={testApi} disabled={isLoading} size="sm" className="w-full">
+            <Button
+              onClick={testApi}
+              disabled={isLoading}
+              size="sm"
+              className="w-full"
+            >
               {isLoading ? "Testing..." : "Test API Connection"}
             </Button>
 
@@ -87,5 +90,5 @@ export default function ApiDebug() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

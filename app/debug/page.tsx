@@ -1,4 +1,4 @@
-import DebugImageUrl from "@/components/debug-image-url"
+import DebugImageUrl from "@/components/debug-image-url";
 
 export default function DebugPage() {
   return (
@@ -6,5 +6,5 @@ export default function DebugPage() {
       <h1 className="text-2xl font-bold mb-4">Image URL Debugging</h1>
       <DebugImageUrl />
     </div>
-  )
+  );
 }

@@ -1,19 +1,27 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { z } from "zod"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { Eye, EyeOff } from "lucide-react"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
-import { useToast } from "@/hooks/use-toast"
-import { Progress } from "@/components/ui/progress"
-import { useFormState, useFormStatus } from "react-dom"
-import { registerAction } from "./actions"
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Eye, EyeOff } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { useToast } from "@/hooks/use-toast";
+import { Progress } from "@/components/ui/progress";
+import { useFormState, useFormStatus } from "react-dom";
+import { registerAction } from "./actions";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const signupSchema = z
   .object({
@@ -27,29 +35,35 @@ const signupSchema = z
     password: z
       .string()
       .min(8, { message: "Password must be at least 8 characters" })
-      .regex(/[A-Z]/, { message: "Password must contain at least one uppercase letter" })
-      .regex(/[a-z]/, { message: "Password must contain at least one lowercase letter" })
+      .regex(/[A-Z]/, {
+        message: "Password must contain at least one uppercase letter",
+      })
+      .regex(/[a-z]/, {
+        message: "Password must contain at least one lowercase letter",
+      })
       .regex(/[0-9]/, { message: "Password must contain at least one number" }),
     confirmPassword: z.string(),
     agreeTerms: z.literal(true, {
-      errorMap: () => ({ message: "You must agree to the terms and conditions" }),
+      errorMap: () => ({
+        message: "You must agree to the terms and conditions",
+      }),
     }),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords do not match",
     path: ["confirmPassword"],
-  })
+  });
 
-type SignupFormValues = z.infer<typeof signupSchema>
+type SignupFormValues = z.infer<typeof signupSchema>;
 
 // Initial state for the form
 const initialState = {
   success: false,
   error: null,
-}
+};
 
 function SubmitButton() {
-  const { pending } = useFormStatus()
+  const { pending } = useFormStatus();
 
   return (
     <Button
@@ -66,16 +80,15 @@ function SubmitButton() {
         "Create account"
       )}
     </Button>
-  )
+  );
 }
 
 export default function SignupForm() {
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [passwordStrength, setPasswordStrength] = useState(0)
-  const router = useRouter()
-  const { toast } = useToast()
-  const [state, formAction] = useFormState(registerAction, initialState)
+  const router = useRouter();
+  const { toast } = useToast();
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [state, formAction] = useFormState(registerAction, initialState);
 
   const form = useForm<SignupFormValues>({
     resolver: zodResolver(signupSchema),
@@ -86,50 +99,55 @@ export default function SignupForm() {
       confirmPassword: "",
       agreeTerms: false,
     },
-    mode: "onChange",
-  })
+  });
 
   const calculatePasswordStrength = (password: string) => {
-    if (!password) return 0
+    if (!password) return 0;
 
-    let strength = 0
+    let strength = 0;
     // Length check
-    if (password.length >= 8) strength += 20
+    if (password.length >= 8) strength += 20;
     // Uppercase check
-    if (/[A-Z]/.test(password)) strength += 20
+    if (/[A-Z]/.test(password)) strength += 20;
     // Lowercase check
-    if (/[a-z]/.test(password)) strength += 20
+    if (/[a-z]/.test(password)) strength += 20;
     // Number check
-    if (/[0-9]/.test(password)) strength += 20
+    if (/[0-9]/.test(password)) strength += 20;
     // Special character check
-    if (/[^A-Za-z0-9]/.test(password)) strength += 20
+    if (/[^A-Za-z0-9]/.test(password)) strength += 20;
 
-    return strength
-  }
+    return strength;
+  };
 
   const getPasswordStrengthColor = (strength: number) => {
-    if (strength < 40) return "bg-red-500"
-    if (strength < 80) return "bg-yellow-500"
-    return "bg-green-500"
-  }
+    if (strength < 40) return "bg-red-500";
+    if (strength < 80) return "bg-yellow-500";
+    return "bg-green-500";
+  };
 
   // Handle successful registration after form submission
   if (state.success) {
     toast({
       title: "Account created!",
       description: "Please check your email to verify your account.",
-    })
+    });
 
     // Store email in localStorage for the verification page
-    localStorage.setItem("pendingVerificationEmail", form.getValues().email)
+    localStorage.setItem("pendingVerificationEmail", form.getValues().email);
 
     // Redirect to verification page
-    router.push("/auth/verify")
+    router.push("/auth/verify");
   }
 
   return (
     <Form {...form}>
       <form action={formAction} className="space-y-4">
+        {state.error && (
+          <Alert variant="destructive">
+            <AlertDescription>{state.error}</AlertDescription>
+          </Alert>
+        )}
+
         <FormField
           control={form.control}
           name="username"
@@ -137,7 +155,7 @@ export default function SignupForm() {
             <FormItem>
               <FormLabel>Username</FormLabel>
               <FormControl>
-                <Input name="username" placeholder="your_username" {...field} />
+                <Input placeholder="Choose a username" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -151,7 +169,7 @@ export default function SignupForm() {
             <FormItem>
               <FormLabel>Email</FormLabel>
               <FormControl>
-                <Input name="email" placeholder="your.email@example.com" {...field} />
+                <Input type="email" placeholder="Enter your email" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -167,37 +185,34 @@ export default function SignupForm() {
               <FormControl>
                 <div className="relative">
                   <Input
-                    name="password"
                     type={showPassword ? "text" : "password"}
-                    placeholder="••••••••"
+                    placeholder="Create a password"
                     {...field}
                     onChange={(e) => {
-                      field.onChange(e)
-                      setPasswordStrength(calculatePasswordStrength(e.target.value))
+                      field.onChange(e);
+                      form.setValue("password", e.target.value);
                     }}
                   />
-                  <Button
+                  <button
                     type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0 h-full px-3 py-2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-2 top-1/2 -translate-y-1/2"
                     onClick={() => setShowPassword(!showPassword)}
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
                 </div>
               </FormControl>
+              <FormMessage />
               {field.value && (
-                <div className="mt-2 space-y-1">
-                  <Progress value={passwordStrength} className={getPasswordStrengthColor(passwordStrength)} />
-                  <p className="text-xs text-gray-500">
-                    {passwordStrength < 40 && "Weak password"}
-                    {passwordStrength >= 40 && passwordStrength < 80 && "Moderate password"}
-                    {passwordStrength >= 80 && "Strong password"}
-                  </p>
+                <div className="mt-2">
+                  <Progress
+                    value={calculatePasswordStrength(field.value)}
+                    className={`h-2 ${getPasswordStrengthColor(
+                      calculatePasswordStrength(field.value)
+                    )}`}
+                  />
                 </div>
               )}
-              <FormMessage />
             </FormItem>
           )}
         />
@@ -211,20 +226,21 @@ export default function SignupForm() {
               <FormControl>
                 <div className="relative">
                   <Input
-                    name="confirmPassword"
                     type={showConfirmPassword ? "text" : "password"}
-                    placeholder="••••••••"
+                    placeholder="Confirm your password"
                     {...field}
                   />
-                  <Button
+                  <button
                     type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0 h-full px-3 py-2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-2 top-1/2 -translate-y-1/2"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   >
-                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
+                    {showConfirmPassword ? (
+                      <EyeOff size={16} />
+                    ) : (
+                      <Eye size={16} />
+                    )}
+                  </button>
                 </div>
               </FormControl>
               <FormMessage />
@@ -236,35 +252,31 @@ export default function SignupForm() {
           control={form.control}
           name="agreeTerms"
           render={({ field }) => (
-            <FormItem className="flex items-start space-x-2 space-y-0">
+            <FormItem className="flex flex-row items-start space-x-3 space-y-0">
               <FormControl>
-                <Checkbox name="agreeTerms" checked={field.value} onCheckedChange={field.onChange} />
+                <Checkbox
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
               </FormControl>
               <div className="space-y-1 leading-none">
-                <FormLabel className="text-sm font-normal cursor-pointer">
+                <FormLabel>
                   I agree to the{" "}
-                  <a href="#" className="text-pink-500 hover:underline">
+                  <a href="/terms" className="text-blue-500 hover:underline">
                     Terms of Service
                   </a>{" "}
                   and{" "}
-                  <a href="#" className="text-pink-500 hover:underline">
+                  <a href="/privacy" className="text-blue-500 hover:underline">
                     Privacy Policy
                   </a>
                 </FormLabel>
-                <FormMessage />
               </div>
             </FormItem>
           )}
         />
 
-        {state.error && (
-          <div className="p-3 rounded-md bg-red-50 text-red-500 text-sm">
-            <p>{state.error}</p>
-          </div>
-        )}
-
         <SubmitButton />
       </form>
     </Form>
-  )
+  );
 }

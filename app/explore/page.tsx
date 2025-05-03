@@ -1,12 +1,12 @@
-import ExploreHeader from "@/components/explore/explore-header"
-import ExploreGrid from "@/components/explore/explore-grid"
-import ExploreTrending from "@/components/explore/explore-trending"
-import Sidebar from "@/components/sidebar"
-import BottomNav from "@/components/bottom-nav"
-import { Toaster } from "@/components/ui/toaster"
-import { Suspense } from "react"
+import ExploreHeader from "@/components/explore/explore-header";
+import ExploreGrid from "@/components/explore/explore-grid";
+import ExploreTrending from "@/components/explore/explore-trending";
+import Sidebar from "@/components/sidebar";
+import BottomNav from "@/components/bottom-nav";
+import { Toaster } from "@/components/ui/toaster";
+import { Suspense } from "react";
 
-export default function ExplorePage() {
+function ExploreContent() {
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="flex">
@@ -20,9 +20,7 @@ export default function ExplorePage() {
           <div className="container max-w-7xl mx-auto px-4 pt-2 pb-16 md:py-8">
             <ExploreHeader />
             <ExploreTrending />
-            <Suspense fallback={<div className="h-screen flex items-center justify-center">Loading...</div>}>
-              <ExploreGrid />
-            </Suspense>
+            <ExploreGrid />
           </div>
         </div>
       </div>
@@ -34,5 +32,19 @@ export default function ExplorePage() {
 
       <Toaster />
     </main>
-  )
+  );
+}
+
+export default function ExplorePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="h-screen flex items-center justify-center">
+          Loading...
+        </div>
+      }
+    >
+      <ExploreContent />
+    </Suspense>
+  );
 }

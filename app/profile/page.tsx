@@ -1,20 +1,26 @@
-import { Suspense } from "react"
-import { requireAuth } from "@/app/actions/user-actions"
-import ProfileHeader from "@/components/profile/profile-header"
-import ProfileGallery from "@/components/profile/profile-gallery"
-import ProfileStats from "@/components/profile/profile-stats"
-import Sidebar from "@/components/sidebar"
-import BottomNav from "@/components/bottom-nav"
-import { Toaster } from "@/components/ui/toaster"
-import GuestModeBanner from "@/components/profile/guest-mode-banner"
-import { ProfileHeaderSkeleton, ProfileStatsSkeleton } from "@/components/profile/profile-skeleton"
+import { Suspense } from "react";
+import { requireAuth } from "@/app/actions/user-actions";
+import ProfileHeader from "@/components/profile/profile-header";
+import ProfileGallery from "@/components/profile/profile-gallery";
+import ProfileStats from "@/components/profile/profile-stats";
+import Sidebar from "@/components/sidebar";
+import BottomNav from "@/components/bottom-nav";
+import { Toaster } from "@/components/ui/toaster";
+import GuestModeBanner from "@/components/profile/guest-mode-banner";
+import {
+  ProfileHeaderSkeleton,
+  ProfileStatsSkeleton,
+} from "@/components/profile/profile-skeleton";
+
+// Mark this page as dynamic
+export const dynamic = "force-dynamic";
 
 export default async function ProfilePage() {
   try {
     // This will redirect to /auth if not authenticated
-    console.log("Fetching user data for profile page")
-    const user = await requireAuth("/profile")
-    console.log("User data fetched successfully")
+    console.log("Fetching user data for profile page");
+    const user = await requireAuth("/profile");
+    console.log("User data fetched successfully");
 
     return (
       <main className="min-h-screen bg-gray-50">
@@ -37,7 +43,11 @@ export default async function ProfilePage() {
                   <ProfileStats user={user} />
                 </Suspense>
 
-                <Suspense fallback={<div className="p-8 text-center">Loading gallery...</div>}>
+                <Suspense
+                  fallback={
+                    <div className="p-8 text-center">Loading gallery...</div>
+                  }
+                >
                   <ProfileGallery username={user.username} />
                 </Suspense>
               </div>
@@ -52,17 +62,20 @@ export default async function ProfilePage() {
 
         <Toaster />
       </main>
-    )
+    );
   } catch (error) {
-    console.error("Error rendering profile page:", error)
+    console.error("Error rendering profile page:", error);
 
     // Fallback UI for errors
     return (
       <main className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="bg-white p-8 rounded-xl shadow-sm max-w-md w-full">
-          <h1 className="text-2xl font-bold text-red-600 mb-4">Error Loading Profile</h1>
+          <h1 className="text-2xl font-bold text-red-600 mb-4">
+            Error Loading Profile
+          </h1>
           <p className="text-gray-700 mb-6">
-            We encountered an error while loading your profile. This could be due to network issues or server problems.
+            We encountered an error while loading your profile. This could be
+            due to network issues or server problems.
           </p>
           <div className="flex flex-col space-y-4">
             <a
@@ -80,6 +93,6 @@ export default async function ProfilePage() {
           </div>
         </div>
       </main>
-    )
+    );
   }
 }
