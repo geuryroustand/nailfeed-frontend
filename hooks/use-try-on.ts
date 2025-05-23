@@ -96,10 +96,16 @@ export function useTryOn(designImageUrl: string) {
         }
       }
 
+      // Wait a moment to ensure DOM is ready
+      await new Promise((resolve) => setTimeout(resolve, 100))
+
       // Get video element
       const videoElement = videoRef.current
       if (!videoElement) {
-        throw new Error("Video element not found")
+        console.error("Video element reference is null. Component might not be mounted yet.")
+        setState("error")
+        setError("Video element not found. Please try again.")
+        return
       }
 
       // Get user media
@@ -113,8 +119,17 @@ export function useTryOn(designImageUrl: string) {
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints)
 
+      // Double check video element is still available
+      if (!videoRef.current) {
+        // Clean up stream if video element is no longer available
+        stream.getTracks().forEach((track) => track.stop())
+        setState("error")
+        setError("Video element was removed. Please try again.")
+        return
+      }
+
       // Set stream to video element
-      videoElement.srcObject = stream
+      videoRef.current.srcObject = stream
       streamRef.current = stream
 
       // Update state
