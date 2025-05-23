@@ -10,12 +10,14 @@ import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
 import { updateEmail, type ActionResponse } from "./actions"
 import type { User } from "@/lib/auth-service"
+import { useRouter } from "next/navigation"
 
 interface EmailFormProps {
   user: User
 }
 
 export function EmailForm({ user }: EmailFormProps) {
+  const router = useRouter()
   const { toast } = useToast()
   const [newEmail, setNewEmail] = useState("")
   const [emailPassword, setEmailPassword] = useState("")
@@ -51,6 +53,11 @@ export function EmailForm({ user }: EmailFormProps) {
       const formData = new FormData(event.currentTarget)
       const result = await updateEmail(formData)
       setFormState(result)
+
+      if (result.success) {
+        // Use router.refresh() instead of a full page reload
+        router.refresh()
+      }
     } catch (error) {
       setFormState({
         success: false,

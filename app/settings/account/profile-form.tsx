@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast"
 import { updateProfile, type ActionResponse } from "./actions"
 import type { UserProfile } from "@/lib/profile-service"
 import type { User as UserType } from "@/lib/auth-service"
+import { useRouter } from "next/navigation"
 
 interface ProfileFormProps {
   profile: UserProfile
@@ -18,10 +19,13 @@ interface ProfileFormProps {
 }
 
 export function ProfileForm({ profile, user }: ProfileFormProps) {
+  const router = useRouter()
   const { toast } = useToast()
   const [username, setUsername] = useState(user.username || "")
   const [displayName, setDisplayName] = useState(profile.displayName || "")
   const [bio, setBio] = useState(profile.bio || "")
+  const [location, setLocation] = useState(profile.location || "")
+  const [website, setWebsite] = useState(profile.website || "")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formState, setFormState] = useState<ActionResponse>({
     success: false,
@@ -44,13 +48,23 @@ export function ProfileForm({ profile, user }: ProfileFormProps) {
     setIsSubmitting(true)
 
     try {
-      const formData = new FormData(event.currentTarget)
+      // Create a new FormData instance
+      const formData = new FormData()
+
+      // Explicitly add all fields to ensure empty fields are included
+      formData.append("username", username)
+      formData.append("displayName", displayName)
+      formData.append("bio", bio) // Include even if empty
+      formData.append("location", location) // Include even if empty
+      formData.append("website", website) // Include even if empty
 
       // Log what we're sending
       console.log("Submitting form data:", {
-        username: formData.get("username"),
-        displayName: formData.get("displayName"),
-        bio: formData.get("bio"),
+        username,
+        displayName,
+        bio,
+        location,
+        website,
       })
 
       const result = await updateProfile(formData)
@@ -59,8 +73,8 @@ export function ProfileForm({ profile, user }: ProfileFormProps) {
       setFormState(result)
 
       if (result.success) {
-        // Optionally refresh the page to show updated data
-        // window.location.reload()
+        // Instead of forcing a page reload, use the router to refresh the data
+        router.refresh()
       }
     } catch (error) {
       console.error("Form submission error:", error)
@@ -112,7 +126,7 @@ export function ProfileForm({ profile, user }: ProfileFormProps) {
 
         <div className="space-y-2">
           <label htmlFor="bio" className="text-sm font-medium">
-            Bio
+            Bio <span className="text-gray-400 text-xs">(optional)</span>
           </label>
           <textarea
             id="bio"
@@ -124,6 +138,38 @@ export function ProfileForm({ profile, user }: ProfileFormProps) {
           />
           {formState.fieldErrors?.bio && <p className="text-xs text-red-500">{formState.fieldErrors.bio[0]}</p>}
           <p className="text-xs text-gray-500">Share a little about yourself, your nail art style, or your interests</p>
+        </div>
+
+        <div className="space-y-2">
+          <label htmlFor="location" className="text-sm font-medium">
+            Location <span className="text-gray-400 text-xs">(optional)</span>
+          </label>
+          <Input
+            id="location"
+            name="location"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder="Your location"
+          />
+          {formState.fieldErrors?.location && (
+            <p className="text-xs text-red-500">{formState.fieldErrors.location[0]}</p>
+          )}
+          <p className="text-xs text-gray-500">Where you're based (city, country, etc.)</p>
+        </div>
+
+        <div className="space-y-2">
+          <label htmlFor="website" className="text-sm font-medium">
+            Website <span className="text-gray-400 text-xs">(optional)</span>
+          </label>
+          <Input
+            id="website"
+            name="website"
+            value={website}
+            onChange={(e) => setWebsite(e.target.value)}
+            placeholder="Your website"
+          />
+          {formState.fieldErrors?.website && <p className="text-xs text-red-500">{formState.fieldErrors.website[0]}</p>}
+          <p className="text-xs text-gray-500">Your personal website or social media</p>
         </div>
 
         <Button

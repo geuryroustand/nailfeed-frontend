@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { z } from "zod"
 import { useForm } from "react-hook-form"
@@ -15,6 +15,8 @@ import Link from "next/link"
 import { useActionState } from "react"
 import { useFormStatus } from "react-dom"
 import { loginAction } from "./actions"
+import { useAuth } from "@/hooks/use-auth"
+import { AuthService } from "@/lib/auth-service"
 
 const loginSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address" }),
@@ -28,6 +30,8 @@ type LoginFormValues = z.infer<typeof loginSchema>
 const initialState = {
   success: false,
   error: null,
+  user: null,
+  jwt: null,
 }
 
 function SubmitButton() {
@@ -56,6 +60,8 @@ export default function LoginForm() {
   const router = useRouter()
   const { toast } = useToast()
   const [state, formAction] = useActionState(loginAction, initialState)
+  const { setUserData, refreshUser } = useAuth()
+  const hasRedirected = useRef(false)
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -68,21 +74,48 @@ export default function LoginForm() {
 
   // Handle successful login after form submission
   useEffect(() => {
-    if (state.success) {
+    if (state.success && state.user && !hasRedirected.current) {
+      console.log("Login successful, user data:", state.user)
+
+      // Set flag to prevent multiple redirects
+      hasRedirected.current = true
+
+      // Update auth context with user data
+      setUserData(state.user)
+
+      // Store JWT in both localStorage and cookies
+      if (state.jwt) {
+        // Store in localStorage for client-side access
+        localStorage.setItem("auth_token", state.jwt)
+
+        // Store in cookies using AuthService
+        AuthService.storeTokenInCookie(state.jwt)
+
+        // Also store using fetch to ensure server-side cookie is set
+        fetch("/api/auth/set-cookie", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ token: state.jwt }),
+        }).catch((err) => console.error("Failed to set cookie:", err))
+      }
+
       toast({
         title: "Login successful!",
         description: "Welcome back to NailFeed",
       })
 
-      // Redirect to home page with a slight delay to ensure toast is visible
-      const redirectTimer = setTimeout(() => {
-        router.push("/")
-        router.refresh()
-      }, 500)
-
-      return () => clearTimeout(redirectTimer)
+      // Force a refresh of the user data
+      refreshUser().then(() => {
+        // Redirect to home page with a slight delay
+        setTimeout(() => {
+          router.push("/")
+          router.refresh()
+        }, 500)
+      })
     }
-  }, [state.success, router, toast])
+  }, [state.success, state.user, state.jwt, router, toast, setUserData, refreshUser])
 
   return (
     <Form {...form}>

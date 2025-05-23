@@ -1,0 +1,183 @@
+"use client"
+
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { ArrowLeft, MessageCircle, Share2, Bookmark, LogIn } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { useToast } from "@/hooks/use-toast"
+import { useAuth } from "@/context/auth-context"
+import type { Post } from "@/types/post"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { ReactionDisplay } from "@/components/reaction-display"
+import { ReactionButton } from "@/components/reaction-button"
+import FeedCommentSection from "@/components/comments/feed-comment-section"
+import RelatedPostsSection from "@/components/post/related-posts-section"
+
+interface PostDetailClientWrapperProps {
+  post: Post
+  relatedPosts: Post[]
+}
+
+export default function PostDetailClientWrapperOptimized({ post, relatedPosts }: PostDetailClientWrapperProps) {
+  const router = useRouter()
+  const { toast } = useToast()
+  const { isAuthenticated } = useAuth()
+  const [isSaved, setIsSaved] = useState(false)
+  const [currentReaction, setCurrentReaction] = useState<string | null>(null)
+
+  // Handle save button click
+  const handleSave = () => {
+    if (!isAuthenticated) {
+      promptLogin("save posts")
+      return
+    }
+
+    setIsSaved(!isSaved)
+    toast({
+      title: isSaved ? "Post unsaved" : "Post saved",
+      description: isSaved ? "Post removed from your saved items" : "Post added to your saved items",
+    })
+  }
+
+  // Handle share button click
+  const handleShare = () => {
+    // Sharing is allowed for all users since it's a basic web functionality
+    if (navigator.share) {
+      navigator
+        .share({
+          title: post.title || `${post.username}'s post`,
+          text: post.description || "Check out this nail art post!",
+          url: window.location.href,
+        })
+        .catch((err) => {
+          console.error("Error sharing:", err)
+        })
+    } else {
+      // Fallback for browsers that don't support the Web Share API
+      navigator.clipboard.writeText(window.location.href)
+      toast({
+        title: "Link copied",
+        description: "Post link copied to clipboard",
+      })
+    }
+  }
+
+  // Helper function to prompt login
+  const promptLogin = (action: string) => {
+    toast({
+      title: "Authentication required",
+      description: (
+        <div className="flex flex-col gap-2">
+          <p>Please log in or sign up to {action}.</p>
+          <Button
+            size="sm"
+            onClick={() => router.push("/auth")}
+            className="bg-pink-500 hover:bg-pink-600 text-white self-start mt-1"
+          >
+            <LogIn className="h-4 w-4 mr-2" />
+            Log in / Sign up
+          </Button>
+        </div>
+      ),
+      duration: 5000,
+    })
+  }
+
+  return (
+    <>
+      {/* Back button */}
+      <div className="mb-4">
+        <Button variant="ghost" size="sm" onClick={() => router.back()} className="mb-4">
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back
+        </Button>
+      </div>
+
+      {/* Authentication banner for non-logged in users */}
+      {!isAuthenticated && (
+        <div className="bg-pink-50 border border-pink-200 rounded-lg p-4 mb-4 flex items-center justify-between">
+          <div className="flex items-center">
+            <LogIn className="h-5 w-5 text-pink-500 mr-2" />
+            <p className="text-sm text-gray-700">Log in to like, comment, and save posts to your collections.</p>
+          </div>
+          <Button size="sm" onClick={() => router.push("/auth")} className="bg-pink-500 hover:bg-pink-600 text-white">
+            Log in / Sign up
+          </Button>
+        </div>
+      )}
+
+      {/* Reaction summary */}
+      <div className="mt-3 mb-2">
+        <div className="bg-gray-50 p-2 rounded-lg">
+          <ReactionDisplay postId={post.id} className="px-2 py-1" maxDisplay={5} />
+        </div>
+      </div>
+
+      {/* Action buttons */}
+      <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+        <div className="flex items-center gap-4">
+          {/* Using the ReactionButton component for consistent behavior with feed page */}
+          <ReactionButton
+            postId={post.id}
+            postDocumentId={post.documentId || post.id.toString()}
+            onReactionChange={(type) => {
+              setCurrentReaction(type)
+            }}
+            className="flex-1"
+          />
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => document.getElementById("comments-section")?.scrollIntoView({ behavior: "smooth" })}
+          >
+            <MessageCircle className="h-5 w-5 mr-1" />
+            {post.comments?.length || 0}
+          </Button>
+
+          <Button variant="ghost" size="sm" onClick={handleShare}>
+            <Share2 className="h-5 w-5 mr-1" />
+            Share
+          </Button>
+        </div>
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleSave}
+                className={`${isSaved ? "text-pink-500" : ""} ${!isAuthenticated ? "opacity-70" : ""}`}
+              >
+                <Bookmark className={`h-5 w-5 mr-1 ${isSaved ? "fill-current" : ""}`} />
+                {isSaved ? "Saved" : "Save"}
+              </Button>
+            </TooltipTrigger>
+            {!isAuthenticated && (
+              <TooltipContent>
+                <p>Log in to save this post</p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+
+      {/* Comments section */}
+      <div id="comments-section" className="bg-white rounded-xl shadow-sm overflow-hidden mb-6 p-4 sm:p-6">
+        <h2 className="text-xl font-semibold mb-4">Comments</h2>
+        <FeedCommentSection
+          postId={post.id}
+          documentId={post.documentId}
+          allowViewingForAll={true}
+          onCommentAdded={() => {
+            // Optional callback for when comments are added
+          }}
+        />
+      </div>
+
+      {/* Related posts */}
+      {relatedPosts && relatedPosts.length > 0 && <RelatedPostsSection posts={relatedPosts} />}
+    </>
+  )
+}

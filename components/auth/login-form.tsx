@@ -11,12 +11,14 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { useToast } from "@/hooks/use-toast"
-import Link from "next/link"
+import { useTransition } from "react"
+import { loginUser } from "@/app/actions/auth-actions"
 import { useAuth } from "@/context/auth-context"
+import Link from "next/link"
 
 const loginSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address" }),
-  password: z.string().min(6, { message: "Password must be at least 6 characters" }),
+  password: z.string().min(1, { message: "Password is required" }),
   rememberMe: z.boolean().optional(),
 })
 
@@ -24,9 +26,11 @@ type LoginFormValues = z.infer<typeof loginSchema>
 
 export default function LoginForm() {
   const [showPassword, setShowPassword] = useState(false)
+  const [serverError, setServerError] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
   const router = useRouter()
   const { toast } = useToast()
-  const { login, isLoading } = useAuth()
+  const { setUserData, checkAuthStatus } = useAuth()
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -37,26 +41,41 @@ export default function LoginForm() {
     },
   })
 
-  const [formError, setFormError] = useState<string | null>(null)
+  const onSubmit = (data: LoginFormValues) => {
+    setServerError(null)
 
-  const onSubmit = async (data: LoginFormValues) => {
-    setFormError(null) // Clear previous form errors
+    startTransition(async () => {
+      try {
+        const result = await loginUser({
+          identifier: data.email,
+          password: data.password,
+          rememberMe: data.rememberMe,
+        })
 
-    const result = await login(data.email, data.password)
+        if (result.success && result.user) {
+          console.log("Login successful, full response:", result)
 
-    if (result.success) {
-      // Show success toast
-      toast({
-        title: "Login successful!",
-        description: "Welcome back to NailFeed",
-      })
+          // Set user data in the auth context with JWT
+          setUserData(result.user, result.jwt)
 
-      // Redirect to home page
-      router.push("/")
-    } else if (result.error) {
-      // Set the exact error message from the backend
-      setFormError(result.error)
-    }
+          // Refresh auth status to ensure we have the latest data
+          await checkAuthStatus()
+
+          toast({
+            title: "Login successful!",
+            description: "Welcome back to NailFeed.",
+            variant: "default",
+          })
+
+          router.push("/")
+        } else {
+          setServerError(result.error || "Login failed. Please check your credentials and try again.")
+        }
+      } catch (error) {
+        console.error("Login error:", error)
+        setServerError("An unexpected error occurred. Please try again later.")
+      }
+    })
   }
 
   return (
@@ -120,23 +139,24 @@ export default function LoginForm() {
           </Link>
         </div>
 
-        {formError && (
+        {serverError && (
           <div className="p-3 rounded-md bg-red-50 text-red-500 text-sm">
-            <p>{formError}</p>
+            <p>{serverError}</p>
           </div>
         )}
 
         <Button
           type="submit"
           className="w-full bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600"
-          disabled={isLoading}
+          disabled={isPending}
         >
-          {isLoading ? (
+          {isPending ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Signing in...
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Logging in...
             </>
           ) : (
-            "Sign in"
+            "Log in"
           )}
         </Button>
       </form>

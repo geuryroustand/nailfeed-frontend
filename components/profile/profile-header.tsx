@@ -1,30 +1,54 @@
 import { ProfileHeaderClient } from "@/components/profile/profile-header-client"
 import type { UserProfileResponse } from "@/lib/services/user-service"
+import { getProfileImageUrl, getCoverImageUrl } from "@/lib/api-url-helper"
 
+// Add isOtherUser prop to the component props
 interface ProfileHeaderProps {
   user: UserProfileResponse
+  isOtherUser?: boolean
 }
 
-// This is now a proper Server Component that passes data to the client component
-export default function ProfileHeader({ user }: ProfileHeaderProps) {
-  // Process data on the server before passing to client
-  const apiBaseUrl = "https://nailfeed-backend-production.up.railway.app"
-
-  // Construct absolute URLs for profile and cover images on the server
-  const getFullImageUrl = (relativeUrl: string | undefined) => {
-    if (!relativeUrl) return undefined
-    // If the URL already starts with http, it's already absolute
-    if (relativeUrl.startsWith("http")) return relativeUrl
-    // Otherwise, prepend the API base URL
-    return `${apiBaseUrl}${relativeUrl}`
+export default function ProfileHeader({ user, isOtherUser = false }: ProfileHeaderProps) {
+  if (!user) {
+    return <div className="p-4 text-center">Error loading profile data</div>
   }
 
-  // Process image URLs on the server
+  // Get the API base URL
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
+
+  // Extract profile image URL using the helper function or directly from the optimized structure
+  const profileImageUrl =
+    getProfileImageUrl(user) ||
+    user.profileImage?.url ||
+    (user.username
+      ? `/placeholder.svg?height=150&width=150&query=profile+${encodeURIComponent(user.username)}`
+      : `/placeholder.svg?height=150&width=150&query=profile+user`)
+
+  // Extract cover image URL using the helper function or directly from the optimized structure
+  const coverImageUrl =
+    getCoverImageUrl(user) ||
+    user.coverImage?.url ||
+    (user.username
+      ? `/placeholder.svg?height=400&width=1200&query=cover+${encodeURIComponent(user.username)}`
+      : `/placeholder.svg?height=400&width=1200&query=cover+background`)
+
+  // Log the raw cover image data for debugging
+  console.log("Raw cover image data:", user.coverImage)
+
+  // Process image URLs on the server with better fallbacks
   const processedUser = {
     ...user,
-    profileImageUrl: getFullImageUrl(user.profileImage?.url) || "/placeholder.svg",
-    coverImageUrl: getFullImageUrl(user.coverImage?.url) || "/nail-pattern-bg.png",
+    profileImageUrl,
+    coverImageUrl,
   }
 
-  return <ProfileHeaderClient userData={processedUser} />
+  // Log the processed image URLs for debugging
+  console.log("Profile Header - Processed image URLs:", {
+    profileImageUrl,
+    coverImageUrl,
+    originalProfileImage: user.profileImage?.url,
+    originalCoverImage: user.coverImage?.url,
+  })
+
+  return <ProfileHeaderClient userData={processedUser} isOtherUser={isOtherUser} />
 }

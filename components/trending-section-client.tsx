@@ -180,17 +180,23 @@ export function TrendingSectionClient({ trendingTags, suggestedUsers, userCollec
       {/* Footer */}
       <div className="text-xs text-gray-500 space-y-2">
         <div className="flex flex-wrap gap-x-2 gap-y-1">
-          <Link href="#" className="hover:underline">
+          <Link href="/about" className="hover:underline">
             About
           </Link>
           <Link href="#" className="hover:underline">
             Help
           </Link>
-          <Link href="#" className="hover:underline">
+          <Link href="/policies/privacy-policy" className="hover:underline">
             Privacy
           </Link>
-          <Link href="#" className="hover:underline">
+          <Link href="/policies/terms-of-service" className="hover:underline">
             Terms
+          </Link>
+          <Link href="/policies/legal-notice" className="hover:underline">
+            Legal
+          </Link>
+          <Link href="/policies/community-guidelines" className="hover:underline">
+            Guidelines
           </Link>
           <Link href="#" className="hover:underline">
             Locations
@@ -199,7 +205,7 @@ export function TrendingSectionClient({ trendingTags, suggestedUsers, userCollec
             Language
           </Link>
         </div>
-        <p>© 2023 NAILFEED</p>
+        <p>© 2025 NAILFEED</p>
       </div>
     </div>
   )

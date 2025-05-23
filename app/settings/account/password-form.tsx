@@ -10,8 +10,10 @@ import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import { useToast } from "@/hooks/use-toast"
 import { updatePassword, type ActionResponse } from "./actions"
+import { useRouter } from "next/navigation"
 
 export function PasswordForm() {
+  const router = useRouter()
   const { toast } = useToast()
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
@@ -83,6 +85,11 @@ export function PasswordForm() {
       const formData = new FormData(event.currentTarget)
       const result = await updatePassword(formData)
       setFormState(result)
+
+      if (result.success) {
+        // Use router.refresh() instead of a full page reload
+        router.refresh()
+      }
     } catch (error) {
       setFormState({
         success: false,

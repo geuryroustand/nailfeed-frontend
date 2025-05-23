@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import LoginForm from "@/components/auth/login-form"
-import SignupForm from "@/components/auth/signup-form"
+import RegistrationForm from "@/components/auth/registration-form"
 import AuthSocial from "@/components/auth/auth-social"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -57,7 +57,7 @@ export default function AuthPage() {
                     exit={{ opacity: 0, y: -10 }}
                     transition={{ duration: 0.2 }}
                   >
-                    {activeTab === "login" ? <LoginForm /> : <SignupForm />}
+                    {activeTab === "login" ? <LoginForm /> : <RegistrationForm />}
                   </motion.div>
                 </AnimatePresence>
               </Tabs>

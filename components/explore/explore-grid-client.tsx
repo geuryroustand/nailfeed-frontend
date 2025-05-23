@@ -4,13 +4,14 @@ import type React from "react"
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { motion } from "framer-motion"
-import { Heart, MessageCircle } from "lucide-react"
+import { Heart, MessageCircle, AlertCircle } from "lucide-react"
 import PostDetailModal from "@/components/explore/post-detail-modal"
 import type { ExplorePostWithLiked } from "@/lib/explore-data"
 import { likePost, unlikePost, savePost, unsavePost, addComment, fetchMorePosts } from "@/lib/explore-actions"
 import { useToast } from "@/hooks/use-toast"
 import LoadMoreIndicator from "./load-more-indicator"
 import Link from "next/link"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface ExploreGridClientProps {
   initialPosts: ExplorePostWithLiked[]
@@ -24,6 +25,7 @@ export default function ExploreGridClient({ initialPosts, initialNextCursor, ini
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor)
   const [hasMore, setHasMore] = useState<boolean>(initialHasMore)
   const [isLoading, setIsLoading] = useState<boolean>(false)
+  const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
 
   // Reference to the observer target element
@@ -34,6 +36,7 @@ export default function ExploreGridClient({ initialPosts, initialNextCursor, ini
     if (isLoading || !hasMore) return
 
     setIsLoading(true)
+    setError(null)
 
     try {
       const result = await fetchMorePosts(nextCursor)
@@ -43,6 +46,7 @@ export default function ExploreGridClient({ initialPosts, initialNextCursor, ini
         setNextCursor(result.nextCursor)
         setHasMore(result.hasMore)
       } else {
+        setError("Failed to load more posts. Please try again.")
         toast({
           title: "Error",
           description: result.error || "Failed to load more posts",
@@ -50,6 +54,7 @@ export default function ExploreGridClient({ initialPosts, initialNextCursor, ini
         })
       }
     } catch (error) {
+      setError("An unexpected error occurred. Please try again.")
       toast({
         title: "Error",
         description: "An unexpected error occurred",
@@ -198,8 +203,24 @@ export default function ExploreGridClient({ initialPosts, initialNextCursor, ini
     }
   }
 
+  // If there are no posts and no error, show a message
+  if (posts.length === 0 && !error && !isLoading) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-gray-500">No posts found. Check back later for new content.</p>
+      </div>
+    )
+  }
+
   return (
     <>
+      {error && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -236,6 +257,8 @@ interface ExploreGridItemProps {
 }
 
 function ExploreGridItem({ post, index, onClick }: ExploreGridItemProps) {
+  const [imageError, setImageError] = useState(false)
+
   const handleClick = (e: React.MouseEvent) => {
     // If the user clicks with the middle mouse button or Ctrl+click, let the browser handle it
     // This allows opening in a new tab
@@ -247,21 +270,31 @@ function ExploreGridItem({ post, index, onClick }: ExploreGridItemProps) {
     onClick()
   }
 
+  // Use medium format if available, or small, or the original image
+  const imageUrl = post.image || "/intricate-nail-art.png"
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(index * 0.05, 1.5) }} // Cap the delay to avoid too long animations
       whileHover={{ scale: 0.98 }}
-      className="relative aspect-square cursor-pointer group"
+      className="relative aspect-square cursor-pointer group overflow-hidden"
     >
-      <Link href={`/post/${post.id}`} onClick={handleClick}>
-        <img
-          src={post.image || "/placeholder.svg"}
-          alt={`Nail art by ${post.username}`}
-          className="w-full h-full object-cover"
-          loading="lazy" // Add lazy loading for better performance
-        />
+      <Link href={`/post/${post.documentId || post.id}`} onClick={handleClick}>
+        {imageError ? (
+          <div className="w-full h-full flex items-center justify-center bg-gray-100">
+            <p className="text-sm text-gray-500">Image unavailable</p>
+          </div>
+        ) : (
+          <img
+            src={imageUrl || "/placeholder.svg"}
+            alt={post.description || `Nail art by ${post.username}`}
+            className="w-full h-full object-cover"
+            loading="lazy"
+            onError={() => setImageError(true)}
+          />
+        )}
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-200 flex items-center justify-center opacity-0 group-hover:opacity-100">
           <div className="flex items-center space-x-4 text-white">
             <div className="flex items-center">

@@ -1,0 +1,345 @@
+"use client"
+
+import { useState, useRef, useEffect } from "react"
+import { useAuth } from "@/context/auth-context"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
+import { MoreHorizontal, Reply, Trash2, Flag, AlertTriangle, Pencil, Check, X, MessageSquare } from "lucide-react"
+import { formatDistanceToNow } from "date-fns"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import type { Comment } from "@/lib/services/comments-service"
+
+interface CommentItemProps {
+  comment: Comment
+  onReply: (commentId: number, username: string) => void
+  onDelete: (commentId: number) => void
+  onReport: (commentId: number, reason: string) => void
+  onEdit: (commentId: number, newContent: string) => void
+}
+
+const getNameInitials = (name: string): string => {
+  if (!name || name === "Anonymous") {
+    return "AN"
+  }
+
+  // For names with spaces (first and last name)
+  if (name.includes(" ")) {
+    const nameParts = name.split(" ")
+    const initials = (nameParts[0].charAt(0) + nameParts[nameParts.length - 1].charAt(0)).toUpperCase()
+    return initials
+  }
+
+  // For single names or usernames
+  if (name.length >= 2) {
+    const initials = name.substring(0, 2).toUpperCase()
+    return initials
+  }
+
+  // For very short names
+  return name.toUpperCase()
+}
+
+export function CommentItem({ comment, onReply, onDelete, onReport, onEdit }: CommentItemProps) {
+  const { user } = useAuth()
+  const [showReportDialog, setShowReportDialog] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [reportReason, setReportReason] = useState("BAD_LANGUAGE")
+  const [isEditing, setIsEditing] = useState(false)
+  const [editedContent, setEditedContent] = useState(comment.content)
+  const [isExpanded, setIsExpanded] = useState(true)
+  const editInputRef = useRef<HTMLInputElement>(null)
+
+  const isAuthor =
+    user &&
+    comment.author &&
+    (String(user.id) === String(comment.author.id) ||
+      user.username === comment.author.name ||
+      user.email === comment.author.email)
+
+  const formattedDate = comment.createdAt
+    ? formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })
+    : "recently"
+
+  // Count replies recursively
+  const countReplies = (comment: Comment): number => {
+    if (!comment.children || !Array.isArray(comment.children) || comment.children.length === 0) {
+      return 0
+    }
+
+    return comment.children.reduce((count, child) => {
+      return count + 1 + countReplies(child)
+    }, 0)
+  }
+
+  const replyCount = countReplies(comment)
+
+  // Focus the input when entering edit mode
+  useEffect(() => {
+    if (isEditing && editInputRef.current) {
+      editInputRef.current.focus()
+    }
+  }, [isEditing])
+
+  const handleReport = () => {
+    onReport(comment.id, reportReason)
+    setShowReportDialog(false)
+  }
+
+  const handleEdit = () => {
+    setIsEditing(true)
+    setEditedContent(comment.content)
+  }
+
+  const handleSaveEdit = () => {
+    if (editedContent.trim()) {
+      onEdit(comment.id, editedContent)
+      setIsEditing(false)
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setIsEditing(false)
+    setEditedContent(comment.content)
+  }
+
+  const handleConfirmDelete = () => {
+    onDelete(comment.id)
+    setShowDeleteDialog(false)
+  }
+
+  const toggleReplies = () => {
+    setIsExpanded(!isExpanded)
+  }
+
+  // Skip rendering if comment is blocked
+  if (comment.blocked) {
+    return (
+      <div className="mb-4 last:mb-0 pl-4 py-2 text-sm text-gray-500 italic">
+        This comment has been blocked by a moderator.
+      </div>
+    )
+  }
+
+  return (
+    <div className="mb-4 last:mb-0">
+      <div className="flex gap-2">
+        <Avatar className="h-6 w-6 flex-shrink-0">
+          <AvatarImage
+            src={comment.author?.avatar || ""}
+            alt={comment.author?.name || "User"}
+            onError={(e) => {
+              // Hide the image on error
+              ;(e.target as HTMLImageElement).style.display = "none"
+            }}
+          />
+          <AvatarFallback
+            className="bg-pink-100 text-pink-800 text-[10px] font-bold flex items-center justify-center"
+            aria-label={`${comment.author?.name || "Anonymous"} profile picture`}
+          >
+            {getNameInitials(comment.author?.name || "Anonymous")}
+          </AvatarFallback>
+        </Avatar>
+
+        <div className="flex-1 min-w-0">
+          <div className="bg-gray-50 rounded-lg p-2 mb-1">
+            <div className="flex justify-between items-start mb-1">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-sm">{comment.author?.name || "Anonymous"}</span>
+                <span className="text-xs text-gray-500">{formattedDate}</span>
+              </div>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                    <MoreHorizontal className="h-4 w-4" />
+                    <span className="sr-only">More options</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => onReply(comment.id, comment.author?.name || "Anonymous")}>
+                    <Reply className="h-4 w-4 mr-2" />
+                    Reply
+                  </DropdownMenuItem>
+
+                  {isAuthor && (
+                    <>
+                      <DropdownMenuItem onClick={handleEdit}>
+                        <Pencil className="h-4 w-4 mr-2" />
+                        Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setShowDeleteDialog(true)} className="text-red-500">
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete
+                      </DropdownMenuItem>
+                    </>
+                  )}
+
+                  {!isAuthor && (
+                    <DropdownMenuItem onClick={() => setShowReportDialog(true)} className="text-amber-500">
+                      <Flag className="h-4 w-4 mr-2" />
+                      Report
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            {isEditing ? (
+              <div className="flex flex-col gap-2">
+                <Input
+                  ref={editInputRef}
+                  value={editedContent}
+                  onChange={(e) => setEditedContent(e.target.value)}
+                  className="text-sm"
+                />
+                <div className="flex justify-end gap-2">
+                  <Button size="sm" variant="ghost" onClick={handleCancelEdit} className="h-7 px-2 text-xs">
+                    <X className="h-3 w-3 mr-1" />
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleSaveEdit}
+                    className="h-7 px-2 text-xs bg-pink-500 hover:bg-pink-600"
+                    disabled={!editedContent.trim() || editedContent === comment.content}
+                  >
+                    <Check className="h-3 w-3 mr-1" />
+                    Save
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm break-words">{comment.content}</p>
+            )}
+          </div>
+
+          <div className="flex gap-2 ml-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onReply(comment.id, comment.author?.name || "Anonymous")}
+              className="h-6 text-xs text-gray-500 hover:text-pink-500"
+            >
+              Reply
+            </Button>
+
+            {/* Show toggle button only if there are replies */}
+            {comment.children && comment.children.length > 0 && isExpanded && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleReplies}
+                className="h-6 text-xs text-gray-500 hover:text-pink-500 flex items-center"
+              >
+                <MessageSquare className="h-3 w-3 mr-1" />
+                {isExpanded ? "Hide" : "Show"} {replyCount} {replyCount === 1 ? "reply" : "replies"}
+              </Button>
+            )}
+          </div>
+
+          {/* Nested replies */}
+          {comment.children && comment.children.length > 0 && isExpanded && (
+            <div className="ml-4 mt-2 space-y-3 border-l-2 border-gray-100 pl-3">
+              {comment.children.map((reply) => (
+                <CommentItem
+                  key={reply.id}
+                  comment={reply}
+                  onReply={onReply}
+                  onDelete={onDelete}
+                  onReport={onReport}
+                  onEdit={onEdit}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Report Dialog */}
+      <Dialog open={showReportDialog} onOpenChange={setShowReportDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Report Comment
+            </DialogTitle>
+            <DialogDescription>
+              Please select a reason for reporting this comment. Our moderation team will review it.
+            </DialogDescription>
+          </DialogHeader>
+
+          <RadioGroup value={reportReason} onValueChange={setReportReason} className="mt-2">
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="BAD_LANGUAGE" id="inappropriate" />
+              <Label htmlFor="inappropriate">Inappropriate content</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="OTHER" id="spam" />
+              <Label htmlFor="spam">Spam</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="DISCRIMINATION" id="harassment" />
+              <Label htmlFor="harassment">Harassment</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="OTHER" id="misinformation" />
+              <Label htmlFor="misinformation">Misinformation</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="OTHER" id="other" />
+              <Label htmlFor="other">Other</Label>
+            </div>
+          </RadioGroup>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowReportDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleReport} className="bg-amber-500 hover:bg-amber-600">
+              Report
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Comment</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this comment? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDelete} className="bg-red-500 hover:bg-red-600">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}

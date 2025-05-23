@@ -21,31 +21,35 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const { token, user } = useAuth()
 
   // Fetch profile data
-  const fetchProfile = useCallback(async () => {
-    if (!token) {
-      setIsLoading(false)
-      return null
-    }
+  const fetchProfile = useCallback(
+    async (forceRefresh = false) => {
+      if (!token) {
+        setIsLoading(false)
+        return null
+      }
 
-    setIsLoading(true)
-    setError(null)
+      setIsLoading(true)
+      setError(null)
 
-    try {
-      const profileData = await ProfileService.getProfile(token)
-      setProfile(profileData)
-      return profileData
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to load profile"
-      setError(errorMessage)
-      return null
-    } finally {
-      setIsLoading(false)
-    }
-  }, [token])
+      try {
+        // Pass forceRefresh to getProfile
+        const profileData = await ProfileService.getProfile(token, forceRefresh)
+        setProfile(profileData)
+        return profileData
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : "Failed to load profile"
+        setError(errorMessage)
+        return null
+      } finally {
+        setIsLoading(false)
+      }
+    },
+    [token],
+  )
 
   // Refresh profile data
   const refreshProfile = useCallback(async () => {
-    return fetchProfile()
+    return fetchProfile(true) // Pass true to force a fresh fetch
   }, [fetchProfile])
 
   // Update profile

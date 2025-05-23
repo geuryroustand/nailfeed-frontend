@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { motion, AnimatePresence } from "framer-motion"
 import { useMediaQuery } from "@/hooks/use-media-query"
+import { useSearch } from "@/context/search-context"
 
 // Filter categories and options
 const colorOptions = [
@@ -76,12 +77,12 @@ export interface SearchFilters {
 }
 
 interface AdvancedSearchProps {
-  onSearch: (filters: SearchFilters) => void
   initialFilters?: SearchFilters
   className?: string
 }
 
-export default function AdvancedSearch({ onSearch, initialFilters, className = "" }: AdvancedSearchProps) {
+export default function AdvancedSearch({ initialFilters, className = "" }: AdvancedSearchProps) {
+  const { setFilters: setSearchFilters } = useSearch()
   const [showFilters, setShowFilters] = useState(false)
   const [filters, setFilters] = useState<SearchFilters>(
     initialFilters || {
@@ -112,7 +113,7 @@ export default function AdvancedSearch({ onSearch, initialFilters, className = "
   }, [filters])
 
   const handleSearch = () => {
-    onSearch(filters)
+    setSearchFilters(filters)
   }
 
   const toggleFilter = (category: keyof SearchFilters, value: string) => {

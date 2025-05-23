@@ -3,12 +3,13 @@
 import { useState, useEffect } from "react"
 import { ReactionService, type ReactionType } from "@/lib/services/reaction-service"
 import { Card, CardContent } from "@/components/ui/card"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ReactionSummary } from "./reaction-summary"
+import { Skeleton } from "@/components/ui/skeleton"
 
 interface ReactionDetailsProps {
   postId: string | number
   className?: string
+  compact?: boolean
 }
 
 interface ReactionUser {
@@ -24,10 +25,9 @@ interface ReactionWithUser {
   user: ReactionUser
 }
 
-export function ReactionDetails({ postId, className }: ReactionDetailsProps) {
+export function ReactionDetails({ postId, className, compact = false }: ReactionDetailsProps) {
   const [reactions, setReactions] = useState<ReactionWithUser[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<string>("all")
 
   useEffect(() => {
     const loadReactions = async () => {
@@ -40,21 +40,34 @@ export function ReactionDetails({ postId, className }: ReactionDetailsProps) {
 
         // Create mock reaction data with users
         const mockReactions: ReactionWithUser[] = []
-        const reactionTypes: ReactionType[] = ["like", "love", "haha", "wow", "sad", "angry"]
 
-        for (let i = 0; i < 20; i++) {
-          const randomType = reactionTypes[Math.floor(Math.random() * reactionTypes.length)]
-          mockReactions.push({
-            id: `reaction-${i}`,
-            type: randomType,
-            user: {
-              id: `user-${i}`,
-              username: `user${i}`,
-              displayName: `User ${i}`,
-              profileImage: `/placeholder.svg?height=40&width=40&query=user`,
-            },
-          })
-        }
+        // Define reaction types with consistent emojis
+        const reactionTypes: { type: ReactionType; count: number }[] = [
+          { type: "haha", count: 6 },
+          { type: "love", count: 5 },
+          { type: "wow", count: 3 },
+          { type: "like", count: 3 },
+          { type: "angry", count: 2 },
+          { type: "sad", count: 1 },
+        ]
+
+        // Generate users for each reaction type
+        let userCounter = 0
+        reactionTypes.forEach(({ type, count }) => {
+          for (let i = 0; i < count; i++) {
+            userCounter++
+            mockReactions.push({
+              id: `reaction-${type}-${i}`,
+              type,
+              user: {
+                id: `user-${userCounter}`,
+                username: `user${userCounter}`,
+                displayName: `User ${userCounter}`,
+                profileImage: `/placeholder.svg?height=40&width=40&query=user+${userCounter}`,
+              },
+            })
+          }
+        })
 
         setReactions(mockReactions)
       } catch (error) {
@@ -66,6 +79,33 @@ export function ReactionDetails({ postId, className }: ReactionDetailsProps) {
 
     loadReactions()
   }, [postId])
+
+  if (loading) {
+    return (
+      <Card className={className}>
+        <CardContent className={compact ? "p-2" : "p-4"}>
+          <div className="flex items-center gap-2">
+            <Skeleton className="w-6 h-6 rounded-full" />
+            <Skeleton className="w-6 h-6 rounded-full" />
+            <Skeleton className="w-24 h-4" />
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (reactions.length === 0) {
+    return null
+  }
+
+  // Count reactions by type and prepare data for ReactionSummary
+  const reactionCounts = reactions.reduce(
+    (counts, reaction) => {
+      counts[reaction.type] = (counts[reaction.type] || 0) + 1
+      return counts
+    },
+    {} as Record<string, number>,
+  )
 
   const getReactionEmoji = (type: ReactionType) => {
     switch (type) {
@@ -86,76 +126,35 @@ export function ReactionDetails({ postId, className }: ReactionDetailsProps) {
     }
   }
 
-  const filteredReactions =
-    activeTab === "all" ? reactions : reactions.filter((reaction) => reaction.type === activeTab)
+  // Format data for ReactionSummary
+  const formattedReactions = Object.entries(reactionCounts).map(([type, count]) => {
+    const users = reactions
+      .filter((r) => r.type === type)
+      .map((r) => ({
+        id: r.user.id,
+        username: r.user.username,
+        displayName: r.user.displayName,
+        avatar: r.user.profileImage,
+      }))
 
-  if (loading) {
-    return (
-      <Card className={className}>
-        <CardContent className="p-4">
-          <div className="flex justify-center p-4">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500"></div>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  if (reactions.length === 0) {
-    return (
-      <Card className={className}>
-        <CardContent className="p-4">
-          <p className="text-gray-500 text-center py-4">No reactions yet</p>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  // Count reactions by type
-  const reactionCounts = reactions.reduce(
-    (counts, reaction) => {
-      counts[reaction.type] = (counts[reaction.type] || 0) + 1
-      return counts
-    },
-    {} as Record<string, number>,
-  )
+    return {
+      emoji: getReactionEmoji(type as ReactionType),
+      label: type,
+      count,
+      users,
+    }
+  })
 
   return (
     <Card className={className}>
-      <CardContent className="p-4">
-        <Tabs defaultValue="all" onValueChange={setActiveTab}>
-          <TabsList className="w-full mb-4">
-            <TabsTrigger value="all" className="flex-1">
-              All ({reactions.length})
-            </TabsTrigger>
-            {Object.entries(reactionCounts)
-              .sort(([_, countA], [__, countB]) => countB - countA)
-              .map(([type, count]) => (
-                <TabsTrigger key={type} value={type} className="flex-1">
-                  <span className="mr-1">{getReactionEmoji(type as ReactionType)}</span>
-                  <span>({count})</span>
-                </TabsTrigger>
-              ))}
-          </TabsList>
-
-          <TabsContent value={activeTab} className="mt-0">
-            <div className="space-y-3 max-h-60 overflow-y-auto">
-              {filteredReactions.map((reaction) => (
-                <div key={reaction.id} className="flex items-center">
-                  <Avatar className="h-8 w-8 mr-3">
-                    <AvatarImage src={reaction.user.profileImage || "/placeholder.svg"} alt={reaction.user.username} />
-                    <AvatarFallback>{reaction.user.username.substring(0, 2).toUpperCase()}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">{reaction.user.displayName || reaction.user.username}</p>
-                    <p className="text-xs text-gray-500">@{reaction.user.username}</p>
-                  </div>
-                  <span className="text-xl">{getReactionEmoji(reaction.type)}</span>
-                </div>
-              ))}
-            </div>
-          </TabsContent>
-        </Tabs>
+      <CardContent className={compact ? "p-2" : "p-4"}>
+        <ReactionSummary
+          reactions={formattedReactions}
+          totalCount={reactions.length}
+          compact={compact}
+          postId={postId}
+          showViewButton={!compact}
+        />
       </CardContent>
     </Card>
   )

@@ -1,441 +1,456 @@
-"use server";
+"use server"
 
-import { cookies } from "next/headers";
-import { revalidatePath, revalidateTag } from "next/cache";
-import { UserService, type UserUpdateInput } from "@/lib/services/user-service";
-import { redirect } from "next/navigation";
-import {
-  validateImage,
-  IMAGE_VALIDATION_PRESETS,
-} from "@/lib/image-validation";
-import { AuthService } from "@/lib/auth-service";
+import { cookies } from "next/headers"
+import { revalidatePath, revalidateTag } from "next/cache"
+import type { UserProfileResponse, UserUpdateInput } from "@/lib/services/user-service"
+import { UserService } from "@/lib/services/user-service"
+import { redirect } from "next/navigation"
+import { validateImage, IMAGE_VALIDATION_PRESETS } from "@/lib/image-validation"
 
-type UserProfileResponse = {
-  id: number;
-  username: string;
-  email: string;
-  displayName?: string;
-  profileImage?: {
-    formats?: {
-      thumbnail?: { url: string };
-      small?: { url: string };
-      medium?: { url: string };
-      large?: { url: string };
-    };
-    url: string;
-  };
-  coverImage?: {
-    formats?: {
-      thumbnail?: { url: string };
-      small?: { url: string };
-      medium?: { url: string };
-      large?: { url: string };
-    };
-    url: string;
-  };
-};
-
-type UserActionResult<T> = {
-  success: boolean;
-  data?: T;
-  error?: string;
-};
-
-type AuthResponse = {
-  success: boolean;
-  data?: UserProfileResponse;
-  error?: string;
-};
-
-type ImageUploadResponse = {
-  success: boolean;
-  data?: {
-    imageUrl: string;
-  };
-  error?: string;
-};
-
-/**
- * Get the current user's profile from the server
- */
-export async function getCurrentUser(): Promise<UserProfileResponse | null> {
-  try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("jwt")?.value;
-
-    if (!token) {
-      console.log("No JWT token found in cookies");
-      return null;
-    }
-
-    const user = await AuthService.getCurrentUser(token);
-    return user;
-  } catch (error) {
-    console.error("Error fetching current user:", error);
-    return null;
-  }
+export type UserActionResult<T = any> = {
+  success: boolean
+  data?: T
+  error?: string
 }
 
-/**
- * Get a user's profile by username
- */
-export async function getUserByUsername(
-  username: string
-): Promise<UserActionResult<UserProfileResponse>> {
+// Get current user
+export async function getCurrentUser(): Promise<UserActionResult<UserProfileResponse>> {
   try {
-    const user = await UserService.getUserByUsername(username);
-
-    if (!user) {
-      return {
-        success: false,
-        error: "User not found",
-      };
-    }
-
-    return {
-      success: true,
-      data: user,
-    };
-  } catch (error) {
-    console.error(`Error in getUserByUsername action for ${username}:`, error);
-    return {
-      success: false,
-      error:
-        error instanceof Error ? error.message : "An unknown error occurred",
-    };
-  }
-}
-
-/**
- * Update the current user's profile
- */
-export async function updateUserProfile(
-  formData: FormData
-): Promise<UserActionResult<UserProfileResponse>> {
-  try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("jwt")?.value;
+    // Get token from cookies
+    const token = cookies().get("jwt")?.value || cookies().get("authToken")?.value
 
     if (!token) {
       return {
         success: false,
         error: "Authentication required",
-      };
+      }
     }
 
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/api/users/me`,
-      {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          displayName: formData.get("displayName"),
-        }),
-      }
-    );
+    // Use the UserService to fetch the current user
+    const userData = await UserService.getCurrentUser(token)
 
-    if (!response.ok) {
-      const error = await response.json();
+    if (!userData) {
       return {
         success: false,
-        error: error.message || "Failed to update profile",
-      };
+        error: "Failed to fetch user data",
+      }
     }
 
-    const data = await response.json();
     return {
       success: true,
-      data: data,
-    };
+      data: userData,
+    }
   } catch (error) {
-    console.error("Error in updateUserProfile:", error);
+    console.error("Error in getCurrentUser:", error)
     return {
       success: false,
-      error:
-        error instanceof Error ? error.message : "Failed to update profile",
-    };
+      error: error instanceof Error ? error.message : "An unknown error occurred",
+    }
   }
 }
 
-/**
- * Upload a profile image
- */
-export async function uploadProfileImage(
-  formData: FormData
-): Promise<ImageUploadResponse> {
+// Get user by username
+export async function getUserByUsername(username: string): Promise<UserActionResult<UserProfileResponse>> {
   try {
-    const userResult = await getCurrentUser();
-    if (!userResult) {
-      console.error("Failed to get current user for profile image upload");
+    // Get token from cookies for authenticated requests
+    const token = cookies().get("jwt")?.value || cookies().get("authToken")?.value
+
+    // Use the UserService to fetch user by username
+    const userData = await UserService.getUserByUsername(username, token)
+
+    if (!userData) {
       return {
         success: false,
-        error: "User not authenticated",
-      };
+        error: `User ${username} not found`,
+      }
     }
 
-    const userId = userResult.id;
-    const file = formData.get("file") as File;
+    return {
+      success: true,
+      data: userData,
+    }
+  } catch (error) {
+    console.error(`Error fetching user ${username}:`, error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "An unknown error occurred",
+    }
+  }
+}
+
+// Update user profile - now accepts a direct JSON payload
+export async function updateUserProfile(userData: UserUpdateInput): Promise<UserActionResult<UserProfileResponse>> {
+  try {
+    // Get fresh token directly from cookies - no caching
+    const cookieStore = cookies()
+    const token = cookieStore.get("jwt")?.value || cookieStore.get("authToken")?.value
+
+    if (!token) {
+      console.error("[SERVER]\nNo JWT token found in cookies")
+      return {
+        success: false,
+        error: "Authentication required - no token found",
+      }
+    }
+
+    console.log("[SERVER]\nToken found in cookies:", token.substring(0, 10) + "...")
+    console.log("[SERVER]\nupdateUserProfile received data:", JSON.stringify(userData, null, 2))
+
+    // First, get the current user to get their ID
+    const currentUserResult = await getCurrentUser()
+    if (!currentUserResult.success || !currentUserResult.data) {
+      return {
+        success: false,
+        error: "Failed to get current user information",
+      }
+    }
+
+    const userId = currentUserResult.data.id
+    console.log(`[SERVER]\nUpdating profile for user ID: ${userId}`)
+
+    // Validate input data
+    if (userData.displayName && userData.displayName.length > 50) {
+      return {
+        success: false,
+        error: "Display name must be less than 50 characters",
+      }
+    }
+
+    if (userData.bio && userData.bio.length > 500) {
+      return {
+        success: false,
+        error: "Bio must be less than 500 characters",
+      }
+    }
+
+    try {
+      // Use the UserService to update the profile with the fresh token and user ID
+      const updatedUser = await UserService.updateProfile(token, userId, userData)
+
+      if (!updatedUser) {
+        return {
+          success: false,
+          error: "Failed to update profile - no response from server",
+        }
+      }
+
+      // Log the response from the server
+      console.log("[SERVER]\nServer response after update:", JSON.stringify(updatedUser, null, 2))
+
+      // Aggressive revalidation to ensure fresh data
+      revalidatePath("/profile", "layout")
+      revalidatePath("/", "layout")
+      revalidateTag("user-profile")
+
+      // Also revalidate any user-specific tags
+      if (updatedUser.username) {
+        revalidateTag(`user-${updatedUser.username}`)
+      }
+
+      return {
+        success: true,
+        data: updatedUser,
+      }
+    } catch (error) {
+      console.error("[SERVER]\nError in UserService.updateProfile:", error)
+      throw error // Re-throw to be caught by the outer catch block
+    }
+  } catch (error) {
+    // Log the detailed error
+    console.error("[SERVER]\nError updating profile:", error)
+    console.error("[SERVER]\nFailed update data:", JSON.stringify(userData, null, 2))
+
+    // Attempt to get more details if it's a response error
+    if (error instanceof Response) {
+      try {
+        const errorText = await error.text()
+        console.error("[SERVER]\nAPI error response:", errorText)
+      } catch (e) {
+        console.error("[SERVER]\nCould not parse error response")
+      }
+    }
+
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "An unknown error occurred",
+    }
+  }
+}
+
+// Upload profile image
+export async function uploadProfileImage(formData: FormData): Promise<UserActionResult<{ imageUrl: string }>> {
+  try {
+    // Get fresh token directly from cookies - no caching
+    const token = cookies().get("jwt")?.value || cookies().get("authToken")?.value
+
+    if (!token) {
+      return {
+        success: false,
+        error: "Authentication required - no token found",
+      }
+    }
+
+    // Get user ID
+    const userResult = await getCurrentUser()
+    if (!userResult.success || !userResult.data) {
+      return {
+        success: false,
+        error: "Failed to get current user",
+      }
+    }
+
+    const userId = userResult.data.id
+
+    // Get file from form data
+    const file = formData.get("profileImage") as File
     if (!file) {
       return {
         success: false,
         error: "No file provided",
-      };
-    }
-
-    const cookieStore = await cookies();
-    const token = cookieStore.get("jwt")?.value;
-    if (!token) {
-      return {
-        success: false,
-        error: "Authentication required",
-      };
-    }
-
-    const uploadFormData = new FormData();
-    uploadFormData.append("files", file);
-    uploadFormData.append("ref", "plugin::users-permissions.user");
-    uploadFormData.append("refId", userId.toString());
-    uploadFormData.append("field", "profileImage");
-
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/api/upload`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: uploadFormData,
       }
-    );
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || "Failed to upload image");
     }
 
-    const updatedUserResult = await getCurrentUser();
-    if (!updatedUserResult) {
-      console.error("Failed to get updated user profile after image upload");
+    // Check file size
+    if (file.size > 3 * 1024 * 1024) {
+      // 3MB limit
       return {
         success: false,
-        error: "Failed to get updated profile",
-      };
+        error: "File size exceeds 3MB limit. Please choose a smaller image.",
+      }
     }
 
-    return {
-      success: true,
-      data: {
-        imageUrl: updatedUserResult.profileImage?.url || "",
-      },
-    };
+    // Validate the image on the server side
+    try {
+      const validationResult = await validateImage(file, IMAGE_VALIDATION_PRESETS.profileImage)
+      if (!validationResult.valid) {
+        return {
+          success: false,
+          error: validationResult.message || "Invalid image file",
+        }
+      }
+    } catch (validationError) {
+      return {
+        success: false,
+        error: "Error validating image. Please try a different image.",
+      }
+    }
+
+    try {
+      // Upload the profile image using the UserService with fresh token
+      const success = await UserService.uploadProfileImage(token, userId, file)
+
+      if (!success) {
+        return {
+          success: false,
+          error: "Failed to upload profile image",
+        }
+      }
+
+      // Get the updated user to get the new image URL
+      const updatedUserResult = await getCurrentUser()
+      const imageUrl =
+        updatedUserResult.success && updatedUserResult.data?.profileImage?.url
+          ? updatedUserResult.data.profileImage.url
+          : `/placeholder.svg?height=300&width=300&query=profile+${userId}+${Date.now()}`
+
+      // Revalidate paths and tags
+      revalidatePath("/profile", "layout")
+      revalidatePath("/", "layout")
+      revalidateTag("user-profile")
+
+      // Also revalidate any user-specific tags
+      if (userResult.data.username) {
+        revalidateTag(`user-${userResult.data.username}`)
+      }
+
+      return {
+        success: true,
+        data: {
+          imageUrl,
+        },
+      }
+    } catch (uploadError) {
+      return {
+        success: false,
+        error: uploadError instanceof Error ? uploadError.message : "Failed to upload image",
+      }
+    }
   } catch (error) {
-    console.error("Error in uploadProfileImage:", error);
+    console.error("Error in uploadProfileImage:", error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to upload image",
-    };
+      error: error instanceof Error ? error.message : "An unknown error occurred",
+    }
   }
 }
 
-/**
- * Upload a cover image
- */
-export async function uploadCoverImage(
-  formData: FormData
-): Promise<ImageUploadResponse> {
+// Upload cover image
+export async function uploadCoverImage(formData: FormData): Promise<UserActionResult<{ imageUrl: string }>> {
   try {
-    const userResult = await getCurrentUser();
-    if (!userResult) {
+    // Get fresh token directly from cookies - no caching
+    const token = cookies().get("jwt")?.value || cookies().get("authToken")?.value
+
+    if (!token) {
       return {
         success: false,
-        error: "User not authenticated",
-      };
+        error: "Authentication required - no token found",
+      }
     }
 
-    const userId = userResult.id;
-    const file = formData.get("file") as File;
+    // Get user ID
+    const userResult = await getCurrentUser()
+    if (!userResult.success || !userResult.data) {
+      return {
+        success: false,
+        error: "Failed to get current user",
+      }
+    }
+
+    const userId = userResult.data.id
+
+    // Get file from form data
+    const file = formData.get("coverImage") as File
     if (!file) {
       return {
         success: false,
         error: "No file provided",
-      };
-    }
-
-    const cookieStore = await cookies();
-    const token = cookieStore.get("jwt")?.value;
-    if (!token) {
-      return {
-        success: false,
-        error: "Authentication required",
-      };
-    }
-
-    const uploadFormData = new FormData();
-    uploadFormData.append("files", file);
-    uploadFormData.append("ref", "plugin::users-permissions.user");
-    uploadFormData.append("refId", userId.toString());
-    uploadFormData.append("field", "coverImage");
-
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/api/upload`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: uploadFormData,
       }
-    );
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || "Failed to upload image");
     }
 
-    const updatedUserResult = await getCurrentUser();
-    if (!updatedUserResult) {
+    // Check file size
+    if (file.size > 3 * 1024 * 1024) {
+      // 3MB limit
       return {
         success: false,
-        error: "Failed to get updated profile",
-      };
+        error: "File size exceeds 3MB limit. Please choose a smaller image.",
+      }
     }
 
-    return {
-      success: true,
-      data: {
-        imageUrl: updatedUserResult.coverImage?.url || "",
-      },
-    };
+    // Validate the image on the server side
+    try {
+      const validationResult = await validateImage(file, IMAGE_VALIDATION_PRESETS.coverImage)
+      if (!validationResult.valid) {
+        return {
+          success: false,
+          error: validationResult.message || "Invalid image file",
+        }
+      }
+    } catch (validationError) {
+      return {
+        success: false,
+        error: "Error validating image. Please try a different image.",
+      }
+    }
+
+    try {
+      // Upload the cover image using the UserService with fresh token
+      const success = await UserService.uploadCoverImage(token, userId, file)
+
+      if (!success) {
+        return {
+          success: false,
+          error: "Failed to upload cover image",
+        }
+      }
+
+      // Get the updated user to get the new image URL
+      const updatedUserResult = await getCurrentUser()
+      const imageUrl =
+        updatedUserResult.success && updatedUserResult.data?.coverImage?.url
+          ? updatedUserResult.data.coverImage.url
+          : `/placeholder.svg?height=1200&width=400&query=cover+${userId}+${Date.now()}`
+
+      // Revalidate paths and tags
+      revalidatePath("/profile", "layout")
+      revalidatePath("/", "layout")
+      revalidateTag("user-profile")
+
+      // Also revalidate any user-specific tags
+      if (userResult.data.username) {
+        revalidateTag(`user-${userResult.data.username}`)
+      }
+
+      return {
+        success: true,
+        data: {
+          imageUrl,
+        },
+      }
+    } catch (uploadError) {
+      return {
+        success: false,
+        error: uploadError instanceof Error ? uploadError.message : "Failed to upload cover image",
+      }
+    }
   } catch (error) {
-    console.error("Error in uploadCoverImage:", error);
+    console.error("Error in uploadCoverImage:", error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to upload image",
-    };
+      error: error instanceof Error ? error.message : "An unknown error occurred",
+    }
   }
 }
 
-/**
- * Check if the user is authenticated
- */
-export async function checkAuth(): Promise<
-  UserActionResult<{ isAuthenticated: boolean }>
-> {
+// Check authentication
+export async function checkAuth(): Promise<UserActionResult<{ isAuthenticated: boolean }>> {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("jwt")?.value;
+    // Get fresh token directly from cookies - no caching
+    const token = cookies().get("jwt")?.value || cookies().get("authToken")?.value
 
     if (!token) {
       return {
         success: true,
         data: { isAuthenticated: false },
-      };
+      }
     }
 
-    const user = await AuthService.getCurrentUser(token);
+    // Check if token is valid by trying to get the current user
+    const userResult = await getCurrentUser()
+    const isAuthenticated = userResult.success && !!userResult.data
+
     return {
       success: true,
-      data: { isAuthenticated: !!user },
-    };
+      data: { isAuthenticated },
+    }
   } catch (error) {
-    console.error("Error in checkAuth:", error);
+    console.error("Error checking authentication:", error)
     return {
       success: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Failed to check authentication",
-    };
+      error: error instanceof Error ? error.message : "An unknown error occurred",
+      data: { isAuthenticated: false },
+    }
   }
 }
 
-/**
- * Require authentication or redirect to login
- */
-export async function requireAuth(
-  callbackUrl?: string
-): Promise<UserProfileResponse> {
+// Require authentication
+export async function requireAuth(callbackUrl?: string): Promise<UserProfileResponse> {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("jwt")?.value;
+    console.log("Checking authentication...")
+
+    // Get fresh token directly from cookies - no caching
+    const token = cookies().get("jwt")?.value || cookies().get("authToken")?.value
 
     if (!token) {
-      console.log("No token found, redirecting to auth");
-      redirect(
-        `/auth${
-          callbackUrl ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ""
-        }`
-      );
+      console.log("No JWT token found, redirecting to auth page")
+      const redirectUrl = callbackUrl ? `/auth?callbackUrl=${encodeURIComponent(callbackUrl)}` : "/auth"
+      redirect(redirectUrl)
     }
 
-    const user = await AuthService.getCurrentUser(token);
-    if (!user) {
-      console.log("Invalid token, redirecting to auth");
-      redirect(
-        `/auth${
-          callbackUrl ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ""
-        }`
-      );
+    // Use the UserService directly to fetch the current user
+    const userData = await UserService.getCurrentUser(token)
+
+    if (!userData) {
+      console.log("Failed to fetch user data, redirecting to auth page")
+      const redirectUrl = callbackUrl ? `/auth?callbackUrl=${encodeURIComponent(callbackUrl)}` : "/auth"
+      redirect(redirectUrl)
     }
 
-    return user;
+    console.log("User authenticated successfully:", userData.username)
+    return userData
   } catch (error) {
-    console.error("Error in requireAuth:", error);
-    redirect(
-      `/auth${
-        callbackUrl ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ""
-      }`
-    );
-  }
-}
-
-export async function loginUser(
-  email: string,
-  password: string
-): Promise<AuthResponse> {
-  try {
-    const response = await AuthService.login(email, password);
-    if (response && "jwt" in response) {
-      const cookieStore = await cookies();
-      cookieStore.set("jwt", response.jwt, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        path: "/",
-      });
-      return {
-        success: true,
-        data: response.user,
-      };
-    }
-    return {
-      success: false,
-      error: response?.error || "Login failed",
-    };
-  } catch (error) {
-    console.error("Error in loginUser:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Login failed",
-    };
-  }
-}
-
-export async function logoutUser(): Promise<AuthResponse> {
-  try {
-    const cookieStore = await cookies();
-    cookieStore.delete("jwt");
-    return {
-      success: true,
-    };
-  } catch (error) {
-    console.error("Error in logoutUser:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Logout failed",
-    };
+    console.error("Error in requireAuth:", error)
+    // In case of error, redirect to login
+    const redirectUrl = callbackUrl ? `/auth?callbackUrl=${encodeURIComponent(callbackUrl)}` : "/auth"
+    redirect(redirectUrl)
   }
 }

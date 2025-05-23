@@ -52,6 +52,21 @@ export function ResponsiveImage({
       setHasError(false)
       setIsLoading(true)
 
+      // Comment out image loading for placeholder URLs
+      if (src.includes("placeholder.svg")) {
+        console.log("Placeholder image request commented out:", src)
+        setImgSrc("/abstract-nail-art.png") // Use local fallback instead
+        setIsLoading(false)
+        return
+      }
+
+      // Special handling for blob URLs
+      if (src.startsWith("blob:")) {
+        console.log("Using blob URL directly:", src.substring(0, 50))
+        setImgSrc(src)
+        return
+      }
+
       // If it's already a full URL, use it directly
       if (src.startsWith("http")) {
         // Check for double slashes in the path part of the URL
@@ -100,40 +115,30 @@ export function ResponsiveImage({
     if (onError) onError()
   }
 
+  // Don't show fallback immediately for blob URLs - they might just need a moment to load
+  const shouldShowFallback = hasError || !imgSrc
+
   return (
     <div className={`relative ${className} ${isLoading ? "animate-pulse bg-gray-200" : ""}`} style={style}>
-      {imgSrc &&
-        !hasError &&
-        (fill ? (
-          <Image
-            src={imgSrc || "/placeholder.svg"}
-            alt={alt}
-            fill
-            sizes={sizes}
-            quality={80}
-            priority={priority}
-            className="object-cover"
-            onLoad={handleImageLoad}
-            onError={handleImageError}
-            unoptimized={true}
-          />
-        ) : (
-          <Image
-            src={imgSrc || "/placeholder.svg"}
-            alt={alt}
-            width={width}
-            height={height}
-            sizes={sizes}
-            quality={80}
-            priority={priority}
-            className="object-cover"
-            onLoad={handleImageLoad}
-            onError={handleImageError}
-            unoptimized={true}
-          />
-        ))}
+      {imgSrc && !hasError && (
+        <Image
+          src={imgSrc || "/placeholder.svg"}
+          alt={alt}
+          width={!fill ? width : undefined}
+          height={!fill ? height : undefined}
+          fill={fill}
+          sizes={sizes}
+          quality={80}
+          priority={priority}
+          className={`object-${objectFit}`}
+          onLoad={handleImageLoad}
+          onError={handleImageError}
+          unoptimized={true}
+          crossOrigin="anonymous"
+        />
+      )}
 
-      {(hasError || !imgSrc) && (
+      {shouldShowFallback && (
         <div className="flex items-center justify-center w-full h-full min-h-[200px] bg-gray-100 rounded">
           {fallbackSrc ? (
             <Image
@@ -145,7 +150,12 @@ export function ResponsiveImage({
               unoptimized={true}
             />
           ) : (
-            <span className="text-sm text-gray-500">Image unavailable</span>
+            <div className="text-center p-4">
+              <span className="text-sm text-gray-500 block">Image unavailable</span>
+              <span className="text-xs text-gray-400 block mt-1">
+                {imgSrc && imgSrc.startsWith("blob:") ? "Temporary image URL expired" : "Could not load image"}
+              </span>
+            </div>
           )}
         </div>
       )}

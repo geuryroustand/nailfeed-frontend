@@ -1,583 +1,394 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
-import Post from "@/components/post"
+import { useState, useEffect, useCallback, useRef } from "react"
+import Post from "./post"
+import { getPosts, type Post as PostType } from "@/lib/post-data"
+import LoadMorePosts from "./load-more-posts"
+import CreatePostModal from "./create-post-modal"
 import { Button } from "@/components/ui/button"
-import { PlusCircle, Filter } from "lucide-react"
-import CreatePostModal from "@/components/create-post-modal"
+import { PlusCircle, Filter, AlertCircle, RefreshCw, WifiOff } from "lucide-react"
+import { useAuth } from "@/context/auth-context"
 import { motion, AnimatePresence } from "framer-motion"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useSearch } from "@/context/search-context"
 import { useToast } from "@/hooks/use-toast"
-import { LoadMorePosts } from "@/components/load-more-posts"
-import { PostService } from "@/lib/services/post-service"
-import type { Post as PostType } from "@/lib/post-data"
-// Import the new API diagnostics component
 import ApiDiagnostics from "@/components/api-diagnostics"
+import { useRouter } from "next/navigation"
+import { ReactionProvider } from "@/context/reaction-context"
+
+// Hardcoded API base URL for testing
+const API_BASE_URL = "https://nailfeed-backend-production.up.railway.app"
 
 interface PostFeedProps {
-  initialPosts: PostType[]
-  initialNextCursor: number | null
-  initialHasMore: boolean
+  initialPosts?: PostType[]
+  initialHasMore?: boolean
+  initialNextPage?: number
+  initialError?: {
+    code: number | string
+    message: string
+  }
 }
 
-export default function PostFeed({ initialPosts, initialNextCursor, initialHasMore }: PostFeedProps) {
-  const [posts, setPosts] = useState<PostType[]>(initialPosts)
-  const [nextCursor, setNextCursor] = useState<number | null>(initialNextCursor)
-  const [hasMore, setHasMore] = useState<boolean>(initialHasMore)
-  const [isLoading, setIsLoading] = useState<boolean>(false)
-  const [showCreateModal, setShowCreateModal] = useState(false)
+export default function PostFeed({
+  initialPosts,
+  initialHasMore = true,
+  initialNextPage = 1,
+  initialError,
+}: PostFeedProps) {
+  const [posts, setPosts] = useState<PostType[]>(initialPosts || [])
+  const [isLoading, setIsLoading] = useState(!initialPosts || initialPosts.length === 0)
+  const [hasMore, setHasMore] = useState(initialHasMore)
+  const [nextPage, setNextPage] = useState(initialNextPage)
+  const [pageSize, setPageSize] = useState(6) // Add this line to track page size
+  const [isCreatePostModalOpen, setIsCreatePostModalOpen] = useState(false)
+  const { isAuthenticated } = useAuth()
   const [viewMode, setViewMode] = useState<"cards" | "compact">("cards")
-  const [apiError, setApiError] = useState<string | null>(null)
+  const [apiError, setApiError] = useState<string | null>(initialError ? initialError.message : null)
+  const [retryCount, setRetryCount] = useState(0)
   const { isSearching } = useSearch()
   const { toast } = useToast()
+  const router = useRouter()
+  const isOffline = useRef(false)
+  const [isConnectionError, setIsConnectionError] = useState(false)
 
-  // Fetch posts on component mount to ensure we have the latest data
+  // Check if we're offline
   useEffect(() => {
-    const fetchLatestPosts = async () => {
-      try {
-        setIsLoading(true)
-        setApiError(null)
-
-        console.log("Fetching latest posts...")
-        const result = await PostService.getPosts(1, 10)
-
-        // Debug logging
-        console.log("API Response structure:", {
-          hasData: !!result.data,
-          dataType: result.data ? (Array.isArray(result.data) ? "array" : typeof result.data) : "none",
-          dataLength: Array.isArray(result.data) ? result.data.length : 0,
-          hasMeta: !!result.meta,
-        })
-
-        if (!result.data || !Array.isArray(result.data)) {
-          console.error("Invalid response structure - data is not an array:", result)
-          setApiError("Invalid API response structure - data is not an array")
-          return
-        }
-
-        if (result.data.length === 0) {
-          console.log("API returned empty posts array")
-          setPosts([])
-          return
-        }
-
-        // Log the first post to understand its structure
-        console.log("First post structure:", JSON.stringify(result.data[0], null, 2))
-
-        // Transform the data to match our Post type with better error handling
-        const transformedPosts = result.data.map((item: any, index: number) => {
-          try {
-            // For debugging the first item in detail
-            if (index === 0) {
-              console.log("Transforming first post:", JSON.stringify(item, null, 2))
-            }
-
-            // Get the post data - could be directly in the item or in item.attributes
-            const post = item.attributes || item
-
-            // Debug user data
-            if (index === 0) {
-              console.log("User data:", JSON.stringify(post.user, null, 2))
-            }
-
-            // Handle user data with multiple possible structures
-            let username = "Unknown User"
-            let userImage = "/serene-woman-gaze.png"
-            let userId = null
-
-            if (post.user) {
-              if (typeof post.user === "object" && post.user !== null) {
-                if (post.user.username) {
-                  username = post.user.username
-                  userId = post.user.id || post.user.documentId
-
-                  // Handle nested profile image structure
-                  if (post.user.profileImage && post.user.profileImage.formats) {
-                    const format =
-                      post.user.profileImage.formats.medium ||
-                      post.user.profileImage.formats.small ||
-                      post.user.profileImage.formats.thumbnail
-
-                    if (format && format.url) {
-                      const apiUrl =
-                        process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
-                      userImage = `${apiUrl}${format.url}`
-                    }
-                  } else if (post.user.profileImage?.url) {
-                    userImage = post.user.profileImage.url
-                  }
-                } else if (post.user.data) {
-                  // Nested in data
-                  const userData = post.user.data.attributes || post.user.data
-                  username = userData.username || "Unknown User"
-                  userImage =
-                    userData.profileImage?.data?.attributes?.url ||
-                    userData.profileImage?.url ||
-                    "/serene-woman-gaze.png"
-                  userId = post.user.data.id || post.user.data.documentId
-                }
-              }
-              // User ID as string/number
-              else if (typeof post.user === "string" || typeof post.user === "number") {
-                userId = post.user
-                username = "User " + userId
-              }
-            }
-
-            // Debug media items
-            if (index === 0) {
-              console.log("Media items:", JSON.stringify(post.mediaItems, null, 2))
-            }
-
-            // Extract media items with better handling of different response structures
-            let mediaItems = []
-            if (post.mediaItems) {
-              if (Array.isArray(post.mediaItems)) {
-                // Handle Strapi v5 nested media structure
-                mediaItems = post.mediaItems.map((item) => {
-                  // Get the file URL from the nested structure
-                  let url = "/abstract-pastel-swirls.png" // Fallback
-
-                  if (item.file && item.file.formats) {
-                    // Prefer medium format, fall back to other sizes
-                    const format =
-                      item.file.formats.medium ||
-                      item.file.formats.small ||
-                      item.file.formats.large ||
-                      item.file.formats.thumbnail
-
-                    if (format && format.url) {
-                      // Construct full URL by prepending API base URL
-                      const apiUrl =
-                        process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
-                      url = `${apiUrl}${format.url}`
-                    }
-                  } else if (item.url) {
-                    // Direct URL case
-                    url = item.url
-                  }
-
-                  return {
-                    id: item.id || `media-${Math.random()}`,
-                    type: item.type || "image",
-                    url: url,
-                  }
-                })
-              } else if (post.mediaItems.data && Array.isArray(post.mediaItems.data)) {
-                // Nested in data array (Strapi format)
-                mediaItems = post.mediaItems.data.map((item) => {
-                  const mediaData = item.attributes || item
-                  return {
-                    id: item.id || `media-${Math.random()}`,
-                    type: mediaData.type || (mediaData.url?.includes(".mp4") ? "video" : "image"),
-                    url:
-                      mediaData.url ||
-                      mediaData.formats?.medium?.url ||
-                      mediaData.formats?.small?.url ||
-                      mediaData.formats?.thumbnail?.url ||
-                      "/abstract-pastel-swirls.png",
-                  }
-                })
-              }
-            }
-
-            // If we still don't have media items but have an image, create a media item from it
-            const image = post.image
-            if (mediaItems.length === 0 && image) {
-              mediaItems = [
-                {
-                  id: `legacy-image-${Math.random()}`,
-                  type: "image",
-                  url: image,
-                },
-              ]
-            }
-
-            // Handle comments with multiple possible structures
-            const comments = []
-            if (post.comments) {
-              if (Array.isArray(post.comments)) {
-                // Direct array
-                comments.push(
-                  ...post.comments.map((comment: any) => ({
-                    id: comment.id || Math.random(),
-                    username: comment.user?.username || "Anonymous",
-                    text: comment.text || comment.content || "",
-                    likes: comment.likes || 0,
-                    reactions: {},
-                  })),
-                )
-              } else if (post.comments.data && Array.isArray(post.comments.data)) {
-                // Nested in data array
-                comments.push(
-                  ...post.comments.data.map((comment: any) => {
-                    const commentData = comment.attributes || comment
-                    return {
-                      id: comment.id || Math.random(),
-                      username:
-                        commentData.user?.data?.attributes?.username || commentData.user?.username || "Anonymous",
-                      text: commentData.text || commentData.content || "",
-                      likes: commentData.likes || 0,
-                      reactions: {},
-                    }
-                  }),
-                )
-              }
-            }
-
-            // Handle tags with multiple possible structures
-            let tags: string[] = []
-            if (post.tags) {
-              if (Array.isArray(post.tags)) {
-                // Direct array
-                tags = post.tags.map((tag: any) => (typeof tag === "string" ? tag : tag.name || "")).filter(Boolean)
-              } else if (post.tags.data && Array.isArray(post.tags.data)) {
-                // Nested in data array
-                tags = post.tags.data
-                  .map((tag: any) => {
-                    const tagData = tag.attributes || tag
-                    return tagData.name || ""
-                  })
-                  .filter(Boolean)
-              }
-            }
-
-            return {
-              id: item.id || Math.random(),
-              documentId: post.documentId || item.id?.toString() || "",
-              userId,
-              username,
-              userImage,
-              image, // Keep this for backward compatibility
-              mediaItems, // Add this line to include the media items
-              contentType:
-                mediaItems.length > 1
-                  ? "media-gallery"
-                  : mediaItems.length === 1
-                    ? mediaItems[0].type === "video"
-                      ? "video"
-                      : "image"
-                    : "text",
-              galleryLayout: mediaItems.length > 1 ? "grid" : undefined,
-              description: post.description || post.content || "",
-              likes: post.likes || post.likesCount || 0,
-              comments,
-              timestamp: formatTimestamp(post.createdAt || post.publishedAt || new Date().toISOString()),
-              tags,
-            }
-          } catch (err) {
-            console.error(`Error transforming post at index ${index}:`, err)
-            // Return a placeholder post on error
-            return {
-              id: Math.random(),
-              username: "Error Loading",
-              userImage: "/serene-woman-gaze.png",
-              image: "/abstract-pastel-swirls.png",
-              description: "There was an error loading this post.",
-              likes: 0,
-              comments: [],
-              timestamp: "Just now",
-              tags: [],
-            }
-          }
-        })
-
-        console.log(`Transformed ${transformedPosts.length} posts`)
-        setPosts(transformedPosts)
-
-        // Update pagination info
-        const pagination = result.meta?.pagination || {
-          page: 1,
-          pageSize: 10,
-          pageCount: transformedPosts.length > 0 ? 2 : 1,
-          total: transformedPosts.length,
-        }
-
-        const newHasMore = pagination.page < pagination.pageCount
-        setHasMore(newHasMore)
-        setNextCursor(newHasMore ? pagination.page + 1 : null)
-      } catch (error: any) {
-        console.error("Error fetching latest posts:", error)
-        setApiError(error.message || "Failed to load posts")
-        toast({
-          title: "Error",
-          description: "Failed to load the latest posts. Using cached data instead.",
-          variant: "destructive",
-        })
-      } finally {
-        setIsLoading(false)
+    const handleOnline = () => {
+      isOffline.current = false
+      setIsConnectionError(false)
+      if (retryCount > 0) {
+        loadInitialPosts()
       }
     }
 
-    fetchLatestPosts()
-  }, [toast])
-
-  // Helper function to format timestamp
-  function formatTimestamp(dateString: string): string {
-    try {
-      const date = new Date(dateString)
-      const now = new Date()
-      const diffMs = now.getTime() - date.getTime()
-      const diffSecs = Math.floor(diffMs / 1000)
-      const diffMins = Math.floor(diffSecs / 60)
-      const diffHours = Math.floor(diffMins / 60)
-      const diffDays = Math.floor(diffHours / 24)
-
-      if (diffDays > 6) {
-        return date.toLocaleDateString()
-      } else if (diffDays > 0) {
-        return `${diffDays}d ago`
-      } else if (diffHours > 0) {
-        return `${diffHours}h ago`
-      } else if (diffMins > 0) {
-        return `${diffMins}m ago`
-      } else {
-        return "Just now"
-      }
-    } catch (error) {
-      console.error("Error formatting timestamp:", error)
-      return "Recently"
+    const handleOffline = () => {
+      isOffline.current = true
+      setIsConnectionError(true)
+      setApiError("You are currently offline. Please check your internet connection.")
     }
-  }
 
-  const loadMorePosts = useCallback(async () => {
-    if (!nextCursor || isLoading) return
+    window.addEventListener("online", handleOnline)
+    window.addEventListener("offline", handleOffline)
+
+    // Initial check
+    if (!navigator.onLine) {
+      isOffline.current = true
+      setIsConnectionError(true)
+      setApiError("You are currently offline. Please check your internet connection.")
+    }
+
+    return () => {
+      window.removeEventListener("online", handleOnline)
+      window.removeEventListener("offline", handleOffline)
+    }
+  }, [retryCount])
+
+  const loadInitialPosts = useCallback(async () => {
+    // Don't reload if we already have initial posts and no error
+    if (initialPosts && initialPosts.length > 0 && !initialError && retryCount === 0) {
+      return
+    }
+
+    // Don't attempt to load if we're offline
+    if (isOffline.current) {
+      setApiError("You are currently offline. Please check your internet connection.")
+      setIsConnectionError(true)
+      return
+    }
+
+    // If we're retrying after a rate limit, add exponential backoff
+    if (initialError?.code === 429 && retryCount > 0) {
+      const backoffTime = Math.min(1000 * Math.pow(2, retryCount - 1), 10000)
+      await new Promise((resolve) => setTimeout(resolve, backoffTime))
+    }
 
     setIsLoading(true)
+    setApiError(null)
+    setIsConnectionError(false)
 
     try {
-      const result = await PostService.getPosts(nextCursor, 10)
+      const response = await getPosts(6, 0)
 
-      // Transform the data with the same logic as above
-      const transformedPosts = result.data.map((item: any) => {
-        try {
-          const post = item.attributes || item
+      // Handle errors
+      if (response.error) {
+        setApiError(response.error.message || "Error loading posts")
 
-          // Handle user data
-          let username = "Unknown User"
-          let userImage = "/serene-woman-gaze.png"
-          let userId = null
-
-          if (post.user) {
-            if (typeof post.user === "object" && post.user !== null) {
-              if (post.user.username) {
-                username = post.user.username
-                userId = post.user.id || post.user.documentId
-
-                // Handle nested profile image structure
-                if (post.user.profileImage && post.user.profileImage.formats) {
-                  const format =
-                    post.user.profileImage.formats.medium ||
-                    post.user.profileImage.formats.small ||
-                    post.user.profileImage.formats.thumbnail
-
-                  if (format && format.url) {
-                    const apiUrl =
-                      process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
-                    userImage = `${apiUrl}${format.url}`
-                  }
-                } else if (post.user.profileImage?.url) {
-                  userImage = post.user.profileImage.url
-                }
-              } else if (post.user.data) {
-                const userData = post.user.data.attributes || post.user.data
-                username = userData.username || "Unknown User"
-                userImage =
-                  userData.profileImage?.data?.attributes?.url || userData.profileImage?.url || "/serene-woman-gaze.png"
-                userId = post.user.data.id || post.user.data.documentId
-              }
-            } else if (typeof post.user === "string" || typeof post.user === "number") {
-              userId = post.user
-              username = "User " + userId
-            }
-          }
-
-          // Extract media items with better handling of different response structures
-          let mediaItems = []
-          const image = post.image
-          if (post.mediaItems) {
-            if (Array.isArray(post.mediaItems)) {
-              // Handle Strapi v5 nested media structure
-              mediaItems = post.mediaItems.map((item) => {
-                // Get the file URL from the nested structure
-                let url = "/abstract-pastel-swirls.png" // Fallback
-
-                if (item.file && item.file.formats) {
-                  // Prefer medium format, fall back to other sizes
-                  const format =
-                    item.file.formats.medium ||
-                    item.file.formats.small ||
-                    item.file.formats.large ||
-                    item.file.formats.thumbnail
-
-                  if (format && format.url) {
-                    // Construct full URL by prepending API base URL
-                    const apiUrl =
-                      process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
-                    url = `${apiUrl}${format.url}`
-                  }
-                } else if (item.url) {
-                  // Direct URL case
-                  url = item.url
-                }
-
-                return {
-                  id: item.id || `media-${Math.random()}`,
-                  type: item.type || "image",
-                  url: url,
-                }
-              })
-            } else if (post.mediaItems.data && Array.isArray(post.mediaItems.data)) {
-              // Nested in data array (Strapi format)
-              mediaItems = post.mediaItems.data.map((item) => {
-                const mediaData = item.attributes || item
-                return {
-                  id: item.id || `media-${Math.random()}`,
-                  type: mediaData.type || (mediaData.url?.includes(".mp4") ? "video" : "image"),
-                  url:
-                    mediaData.url ||
-                    mediaData.formats?.medium?.url ||
-                    mediaData.formats?.small?.url ||
-                    mediaData.formats?.thumbnail?.url ||
-                    "/abstract-pastel-swirls.png",
-                }
-              })
-            }
-          }
-
-          // If we still don't have media items but have an image, create a media item from it
-          if (mediaItems.length === 0 && image) {
-            mediaItems = [
-              {
-                id: `legacy-image-${Math.random()}`,
-                type: "image",
-                url: image,
-              },
-            ]
-          }
-
-          // Handle comments
-          const comments = []
-          if (post.comments) {
-            if (Array.isArray(post.comments)) {
-              comments.push(
-                ...post.comments.map((comment: any) => ({
-                  id: comment.id || Math.random(),
-                  username: comment.user?.username || "Anonymous",
-                  text: comment.text || comment.content || "",
-                  likes: comment.likes || 0,
-                  reactions: {},
-                })),
-              )
-            } else if (post.comments.data && Array.isArray(post.comments.data)) {
-              comments.push(
-                ...post.comments.data.map((comment: any) => {
-                  const commentData = comment.attributes || comment
-                  return {
-                    id: comment.id || Math.random(),
-                    username: commentData.user?.data?.attributes?.username || commentData.user?.username || "Anonymous",
-                    text: commentData.text || commentData.content || "",
-                    likes: commentData.likes || 0,
-                    reactions: {},
-                  }
-                }),
-              )
-            }
-          }
-
-          // Handle tags
-          let tags: string[] = []
-          if (post.tags) {
-            if (Array.isArray(post.tags)) {
-              tags = post.tags.map((tag: any) => (typeof tag === "string" ? tag : tag.name || "")).filter(Boolean)
-            } else if (post.tags.data && Array.isArray(post.tags.data)) {
-              tags = post.tags.data
-                .map((tag: any) => {
-                  const tagData = tag.attributes || tag
-                  return tagData.name || ""
-                })
-                .filter(Boolean)
-            }
-          }
-
-          return {
-            id: item.id || Math.random(),
-            documentId: post.documentId || item.id?.toString() || "",
-            userId,
-            username,
-            userImage,
-            image, // Keep this for backward compatibility
-            mediaItems, // Add this line to include the media items
-            contentType:
-              mediaItems.length > 1
-                ? "media-gallery"
-                : mediaItems.length === 1
-                  ? mediaItems[0].type === "video"
-                    ? "video"
-                    : "image"
-                  : "text",
-            galleryLayout: mediaItems.length > 1 ? "grid" : undefined,
-            description: post.description || post.content || "",
-            likes: post.likes || post.likesCount || 0,
-            comments,
-            timestamp: formatTimestamp(post.createdAt || post.publishedAt || new Date().toISOString()),
-            tags,
-          }
-        } catch (err) {
-          console.error("Error transforming post:", err)
-          // Return a placeholder post on error
-          return {
-            id: Math.random(),
-            username: "Error Loading",
-            userImage: "/serene-woman-gaze.png",
-            image: "/abstract-pastel-swirls.png",
-            description: "There was an error loading this post.",
-            likes: 0,
-            comments: [],
-            timestamp: "Just now",
-            tags: [],
-          }
+        // If we have posts despite the error (fallback data), show them
+        if (response.posts && response.posts.length > 0) {
+          setPosts(response.posts)
+          setHasMore(false)
+          setNextPage(undefined)
+          return
         }
-      })
 
-      setPosts((prevPosts) => [...prevPosts, ...transformedPosts])
+        // Handle rate limit errors
+        if (response.error.code === 429) {
+          // Schedule a retry with backoff
+          const retryDelay = Math.min(2000 * Math.pow(2, retryCount), 30000)
+          setTimeout(() => {
+            setRetryCount((prev) => prev + 1)
+          }, retryDelay)
+        }
 
-      // Update pagination info
-      const pagination = result.meta?.pagination || {
-        page: nextCursor,
-        pageSize: 10,
-        pageCount: nextCursor + 1,
-        total: posts.length + transformedPosts.length,
+        return
       }
 
-      const newHasMore = pagination.page < pagination.pageCount
-      setHasMore(newHasMore)
-      setNextCursor(newHasMore ? pagination.page + 1 : null)
-    } catch (error: any) {
-      console.error("Error loading more posts:", error)
-      setApiError(error.message || "Failed to load more posts")
+      // Ensure each post has a documentId
+      const postsWithDocumentId = response.posts.map((post) => {
+        if (!post.documentId) {
+          // If documentId is missing, create one based on the post ID
+          return {
+            ...post,
+            documentId: `post-${post.id}`,
+          }
+        }
+        return post
+      })
+
+      setPosts(postsWithDocumentId)
+      setHasMore(response.hasMore)
+      setNextPage(response.nextPage || 1)
+
+      // Reset retry count on success
+      if (retryCount > 0) {
+        setRetryCount(0)
+      }
+    } catch (error) {
+      setApiError("Failed to load posts. Please try again later.")
+
+      // Check if it's a network error
+      if (
+        error instanceof Error &&
+        (error.message.includes("network") || error.message.includes("fetch") || error.message.includes("connection"))
+      ) {
+        setIsConnectionError(true)
+        setApiError("Network error. Please check your connection and try again.")
+      } else {
+        setApiError("Failed to load more posts. Please try again later.")
+      }
+
       toast({
-        title: "Error",
-        description: "Failed to load more posts. Please try again.",
+        title: "Error loading posts",
+        description: "We couldn't load the latest posts. Please try again later.",
         variant: "destructive",
       })
     } finally {
       setIsLoading(false)
     }
-  }, [nextCursor, isLoading, toast, posts.length, hasMore])
+  }, [initialPosts, initialError, retryCount, toast])
 
-  const addPost = (newPost: PostType) => {
-    setPosts([newPost, ...posts])
+  useEffect(() => {
+    if (!initialPosts || initialPosts.length === 0 || initialError) {
+      loadInitialPosts()
+    }
+  }, [initialPosts, initialError, loadInitialPosts])
+
+  const loadMorePosts = async () => {
+    if (!hasMore || isLoading || isOffline.current) return
+
+    setIsLoading(true)
+    try {
+      const offset = (nextPage - 1) * 6 // Changed from 10 to 6
+      const response = await getPosts(6, offset) // Changed from 10 to 6
+
+      // Handle errors
+      if (response.error) {
+        setApiError(response.error.message || "Error loading more posts")
+
+        toast({
+          title: "Error loading more posts",
+          description: response.error.message || "We couldn't load additional posts. Please try again later.",
+          variant: "destructive",
+        })
+
+        return
+      }
+
+      // Check for duplicates and only add new posts
+      const existingIds = new Set(posts.map((post) => post.id))
+      const newPosts = response.posts.filter((post) => !existingIds.has(post.id))
+
+      // Ensure each new post has a documentId
+      const newPostsWithDocumentId = newPosts.map((post) => {
+        if (!post.documentId) {
+          return {
+            ...post,
+            documentId: `post-${post.id}`,
+          }
+        }
+        return post
+      })
+
+      setPosts((prevPosts) => [...prevPosts, ...newPostsWithDocumentId])
+      setHasMore(response.hasMore)
+      setNextPage(response.nextPage || nextPage + 1)
+    } catch (error) {
+      setApiError("Failed to load more posts. Please try again later.")
+
+      // Check if it's a network error
+      if (
+        error instanceof Error &&
+        (error.message.includes("network") || error.message.includes("fetch") || error.message.includes("connection"))
+      ) {
+        setIsConnectionError(true)
+        setApiError("Network error. Please check your connection and try again.")
+      } else {
+        setApiError("Failed to load more posts. Please try again later.")
+      }
+
+      toast({
+        title: "Error loading more posts",
+        description: "We couldn't load additional posts. Please try again later.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handlePostCreated = (newPost: PostType) => {
+    // Ensure the new post has a documentId
+    const postWithDocumentId = {
+      ...newPost,
+      documentId: newPost.documentId || `post-${newPost.id}`,
+    }
+
+    // Process mediaItems to ensure they have proper URLs
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
+
+    let processedMediaItems = []
+
+    if (newPost.mediaItems && newPost.mediaItems.length > 0) {
+      processedMediaItems = newPost.mediaItems.map((item) => {
+        // If the item already has a complete URL, use it
+        if (item.url && item.url.startsWith("http")) {
+          return item
+        }
+
+        // If the item has a file with formats, extract the URL
+        if (item.file && item.file.formats) {
+          const formats = item.file.formats
+          const formatUrl = formats.medium?.url || formats.small?.url || formats.thumbnail?.url || formats.large?.url
+
+          if (formatUrl) {
+            return {
+              ...item,
+              url: formatUrl.startsWith("http") ? formatUrl : `${apiUrl}${formatUrl}`,
+            }
+          }
+        }
+
+        // If the item has a direct file URL
+        if (item.file && item.file.url) {
+          return {
+            ...item,
+            url: item.file.url.startsWith("http") ? item.file.url : `${apiUrl}${item.file.url}`,
+          }
+        }
+
+        // If the item has attributes with URL (for Strapi v4 structure)
+        if (item.attributes && item.attributes.url) {
+          return {
+            ...item,
+            url: item.attributes.url.startsWith("http") ? item.attributes.url : `${apiUrl}${item.attributes.url}`,
+          }
+        }
+
+        // If we have a data structure from Strapi v5
+        if (item.data && item.data.attributes) {
+          const attrs = item.data.attributes
+          const fileData = attrs.file && attrs.file.data ? attrs.file.data.attributes : null
+
+          if (fileData && fileData.url) {
+            return {
+              id: item.data.id,
+              type: attrs.type || "image",
+              url: fileData.url.startsWith("http") ? fileData.url : `${apiUrl}${fileData.url}`,
+            }
+          }
+        }
+
+        // Return the item as is if we couldn't process it
+        return item
+      })
+    }
+
+    // Create the final post object with processed media items
+    const finalPost = {
+      ...postWithDocumentId,
+      mediaItems: processedMediaItems.length > 0 ? processedMediaItems : postWithDocumentId.mediaItems || [],
+    }
+
+    setPosts((prevPosts) => [finalPost, ...prevPosts])
+    setIsCreatePostModalOpen(false)
+
+    toast({
+      title: "Post created",
+      description: "Your post has been published successfully!",
+      variant: "default",
+    })
+
+    // Refresh the feed after a short delay to ensure images are loaded
+    setTimeout(() => {
+      loadInitialPosts()
+    }, 2000)
   }
 
   const handlePostDeleted = (postId: number) => {
+    // Remove the deleted post from the UI immediately
     setPosts((prevPosts) => prevPosts.filter((post) => post.id !== postId))
+
+    // Show success toast
+    toast({
+      title: "Post deleted",
+      description: "Your post has been removed.",
+      variant: "default",
+    })
+
+    // Optionally, you can trigger a background refresh of the feed
+    // to ensure the UI is in sync with the backend
+    // This is done without blocking the UI
+    setTimeout(() => {
+      loadInitialPosts().catch(console.error)
+    }, 2000)
   }
 
   const handlePostUpdated = (updatedPost: PostType) => {
-    setPosts((prevPosts) => prevPosts.map((post) => (post.id === updatedPost.id ? updatedPost : post)))
+    // Ensure the updated post has a documentId and properly formatted mediaItems
+    const postWithDocumentId = {
+      ...updatedPost,
+      documentId: updatedPost.documentId || `post-${updatedPost.id}`,
+      // Ensure mediaItems are properly formatted
+      mediaItems:
+        updatedPost.mediaItems?.map((item) => ({
+          ...item,
+          url:
+            item.url ||
+            (item.file?.formats?.medium?.url
+              ? `${API_BASE_URL}${item.file.formats.medium.url}`
+              : item.file?.formats?.small?.url
+                ? `${API_BASE_URL}${item.file.formats.small.url}`
+                : item.file?.formats?.thumbnail?.url
+                  ? `${API_BASE_URL}${item.file.formats.thumbnail.url}`
+                  : ""),
+        })) || [],
+      // Ensure galleryLayout has a default value
+      galleryLayout: updatedPost.galleryLayout || "grid",
+    }
+
+    setPosts((prevPosts) => prevPosts.map((post) => (post.id === updatedPost.id ? postWithDocumentId : post)))
+
+    toast({
+      title: "Post updated",
+      description: "Your post has been updated successfully!",
+      variant: "default",
+    })
+  }
+
+  const handleRetry = () => {
+    setRetryCount((prev) => prev + 1)
+    loadInitialPosts()
   }
 
   // Don't show the regular feed if search results are being displayed
@@ -590,11 +401,26 @@ export default function PostFeed({ initialPosts, initialNextCursor, initialHasMo
 
       {/* API Error Display */}
       {apiError && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
-          <p className="font-medium">Error loading posts</p>
-          <p className="text-sm">{apiError}</p>
-          <Button variant="outline" size="sm" className="mt-2" onClick={() => window.location.reload()}>
-            Retry
+        <div
+          className={`${isConnectionError ? "bg-yellow-50 border-yellow-200 text-yellow-700" : "bg-red-50 border-red-200 text-red-700"} px-4 py-3 rounded-lg mb-6 border`}
+        >
+          <div className="flex items-center">
+            {isConnectionError ? <WifiOff className="h-5 w-5 mr-2" /> : <AlertCircle className="h-5 w-5 mr-2" />}
+            <p className="font-medium">{isConnectionError ? "Connection Issue" : "Error loading posts"}</p>
+          </div>
+          <p className="text-sm mt-1">{apiError}</p>
+          <Button variant="outline" size="sm" className="mt-2" onClick={handleRetry} disabled={isLoading}>
+            {isLoading ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                Retrying...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Retry
+              </>
+            )}
           </Button>
         </div>
       )}
@@ -644,8 +470,15 @@ export default function PostFeed({ initialPosts, initialNextCursor, initialHasMo
           className="p-4"
         >
           <Button
-            onClick={() => setShowCreateModal(true)}
+            onClick={() => {
+              if (isAuthenticated) {
+                setIsCreatePostModalOpen(true)
+              } else {
+                router.push("/auth")
+              }
+            }}
             className="w-full bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white rounded-lg h-12"
+            disabled={isConnectionError}
           >
             <PlusCircle className="mr-2 h-5 w-5" />
             Create New Post
@@ -653,46 +486,59 @@ export default function PostFeed({ initialPosts, initialNextCursor, initialHasMo
         </motion.div>
 
         <div className="divide-y divide-gray-100">
-          <AnimatePresence>
-            {isLoading && posts.length === 0 ? (
-              <div className="p-8">
-                <div className="flex flex-col items-center justify-center space-y-4">
-                  <div className="w-12 h-12 border-4 border-pink-200 border-t-pink-500 rounded-full animate-spin"></div>
-                  <p className="text-gray-500">Loading posts...</p>
-                </div>
-              </div>
-            ) : posts.length > 0 ? (
-              posts.map((post, index) => (
-                <motion.div
-                  key={post.id}
-                  initial={{ opacity: 0, y: 50 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(index * 0.1, 0.5) }} // Cap the delay to avoid long waits
-                  exit={{ opacity: 0, y: -50 }}
-                >
-                  <Post
-                    post={post}
-                    viewMode={viewMode}
-                    onPostDeleted={handlePostDeleted}
-                    onPostUpdated={handlePostUpdated}
-                  />
-                </motion.div>
-              ))
-            ) : (
-              <div className="p-8 text-center">
-                <p className="text-gray-500">No posts found. Create your first post!</p>
-              </div>
-            )}
-          </AnimatePresence>
+          {isLoading && posts.length === 0 ? (
+            <div className="space-y-4 p-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="bg-gray-100 rounded-xl h-64 animate-pulse" />
+              ))}
+            </div>
+          ) : posts.length > 0 ? (
+            <AnimatePresence>
+              <ReactionProvider>
+                {posts.map((post, index) => (
+                  <motion.div
+                    key={`${post.id}-${index}`}
+                    initial={{ opacity: 0, y: 50 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: Math.min(index * 0.1, 0.5) }}
+                    exit={{ opacity: 0, y: -50 }}
+                  >
+                    <Post
+                      post={post}
+                      viewMode={viewMode}
+                      onPostDeleted={handlePostDeleted}
+                      onPostUpdated={handlePostUpdated}
+                    />
+                  </motion.div>
+                ))}
+              </ReactionProvider>
+            </AnimatePresence>
+          ) : (
+            <div className="p-8 text-center">
+              <p className="text-gray-500">No posts found. Create your first post or check back later!</p>
+              <Button variant="outline" size="sm" className="mt-4" onClick={handleRetry} disabled={isLoading}>
+                {isLoading ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
         </div>
 
-        {/* Infinite scroll loading indicator */}
-        <LoadMorePosts onLoadMore={loadMorePosts} hasMore={hasMore} isLoading={isLoading} />
+        {hasMore && <LoadMorePosts onLoadMore={loadMorePosts} isLoading={isLoading} hasMore={hasMore} />}
       </div>
 
-      <AnimatePresence>
-        {showCreateModal && <CreatePostModal onClose={() => setShowCreateModal(false)} onPostCreated={addPost} />}
-      </AnimatePresence>
+      {isCreatePostModalOpen && (
+        <CreatePostModal onClose={() => setIsCreatePostModalOpen(false)} onPostCreated={handlePostCreated} />
+      )}
     </div>
   )
 }
