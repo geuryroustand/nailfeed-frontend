@@ -7,7 +7,7 @@
  */
 
 // API configuration
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:1337"
 export const API_TOKEN = process.env.NEXT_PUBLIC_API_TOKEN || process.env.API_TOKEN || ""
 
 // Request configuration
@@ -20,14 +20,14 @@ export const REQUEST_CONFIG = {
 // Feature flags
 export const FEATURES = {
   enableDetailedLogging: true,
-  useFallbackData: false, // Disable fallback data
+  useFallbackData: process.env.NEXT_PUBLIC_USE_SAMPLE_DATA === "true" || process.env.USE_SAMPLE_DATA === "true",
 }
 
 // Configuration settings for the application
 const config = {
   api: {
-    // API URL with production fallback
-    API_URL: process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app",
+    // API URL with localhost fallback for development
+    API_URL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:1337",
 
     // API token from environment variables
     API_TOKEN: process.env.NEXT_PUBLIC_API_TOKEN || process.env.API_TOKEN || "",
@@ -51,13 +51,17 @@ const config = {
       return config.api.API_TOKEN || null
     },
 
-    // Use sample data - always false
-    useSampleData: () => false,
+    // Use sample data - read from environment variables
+    useSampleData: () => {
+      return process.env.NEXT_PUBLIC_USE_SAMPLE_DATA === "true" || process.env.USE_SAMPLE_DATA === "true"
+    },
   },
 
   app: {
     // Application URL
-    APP_URL: process.env.NEXT_PUBLIC_APP_URL || (typeof window !== "undefined" ? window.location.origin : ""),
+    APP_URL:
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000"),
 
     // Get the full URL for a path
     getFullUrl: (path: string): string => {
@@ -85,7 +89,7 @@ const config = {
 
   features: {
     // Feature flags from environment variables
-    USE_SAMPLE_DATA: false, // Always false
+    USE_SAMPLE_DATA: process.env.NEXT_PUBLIC_USE_SAMPLE_DATA === "true" || process.env.USE_SAMPLE_DATA === "true",
     ENABLE_ANALYTICS: process.env.NEXT_PUBLIC_ENABLE_ANALYTICS === "true",
     ENABLE_COMMENTS: process.env.NEXT_PUBLIC_ENABLE_COMMENTS === "true",
     ENABLE_REACTIONS: process.env.NEXT_PUBLIC_ENABLE_REACTIONS === "true",
@@ -110,6 +114,13 @@ const config = {
         HAS_PUBLIC_API_TOKEN: !!config.api.PUBLIC_API_TOKEN,
         FEATURES: config.features,
       })
+
+      // Debug environment variables
+      console.log("🔍 Environment Variables:", {
+        NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+        NEXT_PUBLIC_USE_SAMPLE_DATA: process.env.NEXT_PUBLIC_USE_SAMPLE_DATA,
+        USE_SAMPLE_DATA: process.env.USE_SAMPLE_DATA,
+      })
     }
 
     // Mark as initialized
@@ -122,10 +133,10 @@ config.initialize()
 
 /**
  * Check if sample data should be used
- * @returns Always false as we don't use sample data
+ * @returns boolean based on environment variables
  */
 export function useSampleData(): boolean {
-  return false
+  return process.env.NEXT_PUBLIC_USE_SAMPLE_DATA === "true" || process.env.USE_SAMPLE_DATA === "true"
 }
 
 export default config

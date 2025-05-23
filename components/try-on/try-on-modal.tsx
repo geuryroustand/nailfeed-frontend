@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { AlertCircle, Camera, Hand, ImageIcon } from "lucide-react"
+import { AlertCircle, Camera, Hand, Image as ImageIcon } from "lucide-react"
 import { CameraCapture } from "./camera-capture"
 import { ComparisonView } from "./comparison-view"
 import { useTryOn } from "@/hooks/use-try-on"
@@ -30,7 +30,7 @@ export function TryOnModal({ open, onOpenChange, designImageUrl, designTitle = "
     handleFileUpload,
     reset,
   } = useTryOn(designImageUrl)
-
+  
   const [selectedTab, setSelectedTab] = useState<"info" | "camera" | "result">("info")
   const [loadingStatus, setLoadingStatus] = useState<string>("Initializing...")
 
@@ -45,22 +45,14 @@ export function TryOnModal({ open, onOpenChange, designImageUrl, designTitle = "
           // Auto-switch to camera tab after initialization
           setTimeout(() => {
             setSelectedTab("camera")
-            // Add a small delay before starting capture to ensure DOM is ready
-            setTimeout(() => {
-              if (videoRef.current) {
-                startCapture()
-              } else {
-                console.error("Video ref is not available when trying to start capture")
-                setLoadingStatus("Error: Camera element not ready. Please try again.")
-              }
-            }, 300)
+            startCapture()
           }, 1000)
         } catch (err) {
           console.error("MediaPipe initialization error:", err)
           setLoadingStatus("Failed to load hand tracking model")
         }
       }
-
+      
       init()
       setSelectedTab("info") // Reset to info tab when opening
     }
@@ -88,19 +80,19 @@ export function TryOnModal({ open, onOpenChange, designImageUrl, designTitle = "
         <DialogHeader>
           <DialogTitle>Try On: {designTitle}</DialogTitle>
         </DialogHeader>
-
+        
         {/* Tabs */}
         <div className="flex border-b">
-          <Button
-            variant={selectedTab === "info" ? "default" : "ghost"}
+          <Button 
+            variant={selectedTab === "info" ? "default" : "ghost"} 
             className="flex-1 rounded-none rounded-t-lg"
             onClick={() => setSelectedTab("info")}
           >
             <Hand className="h-4 w-4 mr-2" />
             Info
           </Button>
-          <Button
-            variant={selectedTab === "camera" ? "default" : "ghost"}
+          <Button 
+            variant={selectedTab === "camera" ? "default" : "ghost"} 
             className="flex-1 rounded-none rounded-t-lg"
             onClick={() => {
               setSelectedTab("camera")
@@ -111,8 +103,8 @@ export function TryOnModal({ open, onOpenChange, designImageUrl, designTitle = "
             <Camera className="h-4 w-4 mr-2" />
             Camera
           </Button>
-          <Button
-            variant={selectedTab === "result" ? "default" : "ghost"}
+          <Button 
+            variant={selectedTab === "result" ? "default" : "ghost"} 
             className="flex-1 rounded-none rounded-t-lg"
             onClick={() => setSelectedTab("result")}
             disabled={state !== "result"}
@@ -121,7 +113,7 @@ export function TryOnModal({ open, onOpenChange, designImageUrl, designTitle = "
             Result
           </Button>
         </div>
-
+        
         {/* Error alerts */}
         {error && (
           <Alert variant="destructive">
@@ -129,15 +121,15 @@ export function TryOnModal({ open, onOpenChange, designImageUrl, designTitle = "
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-
+        
         {/* Tab content */}
         <div className="py-2">
           {selectedTab === "info" && (
             <div className="space-y-4">
               <div className="aspect-video relative rounded-lg overflow-hidden">
-                <img
-                  src={designImageUrl || "/placeholder.svg"}
-                  alt={designTitle}
+                <img 
+                  src={designImageUrl} 
+                  alt={designTitle} 
                   className="w-full h-full object-contain"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent flex items-end">
@@ -147,7 +139,7 @@ export function TryOnModal({ open, onOpenChange, designImageUrl, designTitle = "
                   </div>
                 </div>
               </div>
-
+              
               <div className="space-y-2">
                 <h3 className="font-semibold">How to use:</h3>
                 <ol className="list-decimal list-inside space-y-1 text-sm pl-2">
@@ -159,9 +151,9 @@ export function TryOnModal({ open, onOpenChange, designImageUrl, designTitle = "
                 </ol>
                 <p className="text-xs text-gray-500 mt-2">Status: {loadingStatus}</p>
               </div>
-
-              <Button
-                className="w-full"
+              
+              <Button 
+                className="w-full" 
                 onClick={() => {
                   setSelectedTab("camera")
                   startCapture()
@@ -171,7 +163,7 @@ export function TryOnModal({ open, onOpenChange, designImageUrl, designTitle = "
               </Button>
             </div>
           )}
-
+          
           {selectedTab === "camera" && state === "capturing" && (
             <CameraCapture
               videoRef={videoRef}
@@ -181,7 +173,7 @@ export function TryOnModal({ open, onOpenChange, designImageUrl, designTitle = "
               onCancel={() => onOpenChange(false)}
             />
           )}
-
+          
           {state === "processing" && (
             <div className="flex flex-col items-center py-8">
               <div className="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mb-4"></div>
@@ -189,7 +181,7 @@ export function TryOnModal({ open, onOpenChange, designImageUrl, designTitle = "
               <p className="text-xs text-gray-400 mt-2">Detecting hands and applying nail design</p>
             </div>
           )}
-
+          
           {selectedTab === "result" && state === "result" && capturedImage && resultImage && (
             <ComparisonView originalImage={capturedImage} resultImage={resultImage} onReset={reset} />
           )}

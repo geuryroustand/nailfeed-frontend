@@ -42,15 +42,7 @@ export function CameraCapture({ videoRef, canvasRef, onCapture, onFileUpload, on
   return (
     <div className="flex flex-col items-center w-full">
       <div className="relative w-full max-w-md aspect-[3/4] bg-black rounded-lg overflow-hidden mb-4">
-        {/* Add key to force proper re-rendering when component mounts */}
-        <video
-          ref={videoRef}
-          className="w-full h-full object-cover"
-          autoPlay
-          playsInline
-          key="camera-video"
-          id="try-on-camera"
-        />
+        <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline />
         <canvas ref={canvasRef} className="hidden" />
       </div>
 
