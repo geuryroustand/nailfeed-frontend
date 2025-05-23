@@ -10,6 +10,11 @@ import { ProfileProvider } from "@/context/profile-context"
 import ClientHeaderWrapper from "@/components/client-header-wrapper"
 import ApiStatusIndicator from "@/components/api-status-indicator"
 import { ReactionProvider } from "@/context/reaction-context"
+import AuthDebug from "@/components/auth-debug"
+import config from "@/lib/config"
+
+// Initialize configuration
+config.initialize()
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -28,12 +33,11 @@ export default function RootLayout({
                 <MoodProvider>
                   <ClientHeaderWrapper />
                   {/* Wrap with ReactionProvider */}
-                  <ReactionProvider>
-                    {/* Your existing layout content */}
-                    {children}
-                  </ReactionProvider>
+                  <ReactionProvider>{children}</ReactionProvider>
                   <ApiStatusIndicator />
                   <Toaster />
+                  {/* Add auth debug component */}
+                  <AuthDebug />
                 </MoodProvider>
               </CollectionsProvider>
             </ProfileProvider>

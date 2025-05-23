@@ -1,53 +1,54 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { z } from "zod";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { useToast } from "@/hooks/use-toast";
-import { Progress } from "@/components/ui/progress";
-import { registerAction } from "@/app/auth/actions";
-import { useAuth } from "@/context/auth-context";
-import { AuthService } from "@/lib/auth-service";
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { z } from "zod"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { Eye, EyeOff, Loader2 } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { useToast } from "@/hooks/use-toast"
+import { Progress } from "@/components/ui/progress"
 
+// Define the signup schema for validation
 const signupSchema = z
   .object({
-    username: z.string().min(3, "Username must be at least 3 characters"),
-    email: z.string().email("Please enter a valid email address"),
-    password: z.string().min(8, "Password must be at least 8 characters"),
+    username: z
+      .string()
+      .min(3, { message: "Username must be at least 3 characters" })
+      .regex(/^[a-zA-Z0-9_]+$/, {
+        message: "Username can only contain letters, numbers, and underscores",
+      }),
+    email: z.string().email({ message: "Please enter a valid email address" }),
+    password: z
+      .string()
+      .min(8, { message: "Password must be at least 8 characters" })
+      .regex(/[A-Z]/, { message: "Password must contain at least one uppercase letter" })
+      .regex(/[a-z]/, { message: "Password must contain at least one lowercase letter" })
+      .regex(/[0-9]/, { message: "Password must contain at least one number" }),
     confirmPassword: z.string(),
-    agreeTerms: z.boolean().refine((val) => val === true, {
-      message: "You must agree to the terms and conditions",
+    agreeTerms: z.literal(true, {
+      errorMap: () => ({ message: "You must agree to the terms and conditions" }),
     }),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords do not match",
     path: ["confirmPassword"],
-  });
+  })
 
-type SignupFormValues = z.infer<typeof signupSchema>;
+type SignupFormValues = z.infer<typeof signupSchema>
 
 export default function SignupForm() {
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [passwordStrength, setPasswordStrength] = useState(0);
-  const router = useRouter();
-  const { toast } = useToast();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const { handleAuthSuccess } = useAuth();
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [passwordStrength, setPasswordStrength] = useState(0)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [serverError, setServerError] = useState<string | null>(null)
+  const router = useRouter()
+  const { toast } = useToast()
 
   const form = useForm<SignupFormValues>({
     resolver: zodResolver(signupSchema),
@@ -59,86 +60,81 @@ export default function SignupForm() {
       agreeTerms: false,
     },
     mode: "onChange",
-  });
+  })
 
   const calculatePasswordStrength = (password: string) => {
-    if (!password) return 0;
+    if (!password) return 0
 
-    let strength = 0;
+    let strength = 0
     // Length check
-    if (password.length >= 8) strength += 20;
+    if (password.length >= 8) strength += 20
     // Uppercase check
-    if (/[A-Z]/.test(password)) strength += 20;
+    if (/[A-Z]/.test(password)) strength += 20
     // Lowercase check
-    if (/[a-z]/.test(password)) strength += 20;
+    if (/[a-z]/.test(password)) strength += 20
     // Number check
-    if (/[0-9]/.test(password)) strength += 20;
+    if (/[0-9]/.test(password)) strength += 20
     // Special character check
-    if (/[^A-Za-z0-9]/.test(password)) strength += 20;
+    if (/[^A-Za-z0-9]/.test(password)) strength += 20
 
-    return strength;
-  };
+    return strength
+  }
 
   const getPasswordStrengthColor = (strength: number) => {
-    if (strength < 40) return "bg-red-500";
-    if (strength < 80) return "bg-yellow-500";
-    return "bg-green-500";
-  };
+    if (strength < 40) return "bg-red-500"
+    if (strength < 80) return "bg-yellow-500"
+    return "bg-green-500"
+  }
 
+  // Handle form submission without useActionState
   const onSubmit = async (data: SignupFormValues) => {
-    setIsSubmitting(true);
-
-    const formData = new FormData();
-    formData.append("username", data.username);
-    formData.append("email", data.email);
-    formData.append("password", data.password);
+    setIsSubmitting(true)
+    setServerError(null)
 
     try {
-      const result = await registerAction(null, formData);
+      // Make a direct fetch request to the Strapi API
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/local/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: data.username,
+          email: data.email,
+          password: data.password,
+        }),
+      })
 
-      if (result.success) {
-        // Get the JWT from cookies
-        const cookieStore = document.cookie
-          .split("; ")
-          .find((row) => row.startsWith("jwt="))
-          ?.split("=")[1];
+      const result = await response.json()
 
-        if (cookieStore) {
-          // Get user data using AuthService
-          const userData = await AuthService.getCurrentUser(cookieStore);
-          if (userData) {
-            handleAuthSuccess({
-              jwt: cookieStore,
-              user: userData,
-            });
-          }
-        }
-
-        toast({
-          title: "Account created!",
-          description: "Welcome to NailFeed!",
-        });
-
-        // Redirect to the specified path or home page
-        router.push(result.redirectTo || "/");
-        router.refresh(); // Refresh the page to update the UI
-      } else if (result.error) {
-        toast({
-          title: "Registration failed",
-          description: result.error,
-          variant: "destructive",
-        });
+      if (!response.ok) {
+        throw new Error(result.error?.message || "Registration failed")
       }
-    } catch (error) {
+
+      // Handle successful registration
       toast({
-        title: "Registration failed",
-        description: "An unexpected error occurred",
-        variant: "destructive",
-      });
+        title: "Registration successful!",
+        description: "Your account has been created. You can now log in.",
+        variant: "default",
+      })
+
+      // Store JWT token if provided by Strapi
+      if (result.jwt) {
+        localStorage.setItem("authToken", result.jwt)
+      }
+
+      // Store email in localStorage for verification if needed
+      localStorage.setItem("pendingVerificationEmail", data.email)
+
+      // Redirect to login page or verification page
+      router.push("/auth")
+    } catch (error) {
+      console.error("Registration error:", error)
+      setServerError(error instanceof Error ? error.message : "An unexpected error occurred. Please try again later.")
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
-  };
+  }
 
   return (
     <Form {...form}>
@@ -184,10 +180,8 @@ export default function SignupForm() {
                     placeholder="••••••••"
                     {...field}
                     onChange={(e) => {
-                      field.onChange(e);
-                      setPasswordStrength(
-                        calculatePasswordStrength(e.target.value)
-                      );
+                      field.onChange(e)
+                      setPasswordStrength(calculatePasswordStrength(e.target.value))
                     }}
                   />
                   <Button
@@ -197,32 +191,24 @@ export default function SignupForm() {
                     className="absolute right-0 top-0 h-full px-3 py-2 text-gray-400 hover:text-gray-600"
                     onClick={() => setShowPassword(!showPassword)}
                   >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
                 </div>
               </FormControl>
+              {field.value && (
+                <div className="mt-2 space-y-1">
+                  <Progress value={passwordStrength} className={getPasswordStrengthColor(passwordStrength)} />
+                  <p className="text-xs text-gray-500">
+                    {passwordStrength < 40 && "Weak password"}
+                    {passwordStrength >= 40 && passwordStrength < 80 && "Moderate password"}
+                    {passwordStrength >= 80 && "Strong password"}
+                  </p>
+                </div>
+              )}
               <FormMessage />
             </FormItem>
           )}
         />
-
-        {passwordStrength > 0 && (
-          <div className="space-y-2">
-            <Progress value={passwordStrength} className="h-2" />
-            <p className="text-xs text-gray-500">
-              Password strength:{" "}
-              {passwordStrength < 40
-                ? "Weak"
-                : passwordStrength < 80
-                ? "Medium"
-                : "Strong"}
-            </p>
-          </div>
-        )}
 
         <FormField
           control={form.control}
@@ -232,11 +218,7 @@ export default function SignupForm() {
               <FormLabel>Confirm Password</FormLabel>
               <FormControl>
                 <div className="relative">
-                  <Input
-                    type={showConfirmPassword ? "text" : "password"}
-                    placeholder="••••••••"
-                    {...field}
-                  />
+                  <Input type={showConfirmPassword ? "text" : "password"} placeholder="••••••••" {...field} />
                   <Button
                     type="button"
                     variant="ghost"
@@ -244,11 +226,7 @@ export default function SignupForm() {
                     className="absolute right-0 top-0 h-full px-3 py-2 text-gray-400 hover:text-gray-600"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   >
-                    {showConfirmPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
+                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
                 </div>
               </FormControl>
@@ -263,10 +241,7 @@ export default function SignupForm() {
           render={({ field }) => (
             <FormItem className="flex items-start space-x-2 space-y-0">
               <FormControl>
-                <Checkbox
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                />
+                <Checkbox checked={field.value} onCheckedChange={field.onChange} />
               </FormControl>
               <div className="space-y-1 leading-none">
                 <FormLabel className="text-sm font-normal cursor-pointer">
@@ -285,6 +260,12 @@ export default function SignupForm() {
           )}
         />
 
+        {serverError && (
+          <div className="p-3 rounded-md bg-red-50 text-red-500 text-sm">
+            <p>{serverError}</p>
+          </div>
+        )}
+
         <Button
           type="submit"
           className="w-full bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600"
@@ -292,8 +273,8 @@ export default function SignupForm() {
         >
           {isSubmitting ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating
-              account...
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Creating account...
             </>
           ) : (
             "Create account"
@@ -301,5 +282,5 @@ export default function SignupForm() {
         </Button>
       </form>
     </Form>
-  );
+  )
 }

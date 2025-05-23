@@ -9,8 +9,8 @@ export async function POST(request: NextRequest) {
   try {
     const { endpoint, method, data } = await request.json()
 
-    // Get the API token from server environment
-    const apiToken = process.env.API_TOKEN
+    // Get the API token from environment variable
+    const apiToken = process.env.NEXT_PUBLIC_API_TOKEN
 
     // Construct the full URL
     const baseUrl = API_BASE_URL.endsWith("/") ? API_BASE_URL.slice(0, -1) : API_BASE_URL

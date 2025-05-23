@@ -1,9 +1,17 @@
 "use client"
 
-import { Suspense } from "react"
+import { Suspense, useEffect } from "react"
 import Header from "./header"
+import { useAuth } from "@/hooks/use-auth"
 
 export default function ClientHeaderWrapper() {
+  const { checkAuthStatus } = useAuth()
+
+  // Check auth status when the component mounts
+  useEffect(() => {
+    checkAuthStatus()
+  }, [checkAuthStatus])
+
   return (
     <Suspense fallback={<HeaderFallback />}>
       <Header />

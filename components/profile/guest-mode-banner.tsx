@@ -4,8 +4,16 @@ import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Info } from "lucide-react"
+import { useAuth } from "@/context/auth-context"
 
 export default function GuestModeBanner() {
+  const { isAuthenticated } = useAuth()
+
+  // If user is authenticated, don't show the banner
+  if (isAuthenticated) {
+    return null
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: -10 }}

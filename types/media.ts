@@ -13,4 +13,4 @@ export interface MediaItem {
 }
 
 // Update the MediaGalleryLayout type to match the Strapi enum
-export type MediaGalleryLayout = "grid," | "carousel," | "featured"
+export type MediaGalleryLayout = "grid" | "carousel" | "featured"

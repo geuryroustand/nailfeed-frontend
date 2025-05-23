@@ -1,208 +1,143 @@
-"use server";
+"use server"
+import { z } from "zod"
+import { AuthService, type AuthResponse } from "@/lib/auth-service"
 
-import { cookies } from "next/headers";
-import { AuthService } from "@/lib/auth-service";
-import { v4 as uuidv4 } from "uuid";
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import {
-  TOKEN_COOKIE,
-  USER_COOKIE,
-  CSRF_COOKIE,
-  AuthResponse,
-  AuthError,
-} from "@/lib/config";
+// Login schema
+const loginSchema = z.object({
+  identifier: z.string().min(1, { message: "Email or username is required" }),
+  password: z.string().min(1, { message: "Password is required" }),
+  rememberMe: z.boolean().optional(),
+})
 
-// Cookie names
-const COOKIE_EXPIRY = 30 * 24 * 60 * 60; // 30 days in seconds
-
-export async function registerAction(
-  prevState: any,
-  formData: FormData
-): Promise<{ success: boolean; error?: string; redirectTo?: string }> {
+// Create the login action
+export const loginAction = async (data: {
+  identifier: string
+  password: string
+  rememberMe?: boolean
+}): Promise<{ success: boolean; error?: string; user?: any; jwt?: string }> => {
   try {
-    const username = formData.get("username") as string;
-    const email = formData.get("email") as string;
-    const password = formData.get("password") as string;
+    // Validate form data
+    const validatedFields = loginSchema.safeParse(data)
 
-    if (!username || !email || !password) {
-      return { success: false, error: "Missing required fields" };
-    }
-
-    const response = await AuthService.register(username, email, password);
-
-    if ("error" in response) {
-      return { success: false, error: response.error };
-    }
-
-    if ("jwt" in response) {
-      const cookieStore = await cookies();
-
-      // Set the JWT cookie
-      await cookieStore.set("jwt", response.jwt, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        maxAge: 30 * 24 * 60 * 60, // 30 days
-        path: "/",
-      });
-
-      // Set the user data cookie
-      await cookieStore.set(
-        "user_data",
-        JSON.stringify({
-          id: response.user.id,
-          username: response.user.username,
-          email: response.user.email,
-        }),
-        {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          maxAge: 30 * 24 * 60 * 60, // 30 days
-          path: "/",
-        }
-      );
-
-      // Revalidate the auth path to update the UI
-      revalidatePath("/auth");
-      revalidatePath("/");
-
-      return { success: true, redirectTo: "/" };
-    }
-
-    return { success: false, error: "Registration failed" };
-  } catch (error) {
-    console.error("Registration error:", error);
-    return { success: false, error: "An unexpected error occurred" };
-  }
-}
-
-export async function loginAction(prevState: any, formData: FormData) {
-  const email = formData.get("email") as string;
-  const password = formData.get("password") as string;
-  const rememberMe = formData.get("rememberMe") === "on";
-
-  try {
-    const response = await AuthService.login(email, password);
-
-    if (response && "jwt" in response) {
-      // Set cookies with the JWT token and user data
-      const { jwt, user } = response;
-      const cookieStore = await cookies();
-
-      // Calculate expiration - 30 days if remember me is checked, session otherwise
-      const maxAge = rememberMe ? COOKIE_EXPIRY : undefined;
-
-      // Set the auth token cookie
-      cookieStore.set(TOKEN_COOKIE, jwt, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        maxAge,
-        path: "/",
-      });
-
-      // Set the user data cookie
-      cookieStore.set(
-        USER_COOKIE,
-        JSON.stringify({
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          displayName: user.displayName,
-        }),
-        {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          maxAge,
-          path: "/",
-        }
-      );
-
-      revalidatePath("/auth");
-      return {
-        success: true,
-        error: null,
-      };
-    } else if (response && "error" in response) {
-      // Login failed with specific error
+    if (!validatedFields.success) {
       return {
         success: false,
-        error: response.error,
-      };
-    } else {
-      // Generic login failure
-      return {
-        success: false,
-        error: "Invalid email or password",
-      };
-    }
-  } catch (error) {
-    console.error("Login action error:", error);
-    return {
-      success: false,
-      error:
-        error instanceof Error ? error.message : "An unknown error occurred",
-    };
-  }
-}
-
-export async function logoutAction() {
-  // Clear the auth cookies
-  const cookieStore = await cookies();
-  cookieStore.delete(TOKEN_COOKIE);
-  cookieStore.delete(USER_COOKIE);
-
-  revalidatePath("/");
-  return { success: true };
-}
-
-export async function getSocialAuthUrl(provider: string, redirectUri: string) {
-  try {
-    const csrfToken = uuidv4();
-    const cookieStore = await cookies();
-
-    // Store the CSRF token in a cookie
-    cookieStore.set(CSRF_COOKIE, csrfToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 60 * 5, // 5 minutes
-      path: "/",
-    });
-
-    // Get the authorization URL from the social auth service
-    const authUrl = await AuthService.getAuthorizationUrl(
-      provider,
-      redirectUri
-    );
-    return { success: true, url: authUrl };
-  } catch (error) {
-    console.error("Social auth URL error:", error);
-    return { success: false, error: "Failed to get authorization URL" };
-  }
-}
-
-export async function initiateSocialAuthAction(provider: string) {
-  try {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/api/connect/${provider}`,
-      {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        error: "Invalid form data. Please check your inputs.",
       }
-    );
-
-    if (!response.ok) {
-      throw new Error("Failed to initiate social auth");
     }
 
-    const data = await response.json();
-    return { success: true, url: data.url };
+    // Log in user
+    const result: AuthResponse | { error: string } | null = await AuthService.login(data.identifier, data.password)
+
+    if (!result || result.error) {
+      return { success: false, error: result?.error || "Login failed" }
+    }
+
+    return {
+      success: true,
+      user: result.user,
+      jwt: result.jwt,
+    }
   } catch (error) {
-    console.error("Social auth initiation error:", error);
+    console.error("Login error:", error)
     return {
       success: false,
-      error: "Failed to initiate social authentication",
-    };
+      error: "An unexpected error occurred",
+    }
+  }
+}
+
+// Registration schema
+const registerSchema = z
+  .object({
+    username: z.string().min(3, { message: "Username must be at least 3 characters" }),
+    email: z.string().email({ message: "Please enter a valid email address" }),
+    password: z.string().min(6, { message: "Password must be at least 6 characters" }),
+    confirmPassword: z.string().min(1, { message: "Please confirm your password" }),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords don't match",
+    path: ["confirmPassword"],
+  })
+
+// Create the registration action
+export const registerAction = async (data: {
+  username: string
+  email: string
+  password: string
+  confirmPassword: string
+}): Promise<{ success: boolean; error?: string; user?: any; jwt?: string }> => {
+  try {
+    // Validate form data
+    const validatedFields = registerSchema.safeParse(data)
+
+    if (!validatedFields.success) {
+      return {
+        success: false,
+        error: "Invalid form data. Please check your inputs.",
+      }
+    }
+
+    // Register user
+    const result: AuthResponse | { error: string } | null = await AuthService.register(
+      data.username,
+      data.email,
+      data.password,
+    )
+
+    if (!result || result.error) {
+      return { success: false, error: result?.error || "Registration failed" }
+    }
+
+    return {
+      success: true,
+      user: result.user,
+      jwt: result.jwt,
+    }
+  } catch (error) {
+    console.error("Registration error:", error)
+    return {
+      success: false,
+      error: "An unexpected error occurred",
+    }
+  }
+}
+
+// Social auth schema
+const socialAuthSchema = z.object({
+  provider: z.enum(["google", "facebook", "twitter"]),
+  redirectUrl: z.string().url().optional(),
+})
+
+// Create the social auth action
+export const initiateSocialAuthAction = async (data: {
+  provider: string
+  redirectUrl?: string
+}): Promise<{ success: boolean; error?: string; redirectUrl?: string }> => {
+  try {
+    // Validate form data
+    const validatedFields = socialAuthSchema.safeParse(data)
+
+    if (!validatedFields.success) {
+      return {
+        success: false,
+        error: "Invalid provider or redirect URL.",
+      }
+    }
+
+    // Generate social auth URL
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+    const authUrl = `${baseUrl}/auth/social/${data.provider}`
+
+    return {
+      success: true,
+      redirectUrl: authUrl,
+    }
+  } catch (error) {
+    console.error("Social auth error:", error)
+    return {
+      success: false,
+      error: "An unexpected error occurred",
+    }
   }
 }

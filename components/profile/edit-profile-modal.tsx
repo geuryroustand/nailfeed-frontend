@@ -21,6 +21,7 @@ import type { UserProfileResponse } from "@/lib/services/user-service"
 import ImageUploadWithCrop from "@/components/image-cropper/image-upload-with-crop"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Camera, User, AlertCircle } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 interface EditProfileModalProps {
   user: UserProfileResponse
@@ -33,7 +34,15 @@ export default function EditProfileModal({ user, onClose }: EditProfileModalProp
   const [coverImageBlob, setCoverImageBlob] = useState<Blob | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState("info") // Default to info tab
+
+  // Form state - initialize with actual values from user data, not placeholders
+  const [displayName, setDisplayName] = useState(user.displayName || "")
+  const [bio, setBio] = useState(user.bio || "")
+  const [location, setLocation] = useState(user.location || "")
+  const [website, setWebsite] = useState(user.website || "")
+
   const { toast } = useToast()
+  const router = useRouter()
 
   // Clean up blobs when component unmounts
   useEffect(() => {
@@ -122,10 +131,32 @@ export default function EditProfileModal({ user, onClose }: EditProfileModalProp
     setUploadError(null)
 
     try {
-      const formData = new FormData(e.currentTarget)
+      // Get the current form values directly from state and ensure they're properly trimmed
+      const profileData = {
+        displayName: displayName.trim(),
+        bio: bio.trim(),
+        location: location.trim(),
+        website: website.trim(),
+      }
 
-      // Update profile information first
-      const result = await updateUserProfile(formData)
+      // Log the data we're sending with clear formatting
+      console.log("Sending profile data:", JSON.stringify(profileData, null, 2))
+
+      // Verify we have actual data to send
+      if (!profileData.displayName && !profileData.bio && !profileData.location && !profileData.website) {
+        console.warn("Warning: Attempting to submit form with all empty fields")
+      }
+
+      // Log form state right before submission
+      console.log("Form state before submission:", {
+        displayName: displayName,
+        bio: bio,
+        location: location,
+        website: website,
+      })
+
+      // Update profile information
+      const result = await updateUserProfile(profileData)
 
       if (!result.success) {
         throw new Error(result.error || "Failed to update profile")
@@ -137,6 +168,9 @@ export default function EditProfileModal({ user, onClose }: EditProfileModalProp
           title: "Success",
           description: "Your profile has been updated",
         })
+
+        // Use Next.js router to refresh the data
+        router.refresh()
         onClose()
         return
       }
@@ -231,6 +265,8 @@ export default function EditProfileModal({ user, onClose }: EditProfileModalProp
           title: "Success",
           description: "Your profile has been updated",
         })
+        // Use Next.js router to refresh the data
+        router.refresh()
         onClose()
       } else {
         // Keep the modal open if there were image upload errors
@@ -296,7 +332,12 @@ export default function EditProfileModal({ user, onClose }: EditProfileModalProp
                 <Input
                   id="displayName"
                   name="displayName"
-                  defaultValue={user.displayName || ""}
+                  value={displayName}
+                  onChange={(e) => {
+                    const newValue = e.target.value
+                    console.log(`Setting displayName to: "${newValue}"`)
+                    setDisplayName(newValue)
+                  }}
                   placeholder="Your display name"
                 />
                 <p className="text-xs text-muted-foreground">This is how your name will appear to others</p>
@@ -309,10 +350,15 @@ export default function EditProfileModal({ user, onClose }: EditProfileModalProp
                 <Textarea
                   id="bio"
                   name="bio"
-                  defaultValue={user.bio || ""}
-                  placeholder="Tell us about yourself"
+                  value={bio}
+                  onChange={(e) => {
+                    const newValue = e.target.value
+                    console.log(`Setting bio to: "${newValue}"`)
+                    setBio(newValue)
+                  }}
                   className="resize-none"
                   rows={3}
+                  placeholder="Tell others about yourself"
                 />
                 <p className="text-xs text-muted-foreground">Share your nail art style and interests</p>
               </div>
@@ -321,7 +367,17 @@ export default function EditProfileModal({ user, onClose }: EditProfileModalProp
                 <Label htmlFor="location" className="text-base font-medium">
                   Location
                 </Label>
-                <Input id="location" name="location" defaultValue={user.location || ""} placeholder="Your location" />
+                <Input
+                  id="location"
+                  name="location"
+                  value={location}
+                  onChange={(e) => {
+                    const newValue = e.target.value
+                    console.log(`Setting location to: "${newValue}"`)
+                    setLocation(newValue)
+                  }}
+                  placeholder="Your location (optional)"
+                />
                 <p className="text-xs text-muted-foreground">Where you're based (optional)</p>
               </div>
 
@@ -329,7 +385,17 @@ export default function EditProfileModal({ user, onClose }: EditProfileModalProp
                 <Label htmlFor="website" className="text-base font-medium">
                   Website
                 </Label>
-                <Input id="website" name="website" defaultValue={user.website || ""} placeholder="Your website" />
+                <Input
+                  id="website"
+                  name="website"
+                  value={website}
+                  onChange={(e) => {
+                    const newValue = e.target.value
+                    console.log(`Setting website to: "${newValue}"`)
+                    setWebsite(newValue)
+                  }}
+                  placeholder="https://yourwebsite.com"
+                />
                 <p className="text-xs text-muted-foreground">Your personal or business website (optional)</p>
               </div>
             </TabsContent>

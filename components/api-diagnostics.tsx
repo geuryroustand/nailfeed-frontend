@@ -20,7 +20,7 @@ export default function ApiDiagnostics() {
   const [apiUrl, setApiUrl] = useState(defaultApiUrl)
   const [endpoint, setEndpoint] = useState("/api/posts")
   const [queryParams, setQueryParams] = useState("populate=*&pagination[page]=1&pagination[pageSize]=5")
-  const [token, setToken] = useState(process.env.NEXT_PUBLIC_APP_ENV || "")
+  const [token, setToken] = useState(process.env.NEXT_PUBLIC_API_TOKEN || "")
 
   const constructFullUrl = () => {
     // Ensure proper URL construction with double slashes
@@ -43,8 +43,6 @@ export default function ApiDiagnostics() {
 
     try {
       const fullUrl = constructFullUrl()
-      console.log("Testing API with URL:", fullUrl)
-      console.log("Using token:", token ? "exists" : "not found")
 
       // Prepare headers
       const headers: HeadersInit = {
@@ -89,7 +87,6 @@ export default function ApiDiagnostics() {
         setApiResponse(responseText)
       }
     } catch (err) {
-      console.error("API test failed:", err)
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setIsLoading(false)
@@ -106,7 +103,6 @@ export default function ApiDiagnostics() {
       // Hardcoded URL to test direct fetch without any URL construction logic
       const hardcodedUrl =
         "https://nailfeed-backend-production.up.railway.app/api/posts?populate=*&pagination[page]=1&pagination[pageSize]=5"
-      console.log("Testing direct fetch with URL:", hardcodedUrl)
 
       const headers: HeadersInit = {
         "Content-Type": "application/json",
@@ -143,7 +139,6 @@ export default function ApiDiagnostics() {
         setApiResponse(responseText)
       }
     } catch (err) {
-      console.error("Direct fetch test failed:", err)
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setIsLoading(false)
@@ -251,10 +246,8 @@ export default function ApiDiagnostics() {
             <TabsContent value="env" className="space-y-2">
               <div className="text-xs space-y-1">
                 <p>API URL: {process.env.NEXT_PUBLIC_API_URL || "Not set"}</p>
-                <p>App URL: {process.env.NEXT_PUBLIC_APP_URL || "Not set"}</p>
-                <p>Token exists: {process.env.NEXT_PUBLIC_APP_ENV ? "Yes" : "No"}</p>
-                <p>App Env: {process.env.NEXT_PUBLIC_APP_ENV || "Not set"}</p>
-                <p>Environment: {process.env.NEXT_PUBLIC_VERCEL_ENV || process.env.NEXT_PUBLIC_APP_ENV || "Not set"}</p>
+                <p>Token exists: {process.env.NEXT_PUBLIC_API_TOKEN ? "Yes" : "No"}</p>
+                <p>Environment: {process.env.NODE_ENV || "Not set"}</p>
               </div>
             </TabsContent>
           </Tabs>

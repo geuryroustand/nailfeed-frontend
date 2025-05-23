@@ -63,3 +63,17 @@ export function ProfileStatsSkeleton() {
     </div>
   )
 }
+
+export const ProfileGallerySkeleton = () => {
+  return (
+    <div className="container max-w-4xl mx-auto px-4 py-6">
+      <div className="grid grid-cols-3 gap-4">
+        {Array(6)
+          .fill(0)
+          .map((_, i) => (
+            <div key={i} className="aspect-square bg-gray-200 rounded-md animate-pulse" />
+          ))}
+      </div>
+    </div>
+  )
+}

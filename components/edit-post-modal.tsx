@@ -11,6 +11,7 @@ import MediaGallery from "./media-gallery"
 import PostBackgroundSelector, { type BackgroundType } from "./post-background-selector"
 import { updatePost } from "@/lib/post-management-actions"
 import type { MediaItem, MediaGalleryLayout } from "@/types/media"
+import { validateContent } from "@/lib/content-moderation"
 
 interface EditPostModalProps {
   post: {
@@ -46,11 +47,31 @@ export default function EditPostModal({ post, onClose, onPostUpdated }: EditPost
     return () => window.removeEventListener("keydown", handleEscape)
   }, [onClose])
 
+  const validateContentResult = (): { isValid: boolean; errorMessage?: string } => {
+    // Check description for profanity
+    if (description) {
+      return validateContent(description)
+    }
+
+    return { isValid: true }
+  }
+
   const handleSubmit = async () => {
     if (!description.trim()) {
       toast({
         title: "Error",
         description: "Please add a description to your post",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Validate content for profanity
+    const contentValidation = validateContentResult()
+    if (!contentValidation.isValid) {
+      toast({
+        title: "Content moderation",
+        description: contentValidation.errorMessage,
         variant: "destructive",
       })
       return

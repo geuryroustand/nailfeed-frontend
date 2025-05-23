@@ -12,30 +12,47 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { useAuth } from "@/context/auth-context"
-import { useMemo } from "react"
+import { useAuth } from "@/hooks/use-auth"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 
 export default function Header() {
-  // Use a safe approach to get auth context
-  const auth = useAuth()
+  const { user, isAuthenticated, isLoading, logout, checkAuthStatus } = useAuth()
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const router = useRouter()
+  const [mounted, setMounted] = useState(false)
 
-  const { user, isAuthenticated, logout } = useMemo(() => {
-    try {
-      return {
-        user: auth.user,
-        isAuthenticated: auth.isAuthenticated,
-        logout: auth.logout,
-      }
-    } catch (error) {
-      // If auth context is not available, use default values
-      console.error("Auth context not available:", error)
-      return {
-        user: null,
-        isAuthenticated: false,
-        logout: () => {},
-      }
+  // Set mounted state to true after component mounts
+  useEffect(() => {
+    setMounted(true)
+    // Check auth status when component mounts
+    checkAuthStatus()
+  }, [checkAuthStatus])
+
+  // Debug effect to log auth state in header
+  useEffect(() => {
+    if (mounted) {
+      console.log("[SERVER]\nHeader auth state:", { isAuthenticated, user })
     }
-  }, [auth])
+  }, [isAuthenticated, user, mounted])
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return // Prevent multiple clicks
+
+    setIsLoggingOut(true)
+    try {
+      await logout()
+    } catch (error) {
+      console.error("Logout error:", error)
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
+
+  // Don't render anything until after client-side hydration
+  if (!mounted) {
+    return null
+  }
 
   return (
     <header className="sticky top-0 z-50 bg-white shadow-sm px-4 py-3">
@@ -61,7 +78,10 @@ export default function Header() {
         <div className="flex-1"></div>
 
         <div className="flex items-center space-x-1">
-          {!isAuthenticated ? (
+          {isLoading ? (
+            // Show loading state
+            <div className="h-8 w-8 rounded-full bg-gray-200 animate-pulse"></div>
+          ) : !isAuthenticated ? (
             <div className="hidden sm:flex items-center space-x-2 mr-2">
               <Link href="/auth">
                 <Button variant="ghost" size="sm">
@@ -87,6 +107,11 @@ export default function Header() {
               <Button variant="ghost" size="icon">
                 <MessageCircle className="h-5 w-5 text-gray-600" />
               </Button>
+
+              {/* Display username when authenticated */}
+              <span className="hidden md:inline-block text-sm font-medium mr-2">
+                {user?.displayName || user?.username}
+              </span>
             </>
           )}
 
@@ -113,7 +138,9 @@ export default function Header() {
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={logout}>Log out</DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleLogout} disabled={isLoggingOut} className="cursor-pointer">
+                    {isLoggingOut ? "Logging out..." : "Log out"}
+                  </DropdownMenuItem>
                 </>
               ) : (
                 <>
