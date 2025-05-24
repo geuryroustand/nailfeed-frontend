@@ -71,14 +71,27 @@ export async function generateMetadata({ params }: PostPageProps, parent: Resolv
 // Generate static params for popular posts (ISR)
 export async function generateStaticParams() {
   try {
-    // Fetch IDs of popular posts for static generation
-    const popularPostIds = await import("@/lib/popular-posts").then((module) => module.getPopularPostIds())
+    // During build time, if the API is not available, return empty array
+    // This allows the build to continue and pages will be generated on-demand
+    const { getPopularPostIds } = await import("@/lib/popular-posts")
+    const popularPostIds = await getPopularPostIds()
+
+    // If no popular posts found, return empty array to allow build to continue
+    if (!popularPostIds || popularPostIds.length === 0) {
+      console.log("No popular posts found, pages will be generated on-demand")
+      return []
+    }
 
     return popularPostIds.map((id) => ({
       id: id.toString(),
     }))
   } catch (error) {
-    console.error("Error generating static params:", error)
+    console.warn(
+      "Error generating static params, pages will be generated on-demand:",
+      error instanceof Error ? error.message : String(error),
+    )
+    // Return empty array to allow build to continue
+    // Pages will be generated on-demand when requested
     return []
   }
 }

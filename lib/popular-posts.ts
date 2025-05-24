@@ -26,30 +26,40 @@ export const getPopularPostIds = cache(async (): Promise<(string | number)[]> =>
 
     // Construct the full URL for popular posts
     const apiUrl = process.env.API_URL || "https://nailfeed-backend-production.up.railway.app"
-    const endpoint = "/api/posts/popular"
+    const endpoint = "/api/posts"
     const fullUrl = `${apiUrl}${apiUrl.endsWith("/") ? "" : "/"}${endpoint.startsWith("/") ? endpoint.substring(1) : endpoint}`
 
-    // Make the request
+    // Make the request with a timeout
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+
     const response = await fetch(fullUrl, {
       method: "GET",
       headers,
+      signal: controller.signal,
       next: { revalidate: 3600 }, // Revalidate every hour
     })
 
+    clearTimeout(timeoutId)
+
     if (!response.ok) {
-      throw new Error(`API error (${response.status})`)
+      console.warn(`Popular posts API returned ${response.status}, falling back to empty array`)
+      return []
     }
 
     const data = await response.json()
 
     // Extract post IDs from the response
     if (data && data.data && Array.isArray(data.data)) {
-      return data.data.map((post: any) => post.documentId || post.id).slice(0, 20) // Limit to 20 popular posts
+      return data.data.map((post: any) => post.documentId || post.id).slice(0, 10) // Limit to 10 popular posts
     }
 
     return []
   } catch (error) {
-    console.error("Error fetching popular post IDs:", error)
+    console.warn(
+      "Error fetching popular post IDs, falling back to empty array:",
+      error instanceof Error ? error.message : String(error),
+    )
     return []
   }
 })
@@ -60,7 +70,7 @@ export async function isPopularPost(postId: string | number): Promise<boolean> {
     const popularIds = await getPopularPostIds()
     return popularIds.some((id) => id.toString() === postId.toString())
   } catch (error) {
-    console.error("Error checking if post is popular:", error)
+    console.warn("Error checking if post is popular:", error)
     return false
   }
 }
