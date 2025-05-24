@@ -24,6 +24,23 @@ const EmojiPicker = dynamic(() => import("emoji-picker-react"), {
   loading: () => <div className="p-4 text-center">Loading emoji picker...</div>,
 })
 
+// Add this function after the imports
+async function fetchCompletePostData(postId: number) {
+  try {
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
+    const response = await fetch(`${API_URL}/api/posts/${postId}?populate=*`)
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch complete post data: ${response.status}`)
+    }
+
+    const data = await response.json()
+    return data.data
+  } catch (error) {
+    return null
+  }
+}
+
 interface CreatePostModalProps {
   onClose: () => void
   onPostCreated: (post: any) => void

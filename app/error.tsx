@@ -2,7 +2,6 @@
 
 import { useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import Link from "next/link"
 
 export default function Error({
   error,
@@ -23,7 +22,7 @@ export default function Error({
         <div className="flex gap-4">
           <Button onClick={reset}>Try again</Button>
           <Button variant="outline" asChild>
-            <Link href="/">Go home</Link>
+            <a href="/">Go home</a>
           </Button>
         </div>
       </div>

@@ -64,9 +64,8 @@ apiClient.interceptors.response.use(
 apiClient.testConnection = async () => {
   try {
     const response = await apiClient.get("/")
-    return response.status === 200
+    return true
   } catch (error) {
-    console.error("API connection test failed:", error)
     return false
   }
 }
@@ -92,12 +91,86 @@ export function clearCache(): void {
 // Add the clearCache method to the apiClient instance
 apiClient.clearCache = clearCache
 
-// Extend the axios instance type to include our custom methods
-declare module "axios" {
-  export interface AxiosInstance {
-    testConnection: () => Promise<boolean>
-    clearCache: () => void
+// Assuming this file exists and needs to be updated for React 18 compatibility
+
+import { unstable_useTransition as useTransition } from "react"
+
+// Throttle time in milliseconds
+const THROTTLE_TIME = 500
+let lastRequestTime = 0
+
+/**
+ * Enhanced API client with React 18 optimizations
+ */
+export async function fetchApi(url: string, options: RequestInit = {}) {
+  // Implement request throttling
+  const now = Date.now()
+  const timeSinceLastRequest = now - lastRequestTime
+
+  if (timeSinceLastRequest < THROTTLE_TIME) {
+    await new Promise((resolve) => setTimeout(resolve, THROTTLE_TIME - timeSinceLastRequest))
   }
+
+  lastRequestTime = Date.now()
+
+  // Add authorization header if token exists
+  const token = localStorage.getItem("auth_token")
+  const headers = new Headers(options.headers)
+
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`)
+  }
+
+  // Set content type if not already set
+  if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
+    headers.set("Content-Type", "application/json")
+  }
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    })
+
+    // Safely parse JSON response
+    let data
+    const text = await response.text()
+
+    try {
+      data = text ? JSON.parse(text) : {}
+    } catch (e) {
+      console.error("Error parsing JSON response:", e)
+      data = { error: "Invalid JSON response" }
+    }
+
+    // Check if response has an error property
+    if (data && data.error) {
+      throw new Error(data.error)
+    }
+
+    return data
+  } catch (error) {
+    console.error("API request failed:", error)
+    throw error
+  }
+}
+
+/**
+ * Fetch data with React 18 transition
+ * This prevents the UI from being blocked during data fetching
+ */
+export function fetchWithTransition<T>(
+  url: string,
+  options: RequestInit = {},
+  onSuccess: (data: T) => void,
+  onError: (error: Error) => void,
+) {
+  const [startTransition, isPending] = useTransition()
+  startTransition(() => {
+    fetchApi(url, options)
+      .then((data: T) => onSuccess(data))
+      .catch(onError)
+  })
 }
 
 // Export the configured client

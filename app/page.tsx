@@ -1,72 +1,74 @@
-"use client"
-
-import type React from "react"
-
-import "./globals.css"
-import { Inter } from "next/font/google"
-import { ThemeProvider } from "@/components/theme-provider"
-import { Toaster } from "@/components/ui/toaster"
-import { Header } from "@/components/header"
-import { Sidebar } from "@/components/sidebar"
-import { BottomNav } from "@/components/bottom-nav"
-import { AuthProvider } from "@/context/auth-context"
-import { ProfileProvider } from "@/context/profile-context"
-import { SearchProvider } from "@/context/search-context"
-import { CollectionsProvider } from "@/context/collections-context"
-import { MoodProvider } from "@/context/mood-context"
-import { ReactionProvider } from "@/context/reaction-context"
-import { ErrorBoundary } from "react-error-boundary"
 import { Suspense } from "react"
+import FeaturedStories from "@/components/featured-stories"
+import PostFeedServer from "@/components/post-feed-server"
+import BottomNav from "@/components/bottom-nav"
+import Sidebar from "@/components/sidebar"
+import TrendingSection from "@/components/trending-section"
+import { Toaster } from "@/components/ui/toaster"
+import AuthCTA from "@/components/auth-cta"
+import TestimonialCarousel from "@/components/testimonial-carousel"
+import AdvancedSearch from "@/components/search/advanced-search"
+import SearchResults from "@/components/search/search-results"
+import { SearchProvider } from "@/context/search-context"
 
-const inter = Inter({ subsets: ["latin"] })
+// Loading fallbacks
+const LoadingFallback = () => <div className="animate-pulse h-64 bg-gray-200 rounded-xl"></div>
 
-function ErrorFallback({ error, resetErrorBoundary }: { error: Error; resetErrorBoundary: () => void }) {
+export default function HomePage() {
+  // We'll determine authentication status on the server in a real app
+  const isAuthenticated = false
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center">
-      <h2 className="text-2xl font-bold mb-4">Something went wrong</h2>
-      <p className="mb-4 text-red-500">{error.message || "An unexpected error occurred"}</p>
-      <button
-        onClick={resetErrorBoundary}
-        className="px-4 py-2 bg-pink-500 text-white rounded-md hover:bg-pink-600 transition-colors"
-      >
-        Try again
-      </button>
-    </div>
-  )
-}
+    <SearchProvider>
+      <main className="min-h-screen bg-gray-50">
+        <div className="flex">
+          {/* Desktop Sidebar - hidden on mobile */}
+          <div className="hidden md:block md:w-64 lg:w-72 fixed h-screen border-r border-gray-200">
+            <Sidebar activeItem="home" />
+          </div>
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.className} bg-gray-50 min-h-screen flex flex-col`}>
-        <ErrorBoundary FallbackComponent={ErrorFallback} onReset={() => window.location.reload()}>
-          <ThemeProvider attribute="class" defaultTheme="light">
-            <AuthProvider>
-              <ProfileProvider>
-                <SearchProvider>
-                  <CollectionsProvider>
-                    <MoodProvider>
-                      <ReactionProvider>
-                        <div className="flex flex-col min-h-screen">
-                          <Header />
-                          <div className="flex flex-1 pt-16">
-                            <Sidebar className="hidden md:block w-64 fixed left-0 top-16 h-[calc(100vh-4rem)] border-r overflow-y-auto" />
-                            <main className="flex-1 md:ml-64">
-                              <Suspense fallback={<p>Loading...</p>}>{children}</Suspense>
-                            </main>
-                          </div>
-                          <BottomNav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t z-10" />
-                        </div>
-                        <Toaster />
-                      </ReactionProvider>
-                    </MoodProvider>
-                  </CollectionsProvider>
-                </SearchProvider>
-              </ProfileProvider>
-            </AuthProvider>
-          </ThemeProvider>
-        </ErrorBoundary>
-      </body>
-    </html>
+          {/* Main Content - adjusted for desktop */}
+          <div className="w-full md:pl-64 lg:pl-72">
+            <div className="container max-w-5xl mx-auto px-4 pt-2 pb-16 md:py-8">
+              <div className="mb-6">
+                <AdvancedSearch />
+              </div>
+
+              <SearchResults />
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Left column - Featured and Feed */}
+                <div className="lg:col-span-2 space-y-6">
+                  {!isAuthenticated && <AuthCTA />}
+                  <Suspense fallback={<LoadingFallback />}>
+                    <FeaturedStories />
+                  </Suspense>
+                  <Suspense fallback={<LoadingFallback />}>
+                    <PostFeedServer />
+                  </Suspense>
+                </div>
+
+                {/* Right column - Trending and Testimonials */}
+                <div className="hidden lg:block">
+                  <div className="sticky top-8 space-y-6">
+                    {!isAuthenticated && <TestimonialCarousel />}
+                    <Suspense fallback={<LoadingFallback />}>
+                      <TrendingSection />
+                    </Suspense>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Mobile Bottom Nav - visible on mobile only */}
+        <div className="md:hidden">
+          <BottomNav activeTab="home" />
+        </div>
+
+        <Toaster />
+      </main>
+    </SearchProvider>
   )
 }

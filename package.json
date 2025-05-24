@@ -63,7 +63,6 @@
     "react-day-picker": "8.10.1",
     "react-dom": "^19",
     "react-easy-crop": "latest",
-    "react-error-boundary": "latest",
     "react-hook-form": "latest",
     "react-image-crop": "latest",
     "react-resizable-panels": "^2.1.7",

@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
+  reactStrictMode: true, // Enable React strict mode for better development experience
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -8,23 +8,25 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
-    domains: [
-      'nailfeed-backend-production.up.railway.app',
-      'localhost',
-      'res.cloudinary.com',
-      'images.unsplash.com',
-    ],
+    unoptimized: true,
+    domains: ['nailfeed-backend-production.up.railway.app'],
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: '**',
+        hostname: 'nailfeed-backend-production.up.railway.app',
+        port: '',
+        pathname: '/**',
       },
     ],
-    unoptimized: true,
   },
+  // Ensure experimental features are compatible with React 18
   experimental: {
     serverActions: true,
+    // Enable React Server Components
+    serverComponents: true,
+    // Enable concurrent features
+    concurrentFeatures: true,
   },
-}
+};
 
-export default nextConfig
+export default nextConfig;
