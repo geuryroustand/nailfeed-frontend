@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { MessageCircle, MoreHorizontal, Smile, Trash2, AlertCircle } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import Link from "next/link"
-import Image from "next/image"
+import NextImage from "next/image"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import type { BackgroundType } from "./post-background-selector"
 import type { MediaItem, MediaGalleryLayout } from "@/types/media"
@@ -669,7 +669,7 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
         observer.disconnect()
       }
     }
-  }, [post.id, post.documentId])
+  }, [post.id, post.documentId, post.comments_count])
 
   // Fetch comment count when component mounts
   useEffect(() => {
@@ -764,7 +764,7 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
               <div>
                 <p className="text-xs mb-1">Next.js Image:</p>
                 <div className="aspect-video relative rounded overflow-hidden bg-gray-100">
-                  <Image
+                  <NextImage
                     src={getImageUrl() || "/placeholder.svg"}
                     alt="Post image"
                     fill
