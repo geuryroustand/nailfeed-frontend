@@ -64,8 +64,9 @@ apiClient.interceptors.response.use(
 apiClient.testConnection = async () => {
   try {
     const response = await apiClient.get("/")
-    return true
+    return response.status === 200
   } catch (error) {
+    console.error("API connection test failed:", error)
     return false
   }
 }
@@ -90,6 +91,14 @@ export function clearCache(): void {
 
 // Add the clearCache method to the apiClient instance
 apiClient.clearCache = clearCache
+
+// Extend the axios instance type to include our custom methods
+declare module "axios" {
+  export interface AxiosInstance {
+    testConnection: () => Promise<boolean>
+    clearCache: () => void
+  }
+}
 
 // Export the configured client
 export { apiClient }

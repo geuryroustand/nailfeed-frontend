@@ -116,7 +116,6 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
   const likeButtonRef = useRef<HTMLButtonElement>(null)
   const { toast } = useToast()
   const { user, isAuthenticated } = useAuth() || { user: null, isAuthenticated: false }
-  const [showComments, setShowComments] = useState(false)
 
   // Inside the Post component, add a new state for the try-on modal
   const [tryOnModalOpen, setTryOnModalOpen] = useState(false)
@@ -630,7 +629,7 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
     return () => {
       document.removeEventListener("mousedown", handleClickOutside)
     }
-  }, [showReactions, post])
+  }, [showReactions, post.id, post.documentId])
 
   // Fetch comment count when component mounts
   useEffect(() => {
