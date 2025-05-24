@@ -8,16 +8,7 @@ const nextConfig = {
   },
   images: {
     unoptimized: true,
-    domains: ['nailfeed-backend-production.up.railway.app'],
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'nailfeed-backend-production.up.railway.app',
-        port: '',
-        pathname: '/**',
-      },
-    ],
   },
-};
+}
 
-export default nextConfig;
+export default nextConfig
