@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import { MessageCircle, MoreHorizontal, Smile, Trash2, AlertCircle } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import Link from "next/link"
-import NextImage from "next/image"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import type { BackgroundType } from "./post-background-selector"
 import type { MediaItem, MediaGalleryLayout } from "@/types/media"
@@ -14,7 +13,6 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/context/auth-context"
 import { cn } from "@/lib/utils"
 import { EnhancedAvatar } from "@/components/ui/enhanced-avatar"
-import { DirectImageTest } from "./direct-image-test"
 import { SafePostImage } from "./safe-post-image"
 import MediaGallery from "./media-gallery"
 import { ReactionSummary } from "./reaction-summary"
@@ -117,7 +115,7 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
   const reactionsRef = useRef<HTMLDivElement>(null)
   const likeButtonRef = useRef<HTMLButtonElement>(null)
   const { toast } = useToast()
-  const [showDebug, setShowDebug] = useState(process.env.NODE_ENV === "development")
+  const [showDebug, setShowDebug] = useState(false)
   const [imageError, setImageError] = useState(false)
   const { user, isAuthenticated } = useAuth() || { user: null, isAuthenticated: false }
   const [showComments, setShowComments] = useState(false)
@@ -669,7 +667,7 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
         observer.disconnect()
       }
     }
-  }, [post.id, post.documentId, post.comments_count])
+  }, [post.id, post.documentId, post])
 
   // Fetch comment count when component mounts
   useEffect(() => {
@@ -754,43 +752,6 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
   return (
     <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-4">
       {/* Add direct image test in development mode */}
-      {showDebug && (
-        <div className="p-2 bg-gray-50 border-b">
-          <DirectImageTest />
-          <div className="mt-4">
-            <h3 className="text-sm font-medium mb-2">Image URL Debug:</h3>
-            <p className="text-xs break-all mb-2">{getImageUrl()}</p>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs mb-1">Next.js Image:</p>
-                <div className="aspect-video relative rounded overflow-hidden bg-gray-100">
-                  <NextImage
-                    src={getImageUrl() || "/placeholder.svg"}
-                    alt="Post image"
-                    fill
-                    className="object-contain" // Changed from "object-cover" to "object-contain"
-                    onError={() => setImageError(true)}
-                  />
-                </div>
-              </div>
-              <div>
-                <p className="text-xs mb-1">Regular img tag:</p>
-                <div className="aspect-video relative rounded overflow-hidden bg-gray-100">
-                  <img
-                    src={getImageUrl() || "/placeholder.svg"}
-                    alt="Post image"
-                    className="w-full h-full object-contain" // Changed from "object-cover" to "object-contain"
-                    onError={() => setImageError(true)}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-          <Button variant="outline" size="sm" className="mt-2" onClick={() => setShowDebug(false)}>
-            Hide Debug
-          </Button>
-        </div>
-      )}
 
       <div className="p-4">
         <div className="flex items-center justify-between mb-3">
@@ -831,11 +792,6 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
                   Delete post
-                </DropdownMenuItem>
-              )}
-              {process.env.NODE_ENV === "development" && (
-                <DropdownMenuItem onClick={() => setShowDebug(!showDebug)}>
-                  {showDebug ? "Hide Debug" : "Show Debug"}
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>
