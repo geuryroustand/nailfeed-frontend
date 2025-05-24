@@ -49,7 +49,7 @@ interface PostProps {
     mediaItems?: MediaItem[]
     galleryLayout?: MediaGalleryLayout
     description: string
-    title?: string // Add this line
+    title?: string
     likes: number
     comments: any[]
     timestamp: string
@@ -115,8 +115,6 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
   const reactionsRef = useRef<HTMLDivElement>(null)
   const likeButtonRef = useRef<HTMLButtonElement>(null)
   const { toast } = useToast()
-  const [showDebug, setShowDebug] = useState(false)
-  const [imageError, setImageError] = useState(false)
   const { user, isAuthenticated } = useAuth() || { user: null, isAuthenticated: false }
   const [showComments, setShowComments] = useState(false)
 
@@ -612,17 +610,6 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
     }
   }
 
-  // Log the image URL for debugging
-  useEffect(() => {
-    if (process.env.NODE_ENV === "development") {
-      // Test image loading in development mode
-      const img = new Image()
-      img.onload = () => {}
-      img.onerror = (e) => {}
-      img.src = getImageUrl()
-    }
-  }, [post])
-
   // Handle clicking outside the reactions panel for the like button
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -643,31 +630,7 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
     return () => {
       document.removeEventListener("mousedown", handleClickOutside)
     }
-  }, [showReactions])
-
-  // Set up network request monitoring for comment fetching
-  useEffect(() => {
-    // Create a performance observer to monitor network requests
-    if (typeof window !== "undefined" && window.PerformanceObserver) {
-      // This will help us capture the actual URL being used
-      const observer = new PerformanceObserver((list) => {
-        for (const entry of list.getEntries()) {
-          // Filter for comment-related requests
-          if ((entry.initiatorType === "fetch" && entry.name.includes("comment")) || entry.name.includes("comments")) {
-            console.log("🔍 Comment API Request URL:", entry.name)
-          }
-        }
-      })
-
-      // Start observing network requests
-      observer.observe({ entryTypes: ["resource"] })
-
-      return () => {
-        // Clean up the observer when component unmounts
-        observer.disconnect()
-      }
-    }
-  }, [post.id, post.documentId, post])
+  }, [showReactions, post])
 
   // Fetch comment count when component mounts
   useEffect(() => {
@@ -675,26 +638,19 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
       try {
         // Skip fetching if we don't have a valid post ID
         if (!post || (!post.id && !post.documentId)) {
-          console.log("Skipping comment count fetch - no valid post ID")
           return
         }
 
-        // Use the documentId if available, otherwise use numeric ID
+        // Use the documentIdif available, otherwise use numeric ID
         const identifier = post.documentId || post.id
-
-        console.log(`Fetching comments for post ID: ${post.id}, document ID: ${identifier.toString()}`)
 
         try {
           // Get the actual comments from the service
           const commentsResponse = await CommentsService.getComments(post.id, identifier.toString())
 
-          // Log the actual response to see what we're getting back
-          console.log("Comments API response:", commentsResponse)
-
           if (commentsResponse && commentsResponse.data) {
             // Calculate total comments including all nested replies
             const totalCount = CommentsService.countTotalComments(commentsResponse.data)
-            console.log(`Counted ${totalCount} total comments (including replies) for post ${post.id}`)
 
             // Only update if we actually have comments (avoid setting to 0 if API fails but returns empty data)
             if (totalCount > 0 || (commentsResponse.data && commentsResponse.data.length === 0)) {
@@ -711,7 +667,6 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
             setCommentCount(post.comments_count)
           }
         } catch (error) {
-          console.error("Error fetching comment count:", error)
           // If we have comments_count from the post object, use that as fallback
           if (post.comments_count !== undefined && post.comments_count > 0) {
             setCommentCount(post.comments_count)
@@ -721,7 +676,6 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
           }
         }
       } catch (error) {
-        console.error("Error in fetchCommentCount:", error)
         // Use any available fallback data
         if (post.comments_count !== undefined && post.comments_count > 0) {
           setCommentCount(post.comments_count)
@@ -740,19 +694,8 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
     }
   }, [post.id, post.documentId, post.comments_count])
 
-  // Debug log for comment count
-  useEffect(() => {
-    console.log(`Current comment count for post ${post.id}: ${commentCount}`, {
-      postCommentsCount: post.comments_count,
-      postCommentsLength: post.comments?.length,
-      stateCommentCount: commentCount,
-    })
-  }, [commentCount, post.id, post.comments_count, post.comments?.length])
-
   return (
     <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-4">
-      {/* Add direct image test in development mode */}
-
       <div className="p-4">
         <div className="flex items-center justify-between mb-3">
           <Link href={getProfileUrl()} className="flex items-center group">
@@ -842,7 +785,7 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
                 items={post.mediaItems}
                 layout={post.galleryLayout || "grid"}
                 maxHeight={400}
-                objectFit="contain" // Added objectFit="contain" prop
+                objectFit="contain"
               />
             </Link>
           </div>
@@ -856,7 +799,7 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
                 alt={post.description || "Post image"}
                 className="w-full rounded-md overflow-hidden"
                 fallbackSrc="/intricate-nail-art.png"
-                objectFit="contain" // Added objectFit="contain" prop
+                objectFit="contain"
               />
             </Link>
           </div>
@@ -989,7 +932,7 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
             documentId={post.documentId || post.id.toString()}
             onCommentAdded={handleCommentAdded}
             onCommentDeleted={handleCommentDeleted}
-            allowViewingForAll={true} // Add this prop to indicate all users can view comments
+            allowViewingForAll={true}
           />
         )}
       </div>
