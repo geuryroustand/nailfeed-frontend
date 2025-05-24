@@ -4,36 +4,38 @@ import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts"
-import { getTrendingReactions } from "@/lib/trending-reactions-data"
-import { useQuery } from "@tanstack/react-query"
 
 const COLORS = ["#FF6B6B", "#4ECDC4", "#FFD166", "#06D6A0", "#118AB2", "#073B4C"]
+
+// Mock data for demonstration
+const mockTrendingData = {
+  daily: [
+    { emoji: "❤️", count: 245 },
+    { emoji: "😍", count: 189 },
+    { emoji: "🔥", count: 156 },
+    { emoji: "💅", count: 134 },
+    { emoji: "✨", count: 98 },
+  ],
+  weekly: [
+    { emoji: "❤️", count: 1245 },
+    { emoji: "😍", count: 989 },
+    { emoji: "🔥", count: 756 },
+    { emoji: "💅", count: 634 },
+    { emoji: "✨", count: 498 },
+  ],
+  mostUsed: [
+    { emoji: "❤️", count: 5245 },
+    { emoji: "😍", count: 3989 },
+    { emoji: "🔥", count: 2756 },
+    { emoji: "💅", count: 2134 },
+    { emoji: "✨", count: 1498 },
+  ],
+}
 
 export default function ReactionAnalytics() {
   const [timeRange, setTimeRange] = useState("daily")
 
-  const { data: trendingData, isLoading } = useQuery({
-    queryKey: ["trendingReactions"],
-    queryFn: getTrendingReactions,
-  })
-
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Reaction Analytics</CardTitle>
-          <CardDescription>Loading analytics data...</CardDescription>
-        </CardHeader>
-        <CardContent className="h-80 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500"></div>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  if (!trendingData) return null
-
-  const currentData = trendingData[timeRange as keyof typeof trendingData]
+  const currentData = mockTrendingData[timeRange as keyof typeof mockTrendingData]
 
   // Format data for charts
   const barChartData = currentData.map((item) => ({
