@@ -1,40 +1,52 @@
-import { Suspense } from "react"
-import FeedCommentSection from "@/components/comments/feed-comment-section"
+"use client"
+
+import type React from "react"
+import { useState } from "react"
 
 interface PostDetailCommentsProps {
-  postId: string | number
-  documentId?: string
+  postId: string
 }
 
-export default function PostDetailComments({ postId, documentId }: PostDetailCommentsProps) {
-  return (
-    <div id="comments-section" className="bg-white rounded-xl shadow-sm overflow-hidden mb-6 p-4 sm:p-6">
-      <h2 className="text-xl font-semibold mb-4">Comments</h2>
+const PostDetailComments: React.FC<PostDetailCommentsProps> = ({ postId }) => {
+  const [comments, setComments] = useState<string[]>([])
+  const [newComment, setNewComment] = useState("")
 
-      <Suspense
-        fallback={
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="flex items-start animate-pulse">
-                <div className="h-8 w-8 bg-gray-200 rounded-full mr-3" />
-                <div className="flex-1">
-                  <div className="h-20 bg-gray-100 rounded-lg w-full" />
-                  <div className="h-4 bg-gray-100 rounded w-24 mt-2" />
-                </div>
-              </div>
-            ))}
-          </div>
-        }
-      >
-        <FeedCommentSection
-          postId={postId}
-          documentId={documentId}
-          allowViewingForAll={true}
-          onCommentAdded={() => {
-            // Optional callback for when comments are added
-          }}
-        />
-      </Suspense>
+  const handleCommentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    // Simulate submitting a comment to a backend
+    // In a real application, you would send this to an API
+    const newCommentList = [...comments, newComment]
+    setComments(newCommentList)
+    setNewComment("")
+
+    // Optimistically update the UI
+    console.log("Comment submitted:", newComment)
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setNewComment(e.target.value)
+  }
+
+  return (
+    <div>
+      <h3>Comments</h3>
+      {comments.length === 0 ? (
+        <p>No comments yet.</p>
+      ) : (
+        <ul>
+          {comments.map((comment, index) => (
+            <li key={index}>{comment}</li>
+          ))}
+        </ul>
+      )}
+
+      <form onSubmit={handleCommentSubmit}>
+        <textarea value={newComment} onChange={handleInputChange} placeholder="Add a comment..." />
+        <button type="submit">Submit Comment</button>
+      </form>
     </div>
   )
 }
+
+export default PostDetailComments

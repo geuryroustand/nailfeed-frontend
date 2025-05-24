@@ -1,48 +1,33 @@
 import { cookies } from "next/headers"
-import { getCurrentUser } from "@/app/actions/auth-actions"
+import { ProfileService } from "@/lib/profile-service"
+import { AuthService } from "@/lib/auth-service"
 
 export async function getProfile() {
   try {
-    // This function uses cookies, so the page will be dynamic
-    const cookieStore = await cookies()
-    const authToken = cookieStore.get("authToken")?.value || cookieStore.get("jwt")?.value
+    // Get token from cookies
+    const cookieStore = cookies()
+    const token = cookieStore.get("jwt")?.value
 
-    if (!authToken) {
+    if (!token) {
       return {
         profile: null,
         user: null,
         isAuthenticated: false,
+        error: "No authentication token found",
       }
     }
 
-    // Get current user data
-    const user = await getCurrentUser()
+    // Fetch user data
+    const user = await AuthService.getCurrentUser(token)
 
-    if (!user) {
-      return {
-        profile: null,
-        user: null,
-        isAuthenticated: false,
-      }
-    }
-
-    // For now, we'll use the user data as profile data
-    // In a real app, you might have separate profile and user endpoints
-    const profile = {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      displayName: user.displayName || user.username,
-      bio: user.bio || "",
-      profileImage: user.profileImage,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-    }
+    // Fetch profile data
+    const profile = await ProfileService.getProfile(token)
 
     return {
       profile,
       user,
-      isAuthenticated: true,
+      isAuthenticated: !!user,
+      error: null,
     }
   } catch (error) {
     console.error("Error fetching profile:", error)
@@ -50,6 +35,7 @@ export async function getProfile() {
       profile: null,
       user: null,
       isAuthenticated: false,
+      error: error instanceof Error ? error.message : "Failed to fetch profile",
     }
   }
 }

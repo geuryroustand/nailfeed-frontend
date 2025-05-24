@@ -1,16 +1,17 @@
 import Image from "next/image"
 import Link from "next/link"
-import type { Post } from "@/types/post"
+import type { Post } from "@/lib/post-data"
 
 interface RelatedPostsSectionProps {
   posts: Post[]
+  className?: string
 }
 
-export default function RelatedPostsSection({ posts }: RelatedPostsSectionProps) {
-  if (!posts || posts.length === 0) return null
+export default function RelatedPostsSection({ posts, className = "" }: RelatedPostsSectionProps) {
+  if (posts.length === 0) return null
 
   return (
-    <div className="mt-12">
+    <div className={`mt-12 ${className}`}>
       <h2 className="text-2xl font-bold mb-4">Related Posts</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {posts.map((relatedPost) => (
@@ -24,8 +25,8 @@ export default function RelatedPostsSection({ posts }: RelatedPostsSectionProps)
                 src={relatedPost.image || "/intricate-nail-art.png"}
                 alt={relatedPost.description || "Nail art"}
                 fill
-                className="object-cover"
                 sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                className="object-cover"
               />
             </div>
             <div className="p-2">
