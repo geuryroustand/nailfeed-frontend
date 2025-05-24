@@ -7,6 +7,9 @@ import PostDetailSkeleton from "@/components/post-detail-skeleton"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
 
+// Force dynamic rendering to prevent build errors
+export const dynamic = "force-dynamic"
+
 interface PostPageProps {
   params: {
     id: string
@@ -68,36 +71,11 @@ export async function generateMetadata({ params }: PostPageProps, parent: Resolv
   }
 }
 
-// Generate static params for popular posts (ISR)
-export async function generateStaticParams() {
-  try {
-    // During build time, if the API is not available, return empty array
-    // This allows the build to continue and pages will be generated on-demand
-    const { getPopularPostIds } = await import("@/lib/popular-posts")
-    const popularPostIds = await getPopularPostIds()
+// Remove generateStaticParams to prevent static generation issues
+// Pages will be generated on-demand instead
 
-    // If no popular posts found, return empty array to allow build to continue
-    if (!popularPostIds || popularPostIds.length === 0) {
-      console.log("No popular posts found, pages will be generated on-demand")
-      return []
-    }
-
-    return popularPostIds.map((id) => ({
-      id: id.toString(),
-    }))
-  } catch (error) {
-    console.warn(
-      "Error generating static params, pages will be generated on-demand:",
-      error instanceof Error ? error.message : String(error),
-    )
-    // Return empty array to allow build to continue
-    // Pages will be generated on-demand when requested
-    return []
-  }
-}
-
-// Configure ISR with on-demand revalidation
-export const revalidate = 3600 // Revalidate every hour
+// Remove revalidate since we're using dynamic rendering
+// export const revalidate = 3600
 
 export default async function PostPage({ params }: PostPageProps) {
   try {
