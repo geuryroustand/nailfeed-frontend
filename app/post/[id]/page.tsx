@@ -2,7 +2,7 @@ import { Suspense } from "react"
 import { notFound } from "next/navigation"
 import type { Metadata, ResolvingMetadata } from "next"
 import { getPostWithRelated } from "@/lib/actions/post-detail-actions"
-import PostDetailClientWrapper from "@/components/post-detail-client-wrapper"
+import PostDetailServerWrapper from "@/components/post/post-detail-server-wrapper"
 import PostDetailSkeleton from "@/components/post-detail-skeleton"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
@@ -12,9 +12,6 @@ interface PostPageProps {
     id: string
   }
 }
-
-// Force dynamic rendering to avoid prerendering issues
-export const dynamic = "force-dynamic"
 
 // Generate dynamic metadata for SEO
 export async function generateMetadata({ params }: PostPageProps, parent: ResolvingMetadata): Promise<Metadata> {
@@ -71,8 +68,33 @@ export async function generateMetadata({ params }: PostPageProps, parent: Resolv
   }
 }
 
-// Remove generateStaticParams to avoid prerendering issues
-// Pages will be generated on-demand
+// Generate static params for popular posts (ISR)
+export async function generateStaticParams() {
+  try {
+    // During build time, if the API is not available, return empty array
+    // This allows the build to continue and pages will be generated on-demand
+    const { getPopularPostIds } = await import("@/lib/popular-posts")
+    const popularPostIds = await getPopularPostIds()
+
+    // If no popular posts found, return empty array to allow build to continue
+    if (!popularPostIds || popularPostIds.length === 0) {
+      console.log("No popular posts found, pages will be generated on-demand")
+      return []
+    }
+
+    return popularPostIds.map((id) => ({
+      id: id.toString(),
+    }))
+  } catch (error) {
+    console.warn(
+      "Error generating static params, pages will be generated on-demand:",
+      error instanceof Error ? error.message : String(error),
+    )
+    // Return empty array to allow build to continue
+    // Pages will be generated on-demand when requested
+    return []
+  }
+}
 
 // Configure ISR with on-demand revalidation
 export const revalidate = 3600 // Revalidate every hour
@@ -88,16 +110,10 @@ export default async function PostPage({ params }: PostPageProps) {
       return notFound()
     }
 
-    // Ensure the post has a documentId for comment functionality
-    const postWithDocumentId = {
-      ...post,
-      documentId: post.documentId || `post-${post.id}`,
-    }
-
     return (
       <div className="container mx-auto px-4 py-6 sm:py-8">
         <Suspense fallback={<PostDetailSkeleton />}>
-          <PostDetailClientWrapper post={postWithDocumentId} relatedPosts={relatedPosts || []} />
+          <PostDetailServerWrapper post={post} relatedPosts={relatedPosts} />
         </Suspense>
       </div>
     )
