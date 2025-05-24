@@ -7,9 +7,7 @@ import TrendingSection from "@/components/trending-section"
 import { Toaster } from "@/components/ui/toaster"
 import AuthCTA from "@/components/auth-cta"
 import TestimonialCarousel from "@/components/testimonial-carousel"
-import AdvancedSearch from "@/components/search/advanced-search"
-import SearchResults from "@/components/search/search-results"
-import { SearchProvider } from "@/context/search-context"
+import SearchProviderWrapper from "@/components/search-provider-wrapper"
 import ErrorBoundaryWrapper from "@/components/error-boundary-wrapper"
 
 // Loading fallbacks
@@ -21,7 +19,7 @@ export default function HomePage() {
 
   return (
     <ErrorBoundaryWrapper>
-      <SearchProvider>
+      <SearchProviderWrapper>
         <main className="min-h-screen bg-gray-50">
           <div className="flex">
             {/* Desktop Sidebar - hidden on mobile */}
@@ -32,21 +30,6 @@ export default function HomePage() {
             {/* Main Content - adjusted for desktop */}
             <div className="w-full md:pl-64 lg:pl-72">
               <div className="container max-w-5xl mx-auto px-4 pt-2 pb-16 md:py-8">
-                <div className="mb-6">
-                  <Suspense fallback={<LoadingFallback />}>
-                    <AdvancedSearch
-                      onSearch={(filters) => {
-                        console.log("Search filters:", filters)
-                        // The actual filtering is handled by the SearchContext
-                      }}
-                    />
-                  </Suspense>
-                </div>
-
-                <Suspense fallback={<LoadingFallback />}>
-                  <SearchResults />
-                </Suspense>
-
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   {/* Left column - Featured and Feed */}
                   <div className="lg:col-span-2 space-y-6">
@@ -91,7 +74,7 @@ export default function HomePage() {
 
           <Toaster />
         </main>
-      </SearchProvider>
+      </SearchProviderWrapper>
     </ErrorBoundaryWrapper>
   )
 }

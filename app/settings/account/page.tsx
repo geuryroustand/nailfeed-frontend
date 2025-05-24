@@ -8,6 +8,9 @@ import { getProfile } from "./get-profile"
 import { AccountTabs } from "./tabs"
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 
+// Force dynamic rendering since we use cookies
+export const dynamic = "force-dynamic"
+
 // Loading component for Suspense
 function LoadingState() {
   return (
