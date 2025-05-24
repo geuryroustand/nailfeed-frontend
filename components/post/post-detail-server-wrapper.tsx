@@ -2,7 +2,7 @@ import { Suspense } from "react"
 import { trackPostView } from "@/lib/actions/post-detail-actions"
 import PostDetailHeader from "./post-detail-header"
 import PostDetailContent from "./post-detail-content"
-import PostDetailActionsWrapper from "./post-detail-actions-wrapper"
+import PostDetailActionsClient from "./post-detail-actions-client"
 import PostDetailComments from "./post-detail-comments"
 import PostDetailRelated from "./post-detail-related"
 import StructuredData from "./structured-data"
@@ -46,7 +46,7 @@ export default async function PostDetailServerWrapper({ post, relatedPosts }: Po
           </Suspense>
 
           <Suspense fallback={<div className="h-16 bg-gray-50 animate-pulse" />}>
-            <PostDetailActionsWrapper post={postWithDocumentId} />
+            <PostDetailActionsClient postData={postWithDocumentId} />
           </Suspense>
         </div>
 

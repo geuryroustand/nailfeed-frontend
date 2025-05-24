@@ -12,11 +12,11 @@ import { ReactionButton } from "@/components/reaction-button"
 import type { Post } from "@/lib/post-data"
 import type { ReactionType } from "@/lib/services/reaction-service"
 
-interface PostDetailActionsWrapperProps {
-  post: Post
+interface PostDetailActionsClientProps {
+  postData: Post
 }
 
-export default function PostDetailActionsWrapper({ post }: PostDetailActionsWrapperProps) {
+export default function PostDetailActionsClient({ postData }: PostDetailActionsClientProps) {
   const router = useRouter()
   const { toast } = useToast()
   const { isAuthenticated } = useAuth()
@@ -43,8 +43,8 @@ export default function PostDetailActionsWrapper({ post }: PostDetailActionsWrap
     if (navigator.share) {
       navigator
         .share({
-          title: post.title || `${post.username}'s post`,
-          text: post.description || "Check out this nail art post!",
+          title: postData.title || `${postData.username}'s post`,
+          text: postData.description || "Check out this nail art post!",
           url: window.location.href,
         })
         .catch((err) => {
@@ -99,7 +99,7 @@ export default function PostDetailActionsWrapper({ post }: PostDetailActionsWrap
       {/* Reaction summary */}
       <div className="mt-3 mb-2">
         <div className="bg-gray-50 p-2 rounded-lg">
-          <ReactionDisplay postId={post.id} className="px-2 py-1" maxDisplay={5} />
+          <ReactionDisplay postId={postData.id} className="px-2 py-1" maxDisplay={5} />
         </div>
       </div>
 
@@ -108,8 +108,8 @@ export default function PostDetailActionsWrapper({ post }: PostDetailActionsWrap
         <div className="flex items-center gap-4">
           {/* Using the ReactionButton component for consistent behavior with feed page */}
           <ReactionButton
-            postId={post.id}
-            postDocumentId={post.documentId || post.id.toString()}
+            postId={postData.id}
+            postDocumentId={postData.documentId || postData.id.toString()}
             onReactionChange={(type) => {
               setCurrentReaction(type)
             }}
@@ -122,7 +122,7 @@ export default function PostDetailActionsWrapper({ post }: PostDetailActionsWrap
             onClick={() => document.getElementById("comments-section")?.scrollIntoView({ behavior: "smooth" })}
           >
             <MessageCircle className="h-5 w-5 mr-1" />
-            {post.comments?.length || 0}
+            {postData.comments?.length || 0}
           </Button>
 
           <Button variant="ghost" size="sm" onClick={handleShare}>
