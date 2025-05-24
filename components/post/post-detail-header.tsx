@@ -1,26 +1,60 @@
-import type React from "react"
+import Link from "next/link"
+import { ArrowLeft, MoreHorizontal } from "lucide-react"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
+import { formatDate, formatBackendDate } from "@/lib/date-utils"
+import type { Post } from "@/lib/post-data"
 
 interface PostDetailHeaderProps {
-  title: string
-  author: string
-  date: string
-  imageUrl: string
+  post: Post
 }
 
-const PostDetailHeader: React.FC<PostDetailHeaderProps> = ({ title, author, date, imageUrl }) => {
+export default function PostDetailHeader({ post }: PostDetailHeaderProps) {
+  // Format the timestamp - check for both createdAt (backend format) and timestamp
+  const formattedDate = post.createdAt ? formatBackendDate(post.createdAt) : formatDate(post.timestamp)
+
   return (
-    <header className="post-detail-header">
-      <img src={imageUrl || "/placeholder.svg"} alt={title} className="post-detail-header__image" />
-      <div className="post-detail-header__content">
-        <h1 className="post-detail-header__title">{title}</h1>
-        <div className="post-detail-header__meta">
-          <span className="post-detail-header__author">By {author}</span>
-          <span className="post-detail-header__date">Published on {date}</span>
-        </div>
-        {/* Add any additional header content here, like social sharing buttons or follow buttons */}
+    <>
+      {/* Back button */}
+      <div className="mb-4">
+        <Link href="/" className="inline-flex items-center text-gray-600 hover:text-gray-900 transition-colors">
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          <span>Back to feed</span>
+        </Link>
       </div>
-    </header>
+
+      {/* Post header */}
+      <div className="p-4 sm:p-6 border-b bg-white rounded-t-xl shadow-sm mb-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <Link href={`/profile/${post.username}`} aria-label={`View ${post.username}'s profile`}>
+              <Avatar className="h-12 w-12 sm:h-14 sm:w-14 transition-transform hover:scale-105">
+                <AvatarImage
+                  src={post.userImage || "/abstract-user-icon.png"}
+                  alt={post.username || "User"}
+                  width={56}
+                  height={56}
+                  loading="eager"
+                />
+                <AvatarFallback>{post.username?.substring(0, 2).toUpperCase() || "UN"}</AvatarFallback>
+              </Avatar>
+            </Link>
+            <div className="ml-3">
+              <Link
+                href={`/profile/${post.username}`}
+                className="text-base sm:text-lg font-medium hover:text-pink-600 transition-colors"
+              >
+                {post.username || "Unknown User"}
+              </Link>
+              <p className="text-sm text-gray-500">{formattedDate}</p>
+            </div>
+          </div>
+
+          <Button variant="ghost" size="sm">
+            <MoreHorizontal className="h-5 w-5" />
+          </Button>
+        </div>
+      </div>
+    </>
   )
 }
-
-export default PostDetailHeader

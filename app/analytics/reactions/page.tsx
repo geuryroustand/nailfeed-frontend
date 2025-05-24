@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic"
+
 import ReactionAnalytics from "@/components/reaction-analytics"
 import type { Metadata } from "next"
 
