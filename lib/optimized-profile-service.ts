@@ -1,6 +1,7 @@
 import { cookies } from "next/headers"
 import config from "@/lib/config"
 import type { UserProfileResponse } from "@/lib/services/user-service"
+import { processUserForProfile, processPostsForGallery } from "@/lib/post-data-processors"
 import qs from "qs"
 
 /**
@@ -134,42 +135,27 @@ export async function fetchUserProfile(username: string) {
       return { notFound: true }
     }
 
-    // Process the user data
-    const user = userData
+    // Process the user data using the new processors
+    const processedUser = processUserForProfile(userData)
 
     // Process followers and following data
-    const followers = processFollowers(user.followers || [])
-    const following = processFollowing(user.following || [])
+    const followers = processFollowers(userData.followers || [])
+    const following = processFollowing(userData.following || [])
 
-    // Process posts data with media items
-    const posts = processPosts(user.posts || [])
+    // Process posts data with media items using the new processor
+    const posts = processPostsForGallery(userData.posts || [])
 
     // Transform the data to match the expected format
     const transformedUser: UserProfileResponse = {
-      id: user.id,
-      documentId: user.documentId || "",
-      username: user.username,
-      displayName: user.displayName || user.username,
-      bio: user.bio || "",
-      website: user.website || "",
-      location: user.location || "",
-      isVerified: user.isVerified || false,
-      confirmed: user.confirmed || false,
-      stats: {
-        followers: user.followersCount || followers.length || 0,
-        following: user.followingCount || following.length || 0,
-        posts: user.postsCount || posts.length || 0,
-      },
-      profileImage: user.profileImage,
-      coverImage: user.coverImage,
+      ...processedUser,
+      id: userData.id,
+      documentId: userData.documentId || "",
+      username: userData.username,
+      profileImage: userData.profileImage,
+      coverImage: userData.coverImage,
       followers: followers,
       following: following,
       posts: posts,
-      engagement: user.engagement || {
-        likes: 0,
-        comments: 0,
-        saves: 0,
-      },
     }
 
     console.log(`Successfully fetched optimized profile data for ${username}`)
@@ -234,75 +220,6 @@ function processFollowing(following: any[]): any[] {
       }
     })
     .filter((follow) => follow.username) // Filter out invalid following
-}
-
-/**
- * Process posts data from API response, ensuring media items are included
- */
-function processPosts(posts: any[]): any[] {
-  if (!Array.isArray(posts)) return []
-
-  return posts.map((post) => {
-    // Process media items for this post
-    const mediaItems = processMediaItems(post.mediaItems)
-
-    return {
-      id: post.id,
-      documentId: post.documentId || post.id.toString(),
-      title: post.title || "",
-      description: post.description || "",
-      contentType: post.contentType || "media-gallery",
-      galleryLayout: post.galleryLayout || "grid",
-      publishedAt: post.publishedAt || post.createdAt,
-      likesCount: post.likesCount || 0,
-      commentsCount: post.commentsCount || 0,
-      savesCount: post.savesCount || 0,
-      mediaItems: mediaItems,
-    }
-  })
-}
-
-/**
- * Process media items from API response
- */
-function processMediaItems(mediaItems: any): any[] {
-  if (!mediaItems) return []
-
-  // Handle different API response structures for media items
-  const items = Array.isArray(mediaItems)
-    ? mediaItems
-    : mediaItems.data && Array.isArray(mediaItems.data)
-      ? mediaItems.data
-      : []
-
-  return items.map((item) => {
-    // Extract media item data
-    const mediaItemData = item.attributes || item
-
-    // Extract file data
-    const fileData = extractFileData(mediaItemData.file)
-
-    return {
-      id: mediaItemData.id || item.id,
-      type: mediaItemData.type || "image",
-      order: mediaItemData.order || 0,
-      file: fileData,
-    }
-  })
-}
-
-/**
- * Extract file data from API response
- */
-function extractFileData(file: any): any {
-  if (!file) return {}
-
-  // Handle different API response structures for files
-  if (file.data && file.data.attributes) {
-    return file.data.attributes
-  }
-
-  return file
 }
 
 /**

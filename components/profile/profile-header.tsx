@@ -2,7 +2,6 @@ import { ProfileHeaderClient } from "@/components/profile/profile-header-client"
 import type { UserProfileResponse } from "@/lib/services/user-service"
 import { getProfileImageUrl, getCoverImageUrl } from "@/lib/api-url-helper"
 
-// Add isOtherUser prop to the component props
 interface ProfileHeaderProps {
   user: UserProfileResponse
   isOtherUser?: boolean
@@ -13,10 +12,7 @@ export default function ProfileHeader({ user, isOtherUser = false }: ProfileHead
     return <div className="p-4 text-center">Error loading profile data</div>
   }
 
-  // Get the API base URL
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
-
-  // Extract profile image URL using the helper function or directly from the optimized structure
+  // Process image URLs on the server with better fallbacks
   const profileImageUrl =
     getProfileImageUrl(user) ||
     user.profileImage?.url ||
@@ -24,7 +20,6 @@ export default function ProfileHeader({ user, isOtherUser = false }: ProfileHead
       ? `/placeholder.svg?height=150&width=150&query=profile+${encodeURIComponent(user.username)}`
       : `/placeholder.svg?height=150&width=150&query=profile+user`)
 
-  // Extract cover image URL using the helper function or directly from the optimized structure
   const coverImageUrl =
     getCoverImageUrl(user) ||
     user.coverImage?.url ||
@@ -32,23 +27,16 @@ export default function ProfileHeader({ user, isOtherUser = false }: ProfileHead
       ? `/placeholder.svg?height=400&width=1200&query=cover+${encodeURIComponent(user.username)}`
       : `/placeholder.svg?height=400&width=1200&query=cover+background`)
 
-  // Log the raw cover image data for debugging
-  console.log("Raw cover image data:", user.coverImage)
-
-  // Process image URLs on the server with better fallbacks
+  // Process user data on the server to optimize client-side rendering
   const processedUser = {
     ...user,
     profileImageUrl,
     coverImageUrl,
+    // Ensure these properties exist to avoid client-side errors
+    followersCount: user.followersCount || user.stats?.followers || 0,
+    followingCount: user.followingCount || user.stats?.following || 0,
+    postsCount: user.postsCount || user.stats?.posts || 0,
   }
-
-  // Log the processed image URLs for debugging
-  console.log("Profile Header - Processed image URLs:", {
-    profileImageUrl,
-    coverImageUrl,
-    originalProfileImage: user.profileImage?.url,
-    originalCoverImage: user.coverImage?.url,
-  })
 
   return <ProfileHeaderClient userData={processedUser} isOtherUser={isOtherUser} />
 }

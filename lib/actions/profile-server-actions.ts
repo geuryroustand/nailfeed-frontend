@@ -5,6 +5,7 @@ import { cookies } from "next/headers"
 import qs from "qs"
 import type { UserProfileResponse } from "@/lib/services/user-service"
 import { getApiUrl } from "@/lib/api-helpers"
+import { processUserForProfile, processPostsForGallery } from "@/lib/post-data-processors"
 
 /**
  * Fetches a user profile with optimized data loading
@@ -84,29 +85,22 @@ export async function fetchProfileData(username: string) {
       return { notFound: true }
     }
 
+    // Process user data for optimized rendering
+    const processedUser = processUserForProfile(userData)
+
+    // Process posts for gallery display
+    const processedPosts = processPostsForGallery(userData.posts || [])
+
     // Transform to expected format
     const transformedUser: UserProfileResponse = {
+      ...processedUser,
       id: userData.id,
       username: userData.username,
-      displayName: userData.displayName || userData.username,
-      bio: userData.bio || "",
-      website: userData.website || "",
-      location: userData.location || "",
-      isVerified: userData.isVerified || false,
-      confirmed: userData.confirmed || false,
       profileImage: userData.profileImage,
       coverImage: userData.coverImage,
-      posts: processPostsData(userData.posts),
+      posts: processedPosts,
       followers: processFollowersData(userData.followers),
       following: processFollowingData(userData.following),
-      stats: {
-        posts: userData.postsCount || userData.posts?.length || 0,
-        followers: userData.followersCount || userData.followers?.length || 0,
-        following: userData.followingCount || userData.following?.length || 0,
-      },
-      followersCount: userData.followersCount || userData.followers?.length || 0,
-      followingCount: userData.followingCount || userData.following?.length || 0,
-      postsCount: userData.postsCount || userData.posts?.length || 0,
     }
 
     return { user: transformedUser }
@@ -378,60 +372,6 @@ export async function toggleFollowServer(username: string, currentlyFollowing: b
 }
 
 // Helper functions to process data
-function processPostsData(posts: any[] = []) {
-  if (!Array.isArray(posts)) return []
-
-  return posts.map((post) => {
-    const postData = post.attributes || post
-
-    return {
-      id: post.id,
-      documentId: postData.documentId || post.id.toString(),
-      title: postData.title || "",
-      description: postData.description || "",
-      contentType: postData.contentType || "media-gallery",
-      galleryLayout: postData.galleryLayout || "grid",
-      publishedAt: postData.publishedAt || postData.createdAt,
-      likesCount: postData.likesCount || 0,
-      commentsCount: postData.commentsCount || 0,
-      savesCount: postData.savesCount || 0,
-      mediaItems: processMediaItems(postData.mediaItems),
-    }
-  })
-}
-
-function processMediaItems(mediaItems: any) {
-  if (!mediaItems) return []
-
-  const items = Array.isArray(mediaItems)
-    ? mediaItems
-    : mediaItems.data && Array.isArray(mediaItems.data)
-      ? mediaItems.data
-      : []
-
-  return items.map((item) => {
-    const mediaItemData = item.attributes || item
-    const fileData = extractFileData(mediaItemData.file)
-
-    return {
-      id: mediaItemData.id || item.id,
-      type: mediaItemData.type || "image",
-      order: mediaItemData.order || 0,
-      file: fileData,
-    }
-  })
-}
-
-function extractFileData(file: any) {
-  if (!file) return {}
-
-  if (file.data && file.data.attributes) {
-    return file.data.attributes
-  }
-
-  return file
-}
-
 function processFollowersData(followers: any[] = []) {
   if (!Array.isArray(followers)) return []
 

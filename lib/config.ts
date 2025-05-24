@@ -1,94 +1,131 @@
-interface Config {
-  apiUrl: string
-  appUrl: string
-  enableComments: boolean
-  enableReactions: boolean
-  enableSocialAuth: boolean
-  enableAnalytics: boolean
-  useSampleData: boolean
-  revalidateSecret: string
-  webhookSecret: string
-  apiToken: string
-  initialized: boolean
+/**
+ * Application Configuration
+ *
+ * This file centralizes all environment variables and configuration settings
+ * for the application. It provides type-safe access to configuration values
+ * and default fallbacks when environment variables are not set.
+ */
+
+// API configuration
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
+export const API_TOKEN = process.env.NEXT_PUBLIC_API_TOKEN || process.env.API_TOKEN || ""
+
+// Request configuration
+export const REQUEST_CONFIG = {
+  minRequestInterval: 800, // Minimum time between requests in ms
+  maxRetries: 3,
+  initialBackoff: 500, // Initial backoff time in ms
 }
 
-class ConfigManager {
-  private config: Config | null = null
+// Feature flags
+export const FEATURES = {
+  enableDetailedLogging: true,
+  useFallbackData: false, // Disable fallback data
+}
 
-  initialize(): Config {
-    if (this.config && this.config.initialized) {
-      return this.config
-    }
+// Configuration settings for the application
+const config = {
+  api: {
+    // API URL with production fallback
+    API_URL: process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app",
 
-    // Safely get environment variables with fallbacks
-    const getEnvVar = (key: string, fallback = ""): string => {
-      if (typeof window !== "undefined") {
-        // Client-side: only access NEXT_PUBLIC_ variables
-        if (key.startsWith("NEXT_PUBLIC_")) {
-          return process.env[key] || fallback
-        }
-        return fallback
+    // API token from environment variables
+    API_TOKEN: process.env.NEXT_PUBLIC_API_TOKEN || process.env.API_TOKEN || "",
+
+    // Public API token for client-side requests
+    PUBLIC_API_TOKEN: process.env.NEXT_PUBLIC_API_TOKEN || "",
+
+    // Get the full API URL for a path
+    getFullApiUrl: (path: string): string => {
+      const baseUrl = config.api.API_URL
+      const normalizedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl
+      const normalizedPath = path.startsWith("/") ? path.substring(1) : path
+      return `${normalizedBase}/${normalizedPath}`
+    },
+
+    // Get the API token
+    getApiToken: (usePublic = false): string | null => {
+      if (usePublic) {
+        return config.api.PUBLIC_API_TOKEN || null
       }
-      // Server-side: can access all variables
-      return process.env[key] || fallback
+      return config.api.API_TOKEN || null
+    },
+
+    // Use sample data - always false
+    useSampleData: () => false,
+  },
+
+  app: {
+    // Application URL
+    APP_URL: process.env.NEXT_PUBLIC_APP_URL || (typeof window !== "undefined" ? window.location.origin : ""),
+
+    // Get the full URL for a path
+    getFullUrl: (path: string): string => {
+      const baseUrl = config.app.APP_URL
+      const normalizedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl
+      const normalizedPath = path.startsWith("/") ? path.substring(1) : path
+      return `${normalizedBase}/${normalizedPath}`
+    },
+
+    // Get the URL for a post
+    getPostShareUrl: (postId: number | string): string => {
+      return config.app.getFullUrl(`post/${postId}`)
+    },
+
+    // Get the URL for a profile
+    getProfileUrl: (username: string): string => {
+      return config.app.getFullUrl(`profile/${username}`)
+    },
+
+    // Get the URL for a collection
+    getCollectionUrl: (collectionId: number | string): string => {
+      return config.app.getFullUrl(`collections/${collectionId}`)
+    },
+  },
+
+  features: {
+    // Feature flags from environment variables
+    USE_SAMPLE_DATA: false, // Always false
+    ENABLE_ANALYTICS: process.env.NEXT_PUBLIC_ENABLE_ANALYTICS === "true",
+    ENABLE_COMMENTS: process.env.NEXT_PUBLIC_ENABLE_COMMENTS === "true",
+    ENABLE_REACTIONS: process.env.NEXT_PUBLIC_ENABLE_REACTIONS === "true",
+    ENABLE_SOCIAL_AUTH: process.env.NEXT_PUBLIC_ENABLE_SOCIAL_AUTH === "true",
+  },
+
+  // Flag to track if configuration has been initialized
+  isInitialized: false,
+
+  // Initialize and validate configuration
+  initialize: () => {
+    if (config.isInitialized) {
+      return
     }
 
-    const getBooleanEnvVar = (key: string, fallback = false): boolean => {
-      const value = getEnvVar(key)
-      if (!value) return fallback
-      return value.toLowerCase() === "true" || value === "1"
+    // Log configuration in development
+    if (process.env.NODE_ENV === "development") {
+      console.log("🔧 App Configuration:", {
+        API_URL: config.api.API_URL,
+        APP_URL: config.app.APP_URL,
+        HAS_API_TOKEN: !!config.api.API_TOKEN,
+        HAS_PUBLIC_API_TOKEN: !!config.api.PUBLIC_API_TOKEN,
+        FEATURES: config.features,
+      })
     }
 
-    this.config = {
-      apiUrl: getEnvVar("API_URL", "http://localhost:1337/api"),
-      appUrl: getEnvVar("NEXT_PUBLIC_APP_URL", "http://localhost:3000"),
-      enableComments: getBooleanEnvVar("NEXT_PUBLIC_ENABLE_COMMENTS", true),
-      enableReactions: getBooleanEnvVar("NEXT_PUBLIC_ENABLE_REACTIONS", true),
-      enableSocialAuth: getBooleanEnvVar("NEXT_PUBLIC_ENABLE_SOCIAL_AUTH", false),
-      enableAnalytics: getBooleanEnvVar("NEXT_PUBLIC_ENABLE_ANALYTICS", false),
-      useSampleData: getBooleanEnvVar("NEXT_PUBLIC_USE_SAMPLE_DATA", true),
-      revalidateSecret: getEnvVar("REVALIDATE_SECRET", "default-secret"),
-      webhookSecret: getEnvVar("WEBHOOK_SECRET", "default-webhook-secret"),
-      apiToken: getEnvVar("API_TOKEN", ""),
-      initialized: true,
-    }
-
-    return this.config
-  }
-
-  get(): Config {
-    if (!this.config || !this.config.initialized) {
-      return this.initialize()
-    }
-    return this.config
-  }
-
-  // Safe getters that won't throw errors
-  getApiUrl(): string {
-    try {
-      return this.get().apiUrl
-    } catch {
-      return "http://localhost:1337/api"
-    }
-  }
-
-  getAppUrl(): string {
-    try {
-      return this.get().appUrl
-    } catch {
-      return "http://localhost:3000"
-    }
-  }
-
-  shouldUseSampleData(): boolean {
-    try {
-      return this.get().useSampleData
-    } catch {
-      return true
-    }
-  }
+    // Mark as initialized
+    config.isInitialized = true
+  },
 }
 
-const config = new ConfigManager()
+// Initialize configuration
+config.initialize()
+
+/**
+ * Check if sample data should be used
+ * @returns Always false as we don't use sample data
+ */
+export function useSampleData(): boolean {
+  return false
+}
 
 export default config

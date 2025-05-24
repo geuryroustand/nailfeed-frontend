@@ -1,8 +1,8 @@
 import { Suspense } from "react"
 import { notFound } from "next/navigation"
 import type { Metadata, ResolvingMetadata } from "next"
-import { fetchPostWithRelated } from "@/lib/actions/post-fetch-actions"
-import PostDetailServer from "@/components/post-detail-server"
+import { getPostWithRelated } from "@/lib/actions/post-detail-actions"
+import PostDetailServerWrapper from "@/components/post/post-detail-server-wrapper"
 import PostDetailSkeleton from "@/components/post-detail-skeleton"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
@@ -17,7 +17,7 @@ interface PostPageProps {
 export async function generateMetadata({ params }: PostPageProps, parent: ResolvingMetadata): Promise<Metadata> {
   try {
     // Fetch post data for metadata
-    const { post } = await fetchPostWithRelated(params.id)
+    const { post } = await getPostWithRelated(params.id)
 
     // If post not found, return basic metadata
     if (!post) {
@@ -84,30 +84,23 @@ export async function generateStaticParams() {
 }
 
 // Configure ISR with on-demand revalidation
-export const dynamic = "force-dynamic" // Force dynamic rendering for now
 export const revalidate = 3600 // Revalidate every hour
 
 export default async function PostPage({ params }: PostPageProps) {
   try {
     const idOrDocumentId = params.id
 
-    // Use the optimized function to fetch both post and related posts in one go
-    const { post, relatedPosts } = await fetchPostWithRelated(idOrDocumentId)
+    // Use the optimized server action to fetch both post and related posts
+    const { post, relatedPosts } = await getPostWithRelated(idOrDocumentId)
 
     if (!post) {
       return notFound()
     }
 
-    // Ensure the post has a documentId for comment functionality
-    const postWithDocumentId = {
-      ...post,
-      documentId: post.documentId || idOrDocumentId,
-    }
-
     return (
       <div className="container mx-auto px-4 py-6 sm:py-8">
         <Suspense fallback={<PostDetailSkeleton />}>
-          <PostDetailServer post={postWithDocumentId} relatedPosts={relatedPosts} />
+          <PostDetailServerWrapper post={post} relatedPosts={relatedPosts} />
         </Suspense>
       </div>
     )

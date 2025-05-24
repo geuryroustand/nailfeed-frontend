@@ -1,7 +1,8 @@
+import { Suspense } from "react"
 import { ProfileHeaderClient } from "@/components/profile/profile-header-client"
-import type { UserProfileResponse } from "@/lib/services/user-service"
-import { getProfileImageUrl, getCoverImageUrl } from "@/lib/api-url-helper"
 import { checkFollowStatus } from "@/lib/actions/profile-server-actions"
+import { getProfileImageUrl, getCoverImageUrl } from "@/lib/server-image-utils"
+import type { UserProfileResponse } from "@/lib/services/user-service"
 
 interface ProfileHeaderServerProps {
   user: UserProfileResponse
@@ -9,11 +10,11 @@ interface ProfileHeaderServerProps {
 }
 
 export async function ProfileHeaderServer({ user, isOtherUser = false }: ProfileHeaderServerProps) {
-  if (!user) {
-    return <div className="p-4 text-center">Error loading profile data</div>
-  }
+  // Process images on server side for better performance
+  const profileImageUrl = getProfileImageUrl(user)
+  const coverImageUrl = getCoverImageUrl(user)
 
-  // Get follow status on the server if this is another user's profile
+  // Check follow status if viewing another user's profile
   let isFollowing = false
   if (isOtherUser) {
     try {
@@ -21,32 +22,25 @@ export async function ProfileHeaderServer({ user, isOtherUser = false }: Profile
       isFollowing = followStatus.isFollowing
     } catch (error) {
       console.error("Error checking follow status:", error)
+      // Continue with default value
     }
   }
 
-  // Extract profile image URL using the helper function or directly from the optimized structure
-  const profileImageUrl =
-    getProfileImageUrl(user) ||
-    user.profileImage?.url ||
-    (user.username
-      ? `/placeholder.svg?height=150&width=150&query=profile+${encodeURIComponent(user.username)}`
-      : `/placeholder.svg?height=150&width=150&query=profile+user`)
-
-  // Extract cover image URL using the helper function or directly from the optimized structure
-  const coverImageUrl =
-    getCoverImageUrl(user) ||
-    user.coverImage?.url ||
-    (user.username
-      ? `/placeholder.svg?height=400&width=1200&query=cover+${encodeURIComponent(user.username)}`
-      : `/placeholder.svg?height=400&width=1200&query=cover+background`)
-
-  // Process image URLs on the server with better fallbacks
-  const processedUser = {
+  // Prepare optimized user data for client component
+  const optimizedUserData = {
     ...user,
     profileImageUrl,
     coverImageUrl,
     isFollowing,
+    // Ensure stats are properly formatted
+    followersCount: user.followersCount || user.stats?.followers || 0,
+    followingCount: user.followingCount || user.stats?.following || 0,
+    postsCount: user.postsCount || user.stats?.posts || 0,
   }
 
-  return <ProfileHeaderClient userData={processedUser} isOtherUser={isOtherUser} />
+  return (
+    <Suspense fallback={<div className="h-64 bg-gray-100 animate-pulse" />}>
+      <ProfileHeaderClient userData={optimizedUserData} isOtherUser={isOtherUser} />
+    </Suspense>
+  )
 }

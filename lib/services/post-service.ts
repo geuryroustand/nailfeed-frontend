@@ -1,5 +1,3 @@
-"use client"
-
 import qs from "qs"
 import { fetchWithRetry, safeJsonParse } from "../fetch-with-retry"
 import { API_URL, API_TOKEN, REQUEST_CONFIG } from "../config"

@@ -255,7 +255,7 @@ function EnhancedMediaGallery({ mediaItems, layout = "grid", className }: Enhanc
               }}
               role="button"
               tabIndex={0}
-              aria-label={"View image " + (index + 1)}
+              aria-label={`View image ${index + 1}`}
             >
               <SafeImage
                 src={item.url}
@@ -373,7 +373,7 @@ function EnhancedMediaGallery({ mediaItems, layout = "grid", className }: Enhanc
             }}
             role="button"
             tabIndex={0}
-            aria-label={"Open image " + (index + 2) + " in lightbox"}
+            aria-label={`Open image ${index + 2} in lightbox`}
           >
             <SafeImage
               src={item.url}
@@ -410,40 +410,41 @@ function EnhancedMediaGallery({ mediaItems, layout = "grid", className }: Enhanc
                         e.stopPropagation()
                         setCurrentIndex(index)
                       }}
-                      aria-label={"View image " + (index + 1)}\
-                    ))}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white hover:bg-black/70"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setCurrentIndex((prev) => (prev === 0 ? mediaItems.length - 1 : prev - 1))
-                    }}
-                    aria-label="Previous image"
-                  >
-                    <ChevronLeft className="h-6 w-6" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white hover:bg-black/70"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setCurrentIndex((prev) => (prev === mediaItems.length - 1 ? 0 : prev + 1))
-                    }}
-                    aria-label="Next image"
-                  >
-                    <ChevronRight className="h-6 w-6" />
-                  </Button>
+                      aria-label={`View image ${index + 1}`}
+                    />
+                  ))}
                 </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white hover:bg-black/70"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setCurrentIndex((prev) => (prev === 0 ? mediaItems.length - 1 : prev - 1))
+                  }}
+                  aria-label="Previous image"
+                >
+                  <ChevronLeft className="h-6 w-6" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white hover:bg-black/70"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setCurrentIndex((prev) => (prev === mediaItems.length - 1 ? 0 : prev + 1))
+                  }}
+                  aria-label="Next image"
+                >
+                  <ChevronRight className="h-6 w-6" />
+                </Button>
               </div>
             </div>
           </DialogContent>
         </Dialog>
-  </div>
-    )
+      )}
+    </div>
+  )
 }
 
 // Replace the default export with a named export

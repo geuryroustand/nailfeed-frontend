@@ -1,7 +1,17 @@
+import { Suspense } from "react"
 import { notFound } from "next/navigation"
 import { fetchUserProfile } from "@/lib/optimized-profile-service"
-import ProfilePageContent from "@/components/profile/profile-page-content"
+import ProfilePageLayout from "@/components/profile/profile-page-layout"
+import ProfileHeader from "@/components/profile/profile-header"
+import ProfileStats from "@/components/profile/profile-stats"
+import ProfileGallery from "@/components/profile/profile-gallery"
 import FollowLists from "@/components/profile/follow-lists"
+import {
+  ProfileHeaderSkeleton,
+  ProfileStatsSkeleton,
+  ProfileGallerySkeleton,
+  FollowListsSkeleton,
+} from "@/components/profile/profile-skeleton"
 import { getProfileImageUrl, getCoverImageUrl } from "@/lib/image-url-helper"
 
 // Set dynamic to force-dynamic to ensure we always get fresh data
@@ -60,18 +70,34 @@ export default async function UserProfilePage({ params }: { params: { username: 
     console.log(`- Cover Image: ${getCoverImageUrl(user.coverImage) ? "Available" : "Not available"}`)
 
     return (
-      <>
-        <ProfilePageContent user={user} isOwnProfile={isOwnProfile} showGuestBanner={showGuestBanner} />
+      <ProfilePageLayout isOwnProfile={isOwnProfile} showGuestBanner={showGuestBanner}>
+        {/* Profile Header Section */}
+        <section className="bg-white rounded-xl shadow-sm overflow-hidden">
+          <Suspense fallback={<ProfileHeaderSkeleton />}>
+            <ProfileHeader user={user} isOtherUser={!isOwnProfile} />
+          </Suspense>
 
-        <div className="mb-12 px-4">
-          <FollowLists
-            username={username}
-            isOwnProfile={isOwnProfile}
-            prefetchedFollowers={followers}
-            prefetchedFollowing={following}
-          />
-        </div>
-      </>
+          <Suspense fallback={<ProfileStatsSkeleton />}>
+            <ProfileStats user={user} />
+          </Suspense>
+
+          <Suspense fallback={<ProfileGallerySkeleton />}>
+            <ProfileGallery user={user} />
+          </Suspense>
+        </section>
+
+        {/* Network Section */}
+        <section className="mt-8">
+          <Suspense fallback={<FollowListsSkeleton />}>
+            <FollowLists
+              username={username}
+              isOwnProfile={isOwnProfile}
+              prefetchedFollowers={followers}
+              prefetchedFollowing={following}
+            />
+          </Suspense>
+        </section>
+      </ProfilePageLayout>
     )
   } catch (error) {
     console.error("Error rendering user profile page:", error)

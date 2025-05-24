@@ -2,16 +2,16 @@ import { Suspense } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getFollowers, getFollowing } from "@/lib/services/user-network-service"
 import FollowListClient from "./follow-list-client"
-import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
+import { FollowListsSkeleton } from "./profile-skeleton"
 
 interface FollowListsProps {
   username: string
   initialTab?: "followers" | "following"
   isOwnProfile: boolean
-  followers?: any[] // Optional pre-fetched followers
-  following?: any[] // Optional pre-fetched following
+  followers?: any[]
+  following?: any[]
 }
 
 export default async function FollowLists({
@@ -24,7 +24,7 @@ export default async function FollowLists({
   return (
     <div className="w-full max-w-3xl mx-auto bg-white rounded-lg shadow-md mt-6">
       <h2 className="text-xl font-semibold px-4 pt-4">Network</h2>
-      <Suspense fallback={<FollowListsLoading />}>
+      <Suspense fallback={<FollowListsSkeleton />}>
         <FollowListsContent
           username={username}
           initialTab={initialTab}
@@ -52,104 +52,17 @@ async function FollowListsContent({
 }) {
   try {
     // Use pre-fetched data if available, otherwise fetch from API
-    let followersData
-    let followingData
-
-    if (prefetchedFollowers) {
-      // Use pre-fetched followers data
-      followersData = {
-        users: prefetchedFollowers,
-        total: prefetchedFollowers.length,
-        page: 1,
-        pageSize: prefetchedFollowers.length,
-        totalPages: 1,
-        usingSampleData: false,
-      }
-      console.log("Using pre-fetched followers data:", followersData.users.length)
-    } else {
-      // Fetch followers data from API
-      followersData = await getFollowers(username, 1, 10)
-      console.log("Fetched followers data from API:", followersData?.users?.length || 0)
-    }
-
-    if (prefetchedFollowing) {
-      // Use pre-fetched following data
-      followingData = {
-        users: prefetchedFollowing,
-        total: prefetchedFollowing.length,
-        page: 1,
-        pageSize: prefetchedFollowing.length,
-        totalPages: 1,
-        usingSampleData: false,
-      }
-      console.log("Using pre-fetched following data:", followingData.users.length)
-    } else {
-      // Fetch following data from API
-      followingData = await getFollowing(username, 1, 10)
-      console.log("Fetched following data from API:", followingData?.users?.length || 0)
-    }
-
-    // Ensure we have valid data objects even if the API returns nothing
-    followersData = followersData || {
-      users: [],
-      total: 0,
-      page: 1,
-      pageSize: 10,
-      totalPages: 1,
-      usingSampleData: false,
-    }
-    followingData = followingData || {
-      users: [],
-      total: 0,
-      page: 1,
-      pageSize: 10,
-      totalPages: 1,
-      usingSampleData: false,
-    }
-
-    // Log the data for debugging
-    console.log(
-      `Followers data:`,
-      JSON.stringify({
-        count: followersData.users.length,
-        total: followersData.total,
-      }),
-    )
-    console.log(
-      `Following data:`,
-      JSON.stringify({
-        count: followingData.users.length,
-        total: followingData.total,
-      }),
-    )
+    const followersData = await getFollowersData(username, prefetchedFollowers)
+    const followingData = await getFollowingData(username, prefetchedFollowing)
 
     // Check if we have any data
     const hasFollowers = followersData.users.length > 0
     const hasFollowing = followingData.users.length > 0
     const hasNoData = !hasFollowers && !hasFollowing
 
-    // If we have no data but the API response shows followers, there might be an issue with processing
-    const showDataProcessingAlert = !hasFollowers && (followersData.usingSampleData || followersData.total === 0)
-
     return (
       <>
-        {hasNoData && (
-          <Alert className="m-4 bg-yellow-50 border-yellow-200">
-            <AlertCircle className="h-4 w-4 text-yellow-500" />
-            <AlertDescription className="text-yellow-700">
-              No follower or following data found for this user.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {showDataProcessingAlert && (
-          <Alert className="m-4 bg-blue-50 border-blue-200">
-            <AlertCircle className="h-4 w-4 text-blue-500" />
-            <AlertDescription className="text-blue-700">
-              We're having trouble processing the follower data. Please try again later.
-            </AlertDescription>
-          </Alert>
-        )}
+        {hasNoData && <NoDataAlert />}
 
         <Tabs defaultValue={initialTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
@@ -187,28 +100,64 @@ async function FollowListsContent({
   }
 }
 
-function FollowListsLoading() {
+async function getFollowersData(username: string, prefetchedFollowers?: any[]) {
+  if (prefetchedFollowers) {
+    return {
+      users: prefetchedFollowers,
+      total: prefetchedFollowers.length,
+      page: 1,
+      pageSize: prefetchedFollowers.length,
+      totalPages: 1,
+      usingSampleData: false,
+    }
+  }
+
+  const data = await getFollowers(username, 1, 10)
   return (
-    <div className="p-4">
-      <div className="flex justify-center space-x-4 mb-4">
-        <Skeleton className="h-10 w-1/2" />
-        <Skeleton className="h-10 w-1/2" />
-      </div>
-      <div className="space-y-4">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-3 p-2">
-            <Skeleton className="h-12 w-12 rounded-full" />
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-3 w-24" />
-            </div>
-            <div className="ml-auto">
-              <Skeleton className="h-9 w-24 rounded-full" />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
+    data || {
+      users: [],
+      total: 0,
+      page: 1,
+      pageSize: 10,
+      totalPages: 1,
+      usingSampleData: false,
+    }
+  )
+}
+
+async function getFollowingData(username: string, prefetchedFollowing?: any[]) {
+  if (prefetchedFollowing) {
+    return {
+      users: prefetchedFollowing,
+      total: prefetchedFollowing.length,
+      page: 1,
+      pageSize: prefetchedFollowing.length,
+      totalPages: 1,
+      usingSampleData: false,
+    }
+  }
+
+  const data = await getFollowing(username, 1, 10)
+  return (
+    data || {
+      users: [],
+      total: 0,
+      page: 1,
+      pageSize: 10,
+      totalPages: 1,
+      usingSampleData: false,
+    }
+  )
+}
+
+function NoDataAlert() {
+  return (
+    <Alert className="m-4 bg-yellow-50 border-yellow-200">
+      <AlertCircle className="h-4 w-4 text-yellow-500" />
+      <AlertDescription className="text-yellow-700">
+        No follower or following data found for this user.
+      </AlertDescription>
+    </Alert>
   )
 }
 
