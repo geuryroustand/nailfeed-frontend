@@ -1,160 +1,112 @@
 "use client"
 
-import { Bell, MessageCircle } from "lucide-react"
-import { motion } from "framer-motion"
-import Link from "next/link"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { useAuth } from "@/hooks/use-auth"
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import type React from "react"
 
-export default function Header() {
-  const { user, isAuthenticated, isLoading, logout, checkAuthStatus } = useAuth()
-  const [isLoggingOut, setIsLoggingOut] = useState(false)
-  const router = useRouter()
+import { useState, useEffect } from "react"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { Search, Bell, Menu } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { MobileMenu } from "@/components/mobile-menu"
+import { useAuth } from "@/context/auth-context"
+import { ClientHeaderWrapper } from "@/components/client-header-wrapper"
+
+export function Header() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const pathname = usePathname()
+  const { user, isAuthenticated, isLoading } = useAuth()
   const [mounted, setMounted] = useState(false)
 
-  // Set mounted state to true after component mounts
+  // Handle hydration mismatch by only rendering client components after mount
   useEffect(() => {
     setMounted(true)
-    // Check auth status when component mounts
-    checkAuthStatus()
-  }, [checkAuthStatus])
+  }, [])
 
-  // Debug effect to log auth state in header
-  useEffect(() => {
-    if (mounted) {
-      console.log("[SERVER]\nHeader auth state:", { isAuthenticated, user })
-    }
-  }, [isAuthenticated, user, mounted])
-
-  const handleLogout = async () => {
-    if (isLoggingOut) return // Prevent multiple clicks
-
-    setIsLoggingOut(true)
-    try {
-      await logout()
-    } catch (error) {
-      console.error("Logout error:", error)
-    } finally {
-      setIsLoggingOut(false)
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (searchQuery.trim()) {
+      window.location.href = `/search?q=${encodeURIComponent(searchQuery.trim())}`
     }
   }
 
-  // Don't render anything until after client-side hydration
+  // Don't render anything during SSR to prevent hydration mismatch
   if (!mounted) {
-    return null
+    return (
+      <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b z-20">
+        <div className="container mx-auto h-full px-4 flex items-center justify-between">
+          <div className="flex items-center">
+            <Link href="/" className="text-xl font-bold text-pink-600">
+              NailFeed
+            </Link>
+          </div>
+          <div className="w-full max-w-md mx-4 hidden md:block"></div>
+          <div className="flex items-center space-x-4"></div>
+        </div>
+      </header>
+    )
   }
 
   return (
-    <header className="sticky top-0 z-50 bg-white shadow-sm px-4 py-3">
-      <div className="container max-w-5xl mx-auto flex items-center justify-between">
-        <div className="flex items-center">
-          <Link href="/" className="flex items-center">
-            <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ duration: 0.5 }}
-            >
-              <div className="flex items-center">
-                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-pink-500 to-purple-500 flex items-center justify-center text-white font-bold mr-2">
-                  N
-                </div>
-                <h1 className="text-xl font-bold hidden sm:block">NailFeed</h1>
-              </div>
-            </motion.div>
-          </Link>
-        </div>
+    <ClientHeaderWrapper>
+      <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b z-20">
+        <div className="container mx-auto h-full px-4 flex items-center justify-between">
+          <div className="flex items-center">
+            <Button variant="ghost" size="icon" className="md:hidden mr-2" onClick={() => setMobileMenuOpen(true)}>
+              <Menu className="h-6 w-6" />
+              <span className="sr-only">Open menu</span>
+            </Button>
 
-        {/* Middle section - removed search input */}
-        <div className="flex-1"></div>
+            <Link href="/" className="text-xl font-bold text-pink-600">
+              NailFeed
+            </Link>
+          </div>
 
-        <div className="flex items-center space-x-1">
-          {isLoading ? (
-            // Show loading state
-            <div className="h-8 w-8 rounded-full bg-gray-200 animate-pulse"></div>
-          ) : !isAuthenticated ? (
-            <div className="hidden sm:flex items-center space-x-2 mr-2">
-              <Link href="/auth">
-                <Button variant="ghost" size="sm">
-                  Log in
-                </Button>
-              </Link>
-              <Link href="/auth">
-                <Button
-                  size="sm"
-                  className="bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white"
-                >
-                  Sign up
-                </Button>
-              </Link>
+          <form onSubmit={handleSearch} className="w-full max-w-md mx-4 hidden md:block">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
+              <Input
+                type="search"
+                placeholder="Search for nail designs, artists, or hashtags..."
+                className="w-full bg-gray-100 border-none pl-9 pr-4 py-2 rounded-full focus-visible:ring-pink-500"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
-          ) : (
-            <>
-              <Button variant="ghost" size="icon" className="relative">
-                <Bell className="h-5 w-5 text-gray-600" />
-                <span className="absolute top-1 right-1 h-2 w-2 bg-pink-500 rounded-full"></span>
-              </Button>
+          </form>
 
-              <Button variant="ghost" size="icon">
-                <MessageCircle className="h-5 w-5 text-gray-600" />
-              </Button>
+          <div className="flex items-center space-x-4">
+            {isAuthenticated ? (
+              <>
+                <Button variant="ghost" size="icon" asChild className="hidden md:flex">
+                  <Link href="/notifications">
+                    <Bell className="h-5 w-5" />
+                    <span className="sr-only">Notifications</span>
+                  </Link>
+                </Button>
 
-              {/* Display username when authenticated */}
-              <span className="hidden md:inline-block text-sm font-medium mr-2">
-                {user?.displayName || user?.username}
-              </span>
-            </>
-          )}
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 ml-1">
-                <Avatar className="h-8 w-8">
-                  <AvatarImage src={user?.profileImage?.url || "/diverse-avatars.png"} alt="Your profile" />
-                  <AvatarFallback>{user?.username?.substring(0, 2).toUpperCase() || "YP"}</AvatarFallback>
-                </Avatar>
+                <Link href={user?.username ? `/profile/${user.username}` : "/profile"} className="flex items-center">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage
+                      src={user?.profileImage?.url || "/abstract-user-icon.png"}
+                      alt={user?.username || "User"}
+                    />
+                    <AvatarFallback>{user?.username?.substring(0, 2).toUpperCase() || "U"}</AvatarFallback>
+                  </Avatar>
+                </Link>
+              </>
+            ) : (
+              <Button asChild className="bg-pink-600 hover:bg-pink-700 hidden md:flex">
+                <Link href="/auth">Sign In</Link>
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {isAuthenticated ? (
-                <>
-                  <DropdownMenuItem>
-                    <Link href="/profile" className="flex items-center w-full">
-                      Profile
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <Link href="/settings/account" className="flex items-center w-full">
-                      Settings
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout} disabled={isLoggingOut} className="cursor-pointer">
-                    {isLoggingOut ? "Logging out..." : "Log out"}
-                  </DropdownMenuItem>
-                </>
-              ) : (
-                <>
-                  <DropdownMenuItem>
-                    <Link href="/auth" className="flex items-center w-full">
-                      Login / Sign up
-                    </Link>
-                  </DropdownMenuItem>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+            )}
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+
+      <MobileMenu open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
+    </ClientHeaderWrapper>
   )
 }

@@ -1,39 +1,36 @@
-import type { Post } from "@/lib/post-data"
-
-// Sample post data for development and testing
-const samplePosts: Post[] = [
+export const samplePosts = [
   {
     id: 1,
     documentId: "post-1",
     username: "nailartist",
-    userImage: "/serene-woman-gaze.png",
-    image: "/intricate-nail-art.png",
-    description: "Loving these intricate floral designs! #nailart #florals",
-    likes: 120,
+    userImage: "/abstract-user-icon.png",
+    title: "Summer Vibes Collection",
+    description: "Just finished this bright summer design! 🌞 #summernails #nailart",
+    image: "/nail-art-1.png",
+    likes: 124,
     comments: [],
     timestamp: "2 hours ago",
-    tags: ["nailart", "florals", "design"],
+    contentType: "image",
     mediaItems: [
       {
         id: "media-1",
         type: "image",
-        url: "/intricate-nail-art.png",
+        url: "/nail-art-1.png",
       },
     ],
-    contentType: "image",
-    galleryLayout: "featured",
   },
   {
     id: 2,
     documentId: "post-2",
-    username: "naildesigner",
-    userImage: "/vibrant-artist-portrait.png",
+    username: "gelqueen",
+    userImage: "/abstract-profile.png",
+    title: "Geometric Patterns",
+    description: "Experimenting with geometric patterns and loving the results! #geometricnails #minimalist",
     image: "/geometric-harmony.png",
-    description: "Geometric patterns are trending this season! #geometric #minimal",
-    likes: 85,
+    likes: 89,
     comments: [],
     timestamp: "5 hours ago",
-    tags: ["geometric", "minimal", "nailart"],
+    contentType: "image",
     mediaItems: [
       {
         id: "media-2",
@@ -41,70 +38,304 @@ const samplePosts: Post[] = [
         url: "/geometric-harmony.png",
       },
     ],
-    contentType: "image",
-    galleryLayout: "featured",
   },
   {
     id: 3,
     documentId: "post-3",
-    username: "nailpro",
-    userImage: "/vibrant-beauty-vlogger.png",
-    image: "/marble-gold-nails.png",
-    description: "Marble and gold - a timeless combination #marble #gold #luxury",
-    likes: 210,
+    username: "nailtech_pro",
+    userImage: "/abstract-user-icon.png",
+    description: "Feeling inspired by spring colors today! 🌸 #springnails #floralnails #pastel",
+    contentType: "text-background",
+    background: {
+      type: "gradient",
+      value: "bg-gradient-to-r from-pink-300 to-purple-300",
+      animation: "animate-gradient-x",
+    },
+    likes: 56,
     comments: [],
     timestamp: "1 day ago",
-    tags: ["marble", "gold", "luxury", "nailart"],
-    mediaItems: [
-      {
-        id: "media-3",
-        type: "image",
-        url: "/marble-gold-nails.png",
-      },
-    ],
-    contentType: "image",
-    galleryLayout: "featured",
   },
   {
     id: 4,
     documentId: "post-4",
-    username: "nailtrends",
-    userImage: "/abstract-user-icon.png",
-    image: "/neon-geometric-nails.png",
-    description: "Neon vibes for summer! #neon #summer #bright",
-    likes: 150,
+    username: "manicure_master",
+    userImage: "/abstract-profile.png",
+    title: "Gold Accent Collection",
+    description: "Adding a touch of gold makes everything more luxurious ✨ #goldnails #luxurynails",
+    image: "/gold-veined-marble-nails.png",
+    likes: 210,
     comments: [],
     timestamp: "2 days ago",
-    tags: ["neon", "summer", "bright", "nailart"],
+    contentType: "image",
     mediaItems: [
       {
         id: "media-4",
         type: "image",
-        url: "/neon-geometric-nails.png",
+        url: "/gold-veined-marble-nails.png",
       },
     ],
-    contentType: "image",
-    galleryLayout: "featured",
+  },
+  {
+    id: 5,
+    documentId: "post-5",
+    username: "nail_trends",
+    userImage: "/abstract-user-icon.png",
+    title: "Trending Designs 2023",
+    description:
+      "A collection of the most requested designs this season! Which one is your favorite? #trending #naildesign",
+    likes: 178,
+    comments: [],
+    timestamp: "3 days ago",
+    contentType: "media-gallery",
+    galleryLayout: "grid",
+    mediaItems: [
+      {
+        id: "media-5-1",
+        type: "image",
+        url: "/marble-gold-nails.png",
+      },
+      {
+        id: "media-5-2",
+        type: "image",
+        url: "/subtle-nude-nails.png",
+      },
+      {
+        id: "media-5-3",
+        type: "image",
+        url: "/neon-geometric-nails.png",
+      },
+      {
+        id: "media-5-4",
+        type: "image",
+        url: "/delicate-daisies.png",
+      },
+    ],
   },
 ]
 
-// Function to get a sample post by ID
-export function getSamplePost(id: string): Post | null {
-  const numericId = Number.parseInt(id.replace("post-", ""))
-  const post = samplePosts.find((p) => p.id === numericId || p.documentId === id)
-  return post || null
-}
+export const sampleUsers = [
+  {
+    id: 1,
+    username: "nailartist",
+    displayName: "Nail Artist",
+    profileImage: {
+      url: "/abstract-user-icon.png",
+    },
+    bio: "Professional nail artist with 5+ years experience. Specializing in gel designs and nail art.",
+    followers: 1245,
+    following: 328,
+    posts: 87,
+  },
+  {
+    id: 2,
+    username: "gelqueen",
+    displayName: "Gel Queen",
+    profileImage: {
+      url: "/abstract-profile.png",
+    },
+    bio: "Certified nail technician. Gel specialist. Creating art one nail at a time.",
+    followers: 952,
+    following: 412,
+    posts: 63,
+  },
+  {
+    id: 3,
+    username: "nailtech_pro",
+    displayName: "Nail Tech Pro",
+    profileImage: {
+      url: "/abstract-user-icon.png",
+    },
+    bio: "Nail salon owner and educator. Sharing tips, tricks, and inspiration.",
+    followers: 2134,
+    following: 567,
+    posts: 124,
+  },
+  {
+    id: 4,
+    username: "manicure_master",
+    displayName: "Manicure Master",
+    profileImage: {
+      url: "/abstract-profile.png",
+    },
+    bio: "Luxury nail artist. As seen in Vogue, Elle, and Cosmopolitan.",
+    followers: 3452,
+    following: 215,
+    posts: 98,
+  },
+  {
+    id: 5,
+    username: "nail_trends",
+    displayName: "Nail Trends",
+    profileImage: {
+      url: "/abstract-user-icon.png",
+    },
+    bio: "Keeping you updated on the latest nail trends and techniques.",
+    followers: 5621,
+    following: 732,
+    posts: 156,
+  },
+]
 
-// Function to get related sample posts
-export function getRelatedPosts(postId: string, limit = 4): Post[] {
-  const id = postId.replace("post-", "")
-  const numericId = Number.parseInt(id)
+export const sampleTrending = [
+  {
+    id: 1,
+    tag: "summernails",
+    count: 12453,
+    image: "/nail-art-1.png",
+  },
+  {
+    id: 2,
+    tag: "frenchnails",
+    count: 9876,
+    image: "/subtle-nude-nails.png",
+  },
+  {
+    id: 3,
+    tag: "gelnails",
+    count: 8765,
+    image: "/marble-gold-nails.png",
+  },
+  {
+    id: 4,
+    tag: "nailart",
+    count: 7654,
+    image: "/geometric-harmony.png",
+  },
+  {
+    id: 5,
+    tag: "glitternails",
+    count: 6543,
+    image: "/shimmering-gold-flakes.png",
+  },
+]
 
-  // Filter out the current post and return up to the limit
-  return samplePosts.filter((p) => p.id !== numericId && p.documentId !== postId).slice(0, limit)
-}
+export const sampleStories = [
+  {
+    id: 1,
+    username: "nailartist",
+    userImage: "/abstract-user-icon.png",
+    image: "/nail-art-1.png",
+    viewed: false,
+  },
+  {
+    id: 2,
+    username: "gelqueen",
+    userImage: "/abstract-profile.png",
+    image: "/geometric-harmony.png",
+    viewed: false,
+  },
+  {
+    id: 3,
+    username: "nailtech_pro",
+    userImage: "/abstract-user-icon.png",
+    image: "/marble-gold-nails.png",
+    viewed: true,
+  },
+  {
+    id: 4,
+    username: "manicure_master",
+    userImage: "/abstract-profile.png",
+    image: "/subtle-nude-nails.png",
+    viewed: false,
+  },
+  {
+    id: 5,
+    username: "nail_trends",
+    userImage: "/abstract-user-icon.png",
+    image: "/neon-geometric-nails.png",
+    viewed: true,
+  },
+  {
+    id: 6,
+    username: "polish_pro",
+    userImage: "/abstract-profile.png",
+    image: "/delicate-daisies.png",
+    viewed: false,
+  },
+]
 
-// Function to get all sample posts
-export function getAllSamplePosts(): Post[] {
-  return [...samplePosts]
-}
+export const sampleCollections = [
+  {
+    id: 1,
+    name: "Summer Inspiration",
+    description: "Bright and colorful designs perfect for summer",
+    coverImage: "/nail-art-1.png",
+    postCount: 12,
+    isPrivate: false,
+  },
+  {
+    id: 2,
+    name: "Minimalist Designs",
+    description: "Clean, simple, and elegant nail art",
+    coverImage: "/geometric-harmony.png",
+    postCount: 8,
+    isPrivate: false,
+  },
+  {
+    id: 3,
+    name: "Wedding Ideas",
+    description: "Elegant designs for the big day",
+    coverImage: "/subtle-nude-nails.png",
+    postCount: 15,
+    isPrivate: true,
+  },
+  {
+    id: 4,
+    name: "Bold & Bright",
+    description: "Statement nails that stand out",
+    coverImage: "/neon-geometric-nails.png",
+    postCount: 10,
+    isPrivate: false,
+  },
+]
+
+export const sampleComments = [
+  {
+    id: 1,
+    postId: 1,
+    username: "gelqueen",
+    userImage: "/abstract-profile.png",
+    content: "These are absolutely gorgeous! Love the color combination.",
+    timestamp: "1 hour ago",
+    likes: 12,
+    replies: [
+      {
+        id: 101,
+        username: "nailartist",
+        userImage: "/abstract-user-icon.png",
+        content: "Thank you so much! The colors were inspired by a sunset I saw last week.",
+        timestamp: "45 minutes ago",
+        likes: 3,
+      },
+    ],
+  },
+  {
+    id: 2,
+    postId: 1,
+    username: "nail_trends",
+    userImage: "/abstract-user-icon.png",
+    content: "Definitely trying this design for my next appointment! 😍",
+    timestamp: "2 hours ago",
+    likes: 8,
+    replies: [],
+  },
+  {
+    id: 3,
+    postId: 2,
+    username: "manicure_master",
+    userImage: "/abstract-profile.png",
+    content: "The precision in these lines is impressive! What brush do you use?",
+    timestamp: "3 hours ago",
+    likes: 5,
+    replies: [
+      {
+        id: 301,
+        username: "gelqueen",
+        userImage: "/abstract-profile.png",
+        content: "I use a 00 detail brush from the Artist Series. It makes all the difference!",
+        timestamp: "2 hours ago",
+        likes: 2,
+      },
+    ],
+  },
+]

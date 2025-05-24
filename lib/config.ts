@@ -8,19 +8,29 @@
 
 // API configuration
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
-export const API_TOKEN = process.env.NEXT_PUBLIC_API_TOKEN || process.env.API_TOKEN || ""
+export const API_TOKEN = process.env.NEXT_PUBLIC_API_TOKEN || ""
 
 // Request configuration
 export const REQUEST_CONFIG = {
-  minRequestInterval: 800, // Minimum time between requests in ms
-  maxRetries: 3,
-  initialBackoff: 500, // Initial backoff time in ms
+  minRequestInterval: 300, // Minimum time between requests in milliseconds
+  maxRetries: 3, // Maximum number of retries for failed requests
+  retryDelay: 1000, // Initial delay between retries in milliseconds
 }
 
 // Feature flags
 export const FEATURES = {
-  enableDetailedLogging: true,
-  useFallbackData: false, // Disable fallback data
+  enableComments: process.env.NEXT_PUBLIC_ENABLE_COMMENTS === "true",
+  enableReactions: process.env.NEXT_PUBLIC_ENABLE_REACTIONS === "true",
+  enableSocialAuth: process.env.NEXT_PUBLIC_ENABLE_SOCIAL_AUTH === "true",
+  enableAnalytics: process.env.NEXT_PUBLIC_ENABLE_ANALYTICS === "true",
+  useSampleData: process.env.NEXT_PUBLIC_USE_SAMPLE_DATA === "true",
+}
+
+// App configuration
+export const APP_CONFIG = {
+  appName: "NailFeed",
+  appUrl: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+  apiUrl: API_URL,
 }
 
 // Configuration settings for the application

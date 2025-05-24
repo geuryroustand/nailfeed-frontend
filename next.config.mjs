@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  reactStrictMode: true,
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -7,17 +8,23 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
-    unoptimized: true,
-    domains: ['nailfeed-backend-production.up.railway.app'],
+    domains: [
+      'nailfeed-backend-production.up.railway.app',
+      'localhost',
+      'res.cloudinary.com',
+      'images.unsplash.com',
+    ],
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'nailfeed-backend-production.up.railway.app',
-        port: '',
-        pathname: '/**',
+        hostname: '**',
       },
     ],
+    unoptimized: true,
   },
-};
+  experimental: {
+    serverActions: true,
+  },
+}
 
-export default nextConfig;
+export default nextConfig

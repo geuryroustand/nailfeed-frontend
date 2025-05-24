@@ -1,30 +1,19 @@
 "use client"
 
-import { Suspense, useEffect } from "react"
-import Header from "./header"
-import { useAuth } from "@/hooks/use-auth"
+import type React from "react"
 
-export default function ClientHeaderWrapper() {
-  const { checkAuthStatus } = useAuth()
+import { useEffect, useState } from "react"
 
-  // Check auth status when the component mounts
+export function ClientHeaderWrapper({ children }: { children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(false)
+
   useEffect(() => {
-    checkAuthStatus()
-  }, [checkAuthStatus])
+    setMounted(true)
+  }, [])
 
-  return (
-    <Suspense fallback={<HeaderFallback />}>
-      <Header />
-    </Suspense>
-  )
-}
+  if (!mounted) {
+    return null
+  }
 
-function HeaderFallback() {
-  return (
-    <header className="sticky top-0 z-50 bg-white shadow-sm px-4 py-3">
-      <div className="container max-w-5xl mx-auto flex items-center justify-between">
-        <div className="h-8"></div>
-      </div>
-    </header>
-  )
+  return <>{children}</>
 }
