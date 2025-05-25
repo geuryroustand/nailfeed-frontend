@@ -14,7 +14,6 @@
     "@dnd-kit/utilities": "latest",
     "@emotion/is-prop-valid": "latest",
     "@hookform/resolvers": "latest",
-    "@mediapipe/hands": "latest",
     "@radix-ui/react-accordion": "latest",
     "@radix-ui/react-alert-dialog": "1.1.4",
     "@radix-ui/react-aspect-ratio": "1.1.1",
