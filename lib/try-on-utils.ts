@@ -7,18 +7,22 @@ interface NailPosition {
   width: number
   height: number
   angle: number // Rotation angle for proper placement
+  finger: number // Finger index (0=thumb, 1=index, etc.)
+  confidence: number // Confidence score for detection
 }
 
 // MediaPipe Hands module reference
 let handsModule: any = null
+const handLandmarkerModule: any = null
+let isMediaPipeInitialized = false
 
 // Initialize MediaPipe Hands
 export async function initMediaPipe() {
   if (typeof window === "undefined") return false
-  if (handsModule) return true
+  if (isMediaPipeInitialized) return true
 
   try {
-    // Load MediaPipe Hands dynamically
+    // Try to load MediaPipe Hands
     if (!(window as any).Hands) {
       // Create and load script
       const script = document.createElement("script")
@@ -37,29 +41,29 @@ export async function initMediaPipe() {
     }
 
     // Check if Hands is available
-    if (!(window as any).Hands) {
+    if ((window as any).Hands) {
+      const Hands = (window as any).Hands
+      handsModule = new Hands({
+        locateFile: (file: string) => {
+          return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`
+        },
+      })
+
+      // Configure Hands
+      await handsModule.setOptions({
+        maxNumHands: 2,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      })
+
+      console.log("MediaPipe Hands initialized successfully")
+      isMediaPipeInitialized = true
+      return true
+    } else {
       console.error("MediaPipe Hands not available after loading")
       return false
     }
-
-    // Initialize Hands
-    const Hands = (window as any).Hands
-    handsModule = new Hands({
-      locateFile: (file: string) => {
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`
-      },
-    })
-
-    // Configure Hands
-    await handsModule.setOptions({
-      maxNumHands: 2,
-      modelComplexity: 1,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5,
-    })
-
-    console.log("MediaPipe Hands initialized successfully")
-    return true
   } catch (error) {
     console.error("Error initializing MediaPipe Hands:", error)
     return false
@@ -72,20 +76,34 @@ async function processWithMediaPipe(imageElement: HTMLImageElement | HTMLCanvasE
     throw new Error("MediaPipe Hands not initialized")
   }
 
-  return new Promise((resolve) => {
-    // Set up results handler
-    handsModule.onResults((results: any) => {
-      resolve(results)
-    })
+  return new Promise((resolve, reject) => {
+    try {
+      // Set up results handler
+      handsModule.onResults((results: any) => {
+        resolve(results)
+      })
 
-    // Process the image
-    handsModule.send({ image: imageElement })
+      // Process the image
+      handsModule.send({ image: imageElement }).catch((err: any) => {
+        console.error("Error sending image to MediaPipe:", err)
+        reject(err)
+      })
+
+      // Set a timeout to prevent hanging
+      setTimeout(() => {
+        reject(new Error("MediaPipe processing timed out"))
+      }, 5000)
+    } catch (error) {
+      reject(error)
+    }
   })
 }
 
 // Detect hands and nail positions in an image
 export async function detectHands(imageUrl: string): Promise<NailPosition[]> {
   try {
+    console.log("Starting hand detection process")
+
     // Load the image
     const img = new Image()
     img.crossOrigin = "anonymous"
@@ -105,14 +123,18 @@ export async function detectHands(imageUrl: string): Promise<NailPosition[]> {
     // Draw the image to the canvas
     ctx.drawImage(img, 0, 0)
 
-    // Check if MediaPipe is available
-    if (!handsModule) {
-      console.log("MediaPipe not initialized, using fallback detection")
-      return fallbackNailDetection(imageUrl)
+    // Check if MediaPipe is initialized
+    if (!isMediaPipeInitialized) {
+      const initialized = await initMediaPipe()
+      if (!initialized) {
+        console.log("MediaPipe initialization failed, using fallback detection")
+        return fallbackNailDetection(imageUrl)
+      }
     }
 
     // Process with MediaPipe
     try {
+      console.log("Processing image with MediaPipe")
       const results = await processWithMediaPipe(canvas)
 
       // Check if hands were detected
@@ -121,10 +143,17 @@ export async function detectHands(imageUrl: string): Promise<NailPosition[]> {
         return fallbackNailDetection(imageUrl)
       }
 
+      console.log(`Detected ${results.multiHandLandmarks.length} hands`)
+
       // Extract nail positions from landmarks
       const nailPositions: NailPosition[] = []
 
-      for (const landmarks of results.multiHandLandmarks) {
+      for (let handIndex = 0; handIndex < results.multiHandLandmarks.length; handIndex++) {
+        const landmarks = results.multiHandLandmarks[handIndex]
+        const handedness = results.multiHandedness?.[handIndex]?.label || "Right"
+
+        console.log(`Processing ${handedness} hand`)
+
         // Fingertip indices as specified: thumb (4), index (8), middle (12), ring (16), pinky (20)
         const fingertips = [4, 8, 12, 16, 20]
 
@@ -134,6 +163,19 @@ export async function detectHands(imageUrl: string): Promise<NailPosition[]> {
         // Base joints for angle calculation
         const baseJoints = [2, 6, 10, 14, 18]
 
+        // Wrist point for hand orientation
+        const wrist = landmarks[0]
+
+        // Calculate hand orientation to adjust nail placement
+        const handCenter = {
+          x: landmarks.reduce((sum: number, point: any) => sum + point.x, 0) / landmarks.length,
+          y: landmarks.reduce((sum: number, point: any) => sum + point.y, 0) / landmarks.length,
+        }
+
+        // Determine if palm is facing camera (roughly)
+        // This is a simplified heuristic - in a real app, you'd use more sophisticated detection
+        const isPalmFacingCamera = handedness === "Left" ? handCenter.x > wrist.x : handCenter.x < wrist.x
+
         for (let i = 0; i < fingertips.length; i++) {
           const tipIndex = fingertips[i]
           const midIndex = middleJoints[i]
@@ -142,6 +184,10 @@ export async function detectHands(imageUrl: string): Promise<NailPosition[]> {
           const tip = landmarks[tipIndex]
           const mid = landmarks[midIndex]
           const base = landmarks[baseIndex]
+
+          // Skip thumb for better results if multiple hands are detected
+          // Thumbs are harder to detect accurately
+          if (i === 0 && results.multiHandLandmarks.length > 1) continue
 
           // Convert normalized coordinates to pixel coordinates
           const tipX = tip.x * canvas.width
@@ -165,18 +211,34 @@ export async function detectHands(imageUrl: string): Promise<NailPosition[]> {
           const offsetX = Math.sin(angle * (Math.PI / 180)) * (nailWidth * 0.3)
           const offsetY = -Math.cos(angle * (Math.PI / 180)) * (nailWidth * 0.3)
 
+          // Skip nails that are likely not visible (e.g., if hand is sideways)
+          // This is a simple heuristic based on the z-coordinate
+          if (tip.z > 0.1) continue
+
+          // Calculate confidence based on visibility and position
+          const confidence = isPalmFacingCamera ? 0.9 : 0.5
+
           nailPositions.push({
             x: tipX - nailWidth / 2 + offsetX,
             y: tipY - nailWidth / 2 + offsetY,
             width: nailWidth,
             height: nailWidth * 1.5, // Nails are typically longer than wide
             angle: angle,
+            finger: i,
+            confidence: confidence,
           })
         }
       }
 
-      console.log(`Detected ${nailPositions.length} nail positions using MediaPipe`)
-      return nailPositions
+      // If we detected at least one nail, return the results
+      if (nailPositions.length > 0) {
+        console.log(`Detected ${nailPositions.length} nail positions using MediaPipe`)
+        return nailPositions
+      }
+
+      // Otherwise fall back to the simple detection
+      console.log("No valid nails detected, using fallback detection")
+      return fallbackNailDetection(imageUrl)
     } catch (processingError) {
       console.error("Error processing with MediaPipe:", processingError)
       return fallbackNailDetection(imageUrl)
@@ -324,37 +386,12 @@ export async function applyNailDesign(sourceImageUrl: string, designImageUrl: st
 
     // Apply the design to each detected nail
     if (nailPositions && nailPositions.length > 0) {
-      for (const nail of nailPositions) {
-        // Save the current context state
-        context.save()
+      // Sort by confidence to apply highest confidence nails first
+      const sortedPositions = [...nailPositions].sort((a, b) => b.confidence - a.confidence)
 
-        // Translate to the center of the nail position
-        context.translate(nail.x + nail.width / 2, nail.y + nail.height / 2)
-
-        // Rotate to match the nail angle
-        context.rotate((nail.angle * Math.PI) / 180)
-
-        // Calculate scale to fit the nail size
-        const scaleX = nail.width / designCanvas.width
-        const scaleY = nail.height / designCanvas.height
-
-        // Apply scaling
-        context.scale(scaleX, scaleY)
-
-        // Draw the nail design centered
-        context.drawImage(
-          designCanvas,
-          -designCanvas.width / 2,
-          -designCanvas.height / 2,
-          designCanvas.width,
-          designCanvas.height,
-        )
-
-        // Restore the context state
-        context.restore()
-
-        // Apply shine effect to make it look more realistic
-        applyShineEffect(context, nail.x, nail.y, nail.width, nail.height, nail.angle)
+      for (const nail of sortedPositions) {
+        // Apply the nail design with realistic effects
+        applyNailWithEffects(context, designCanvas, nail)
       }
 
       console.log("Nail designs applied successfully")
@@ -365,24 +402,7 @@ export async function applyNailDesign(sourceImageUrl: string, designImageUrl: st
       // Apply fallback nails
       const fallbackNails = await fallbackNailDetection(sourceImageUrl)
       for (const nail of fallbackNails) {
-        context.save()
-        context.translate(nail.x + nail.width / 2, nail.y + nail.height / 2)
-        context.rotate((nail.angle * Math.PI) / 180)
-
-        const scaleX = nail.width / designCanvas.width
-        const scaleY = nail.height / designCanvas.height
-        context.scale(scaleX, scaleY)
-
-        context.drawImage(
-          designCanvas,
-          -designCanvas.width / 2,
-          -designCanvas.height / 2,
-          designCanvas.width,
-          designCanvas.height,
-        )
-
-        context.restore()
-        applyShineEffect(context, nail.x, nail.y, nail.width, nail.height, nail.angle)
+        applyNailWithEffects(context, designCanvas, nail)
       }
     }
 
@@ -392,6 +412,53 @@ export async function applyNailDesign(sourceImageUrl: string, designImageUrl: st
     console.error("Error applying nail design:", err)
     throw err
   }
+}
+
+// Apply a nail design with realistic effects
+function applyNailWithEffects(context: CanvasRenderingContext2D, designCanvas: HTMLCanvasElement, nail: NailPosition) {
+  // Save the current context state
+  context.save()
+
+  // Translate to the center of the nail position
+  context.translate(nail.x + nail.width / 2, nail.y + nail.height / 2)
+
+  // Rotate to match the nail angle
+  context.rotate((nail.angle * Math.PI) / 180)
+
+  // Calculate scale to fit the nail size
+  const scaleX = nail.width / designCanvas.width
+  const scaleY = nail.height / designCanvas.height
+
+  // Apply scaling
+  context.scale(scaleX, scaleY)
+
+  // Apply a subtle shadow for depth
+  context.shadowColor = "rgba(0, 0, 0, 0.2)"
+  context.shadowBlur = 4
+  context.shadowOffsetX = 1
+  context.shadowOffsetY = 1
+
+  // Draw the nail design centered
+  context.drawImage(
+    designCanvas,
+    -designCanvas.width / 2,
+    -designCanvas.height / 2,
+    designCanvas.width,
+    designCanvas.height,
+  )
+
+  // Reset shadow
+  context.shadowColor = "transparent"
+  context.shadowBlur = 0
+  context.shadowOffsetX = 0
+  context.shadowOffsetY = 0
+
+  // Restore the context state
+  context.restore()
+
+  // Apply shine and curvature effects
+  applyShineEffect(context, nail.x, nail.y, nail.width, nail.height, nail.angle)
+  applyCurvatureEffect(context, nail.x, nail.y, nail.width, nail.height, nail.angle)
 }
 
 // Apply shine effect to make nails look more realistic
@@ -434,6 +501,40 @@ function applyShineEffect(
   ctx.restore()
 }
 
+// Apply curvature effect to simulate the 3D curve of a nail
+function applyCurvatureEffect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  angle: number,
+) {
+  ctx.save()
+
+  // Translate and rotate to match nail position
+  ctx.translate(x + width / 2, y + height / 2)
+  ctx.rotate((angle * Math.PI) / 180)
+
+  // Create a subtle gradient for the curvature effect
+  const gradient = ctx.createLinearGradient(-width / 2, 0, width / 2, 0)
+  gradient.addColorStop(0, "rgba(0, 0, 0, 0.1)")
+  gradient.addColorStop(0.5, "rgba(0, 0, 0, 0)")
+  gradient.addColorStop(1, "rgba(0, 0, 0, 0.1)")
+
+  // Apply the curvature as an overlay
+  ctx.fillStyle = gradient
+  ctx.globalCompositeOperation = "multiply"
+  ctx.beginPath()
+  ctx.ellipse(0, 0, width / 2, height / 2, 0, 0, Math.PI * 2)
+  ctx.fill()
+
+  // Reset composite operation
+  ctx.globalCompositeOperation = "source-over"
+
+  ctx.restore()
+}
+
 // Fallback nail detection using simple image processing
 export async function fallbackNailDetection(imageUrl: string): Promise<NailPosition[]> {
   // This is a simplified fallback that estimates nail positions
@@ -458,6 +559,8 @@ export async function fallbackNailDetection(imageUrl: string): Promise<NailPosit
           width: nailWidth,
           height: nailHeight,
           angle: 0, // Default angle (straight)
+          finger: i,
+          confidence: 0.5, // Medium confidence for fallback
         })
       }
 

@@ -12,6 +12,7 @@ export function useTryOn(designImageUrl: string) {
   const [resultImage, setResultImage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isMediaPipeInitialized, setIsMediaPipeInitialized] = useState(false)
+  const [processingProgress, setProcessingProgress] = useState(0)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -33,6 +34,14 @@ export function useTryOn(designImageUrl: string) {
 
     initialize()
   }, [])
+
+  // Preload the design image
+  useEffect(() => {
+    if (designImageUrl) {
+      const img = new Image()
+      img.src = designImageUrl
+    }
+  }, [designImageUrl])
 
   const startCapture = useCallback(async () => {
     try {
@@ -73,6 +82,10 @@ export function useTryOn(designImageUrl: string) {
           errorMessage = "No camera found. Please connect a camera and try again."
         } else if (err.name === "NotReadableError") {
           errorMessage = "Camera is in use by another application. Please close other apps using your camera."
+        } else if (err.name === "OverconstrainedError") {
+          errorMessage = "Camera constraints not satisfied. Please try a different camera."
+        } else if (err.name === "AbortError") {
+          errorMessage = "Camera access aborted. Please try again."
         }
       }
 
@@ -96,6 +109,7 @@ export function useTryOn(designImageUrl: string) {
 
     try {
       setState("processing")
+      setProcessingProgress(10)
 
       const video = videoRef.current
       const canvas = canvasRef.current
@@ -109,16 +123,20 @@ export function useTryOn(designImageUrl: string) {
 
       // Draw the current video frame to the canvas
       context.drawImage(video, 0, 0)
+      setProcessingProgress(30)
 
       // Get the captured image as data URL
       const imageDataUrl = canvas.toDataURL("image/png")
       setCapturedImage(imageDataUrl)
+      setProcessingProgress(50)
 
       // Stop the camera
       stopCapture()
 
       // Apply the nail design
+      setProcessingProgress(70)
       const result = await applyNailDesign(imageDataUrl, designImageUrl)
+      setProcessingProgress(100)
       setResultImage(result)
       setState("result")
     } catch (err) {
@@ -136,6 +154,7 @@ export function useTryOn(designImageUrl: string) {
       try {
         setState("processing")
         setError(null)
+        setProcessingProgress(10)
 
         // Validate file type
         if (!file.type.startsWith("image/")) {
@@ -147,6 +166,7 @@ export function useTryOn(designImageUrl: string) {
         reader.onload = async (e) => {
           const imageDataUrl = e.target?.result as string
           setCapturedImage(imageDataUrl)
+          setProcessingProgress(40)
 
           // Preload the image to get dimensions
           const img = new Image()
@@ -160,7 +180,9 @@ export function useTryOn(designImageUrl: string) {
 
             // Apply the nail design
             try {
+              setProcessingProgress(60)
               const result = await applyNailDesign(imageDataUrl, designImageUrl)
+              setProcessingProgress(100)
               setResultImage(result)
               setState("result")
             } catch (err) {
@@ -199,6 +221,7 @@ export function useTryOn(designImageUrl: string) {
     setCapturedImage(null)
     setResultImage(null)
     setError(null)
+    setProcessingProgress(0)
   }, [stopCapture])
 
   return {
@@ -206,6 +229,7 @@ export function useTryOn(designImageUrl: string) {
     capturedImage,
     resultImage,
     error,
+    processingProgress,
     videoRef,
     canvasRef,
     startCapture,
