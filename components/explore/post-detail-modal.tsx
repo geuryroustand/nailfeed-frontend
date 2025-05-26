@@ -16,6 +16,7 @@ import { TryOnButton } from "@/components/try-on/try-on-button"
 import { usePostOwnership } from "@/hooks/use-post-ownership"
 import { formatDistanceToNow } from "date-fns"
 import { ShareButton } from "@/components/share-button"
+import { extractPostImageUrl } from "@/lib/image-url-extractor"
 
 interface Post {
   id: string
@@ -53,23 +54,12 @@ export function PostDetailModal({ post, isOpen, onClose, onEdit, onDelete }: Pos
 
   // Function to extract valid image URL from various possible sources
   const getValidImageUrl = (): string => {
-    console.log("PostDetailModal - Extracting image URL from post:", {
-      postImageUrl: post.imageUrl,
-      postImage: post.image,
-      postMedia: post.media,
-      postImages: post.images,
-    })
+    console.log("PostDetailModal - Post data:", post)
 
-    // Try different sources in order of preference
-    const possibleUrls = [post.imageUrl, post.image, post.media?.[0]?.url, post.images?.[0]].filter(Boolean) // Remove falsy values
+    const extractedUrl = extractPostImageUrl(post)
+    console.log("PostDetailModal - Extracted URL:", extractedUrl)
 
-    console.log("PostDetailModal - Possible URLs found:", possibleUrls)
-
-    // Return the first valid URL or fallback
-    const validUrl = possibleUrls[0] || "/placeholder.svg?height=400&width=400&text=Nail+Design"
-    console.log("PostDetailModal - Selected image URL:", validUrl)
-
-    return validUrl
+    return extractedUrl
   }
 
   const handleLike = () => {
