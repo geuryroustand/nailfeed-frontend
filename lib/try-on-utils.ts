@@ -6,94 +6,86 @@ interface NailPosition {
   y: number
   width: number
   height: number
-  angle: number // Added angle for better placement
+  angle: number // Rotation angle for proper placement
 }
 
-// Initialize MediaPipe
+// MediaPipe Hands module reference
 let handsModule: any = null
-let isMediaPipeLoaded = false
 
-// Load MediaPipe scripts dynamically
-async function loadMediaPipeScripts() {
-  if (isMediaPipeLoaded) return true
-
-  try {
-    // Import MediaPipe scripts directly as ES modules
-    await import("https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.min.js")
-
-    isMediaPipeLoaded = true
-    console.log("MediaPipe scripts loaded successfully")
-    return true
-  } catch (error) {
-    console.error("Error loading MediaPipe scripts:", error)
-    return false
-  }
-}
-
+// Initialize MediaPipe Hands
 export async function initMediaPipe() {
+  if (typeof window === "undefined") return false
+  if (handsModule) return true
+
   try {
-    if (typeof window === "undefined") return false
+    // Load MediaPipe Hands dynamically
+    if (!(window as any).Hands) {
+      // Create and load script
+      const script = document.createElement("script")
+      script.src = "https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.min.js"
+      script.async = true
+      script.crossOrigin = "anonymous"
 
-    // Check if MediaPipe is already initialized
-    if (handsModule) {
-      console.log("MediaPipe Hands already initialized")
-      return true
+      await new Promise((resolve, reject) => {
+        script.onload = resolve
+        script.onerror = reject
+        document.head.appendChild(script)
+      })
+
+      // Give a moment for the script to initialize
+      await new Promise((resolve) => setTimeout(resolve, 100))
     }
 
-    // Load MediaPipe scripts first
-    const scriptsLoaded = await loadMediaPipeScripts()
-    if (!scriptsLoaded) {
-      console.error("Failed to load MediaPipe scripts")
+    // Check if Hands is available
+    if (!(window as any).Hands) {
+      console.error("MediaPipe Hands not available after loading")
       return false
     }
 
-    // Check if window.Hands is available
-    if ((window as any).Hands) {
-      const Hands = (window as any).Hands
+    // Initialize Hands
+    const Hands = (window as any).Hands
+    handsModule = new Hands({
+      locateFile: (file: string) => {
+        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`
+      },
+    })
 
-      try {
-        handsModule = new Hands({
-          locateFile: (file: string) => {
-            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`
-          },
-        })
+    // Configure Hands
+    await handsModule.setOptions({
+      maxNumHands: 2,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5,
+    })
 
-        // Set options
-        handsModule.setOptions({
-          maxNumHands: 2,
-          modelComplexity: 1,
-          minDetectionConfidence: 0.5,
-          minTrackingConfidence: 0.5,
-        })
-
-        console.log("MediaPipe Hands initialized successfully")
-        return true
-      } catch (initError) {
-        console.error("Error creating MediaPipe Hands instance:", initError)
-        return false
-      }
-    } else {
-      console.error("window.Hands not found after loading scripts")
-      return false
-    }
+    console.log("MediaPipe Hands initialized successfully")
+    return true
   } catch (error) {
     console.error("Error initializing MediaPipe Hands:", error)
     return false
   }
 }
 
+// Process image with MediaPipe Hands
+async function processWithMediaPipe(imageElement: HTMLImageElement | HTMLCanvasElement): Promise<any> {
+  if (!handsModule) {
+    throw new Error("MediaPipe Hands not initialized")
+  }
+
+  return new Promise((resolve) => {
+    // Set up results handler
+    handsModule.onResults((results: any) => {
+      resolve(results)
+    })
+
+    // Process the image
+    handsModule.send({ image: imageElement })
+  })
+}
+
 // Detect hands and nail positions in an image
 export async function detectHands(imageUrl: string): Promise<NailPosition[]> {
   try {
-    // Make sure MediaPipe is initialized
-    if (!handsModule) {
-      const initialized = await initMediaPipe()
-      if (!initialized) {
-        console.log("MediaPipe initialization failed, using fallback detection")
-        return fallbackNailDetection(imageUrl)
-      }
-    }
-
     // Load the image
     const img = new Image()
     img.crossOrigin = "anonymous"
@@ -103,7 +95,7 @@ export async function detectHands(imageUrl: string): Promise<NailPosition[]> {
       img.src = imageUrl
     })
 
-    // Create a temporary canvas to process the image
+    // Create a canvas for processing
     const canvas = document.createElement("canvas")
     canvas.width = img.width
     canvas.height = img.height
@@ -113,99 +105,86 @@ export async function detectHands(imageUrl: string): Promise<NailPosition[]> {
     // Draw the image to the canvas
     ctx.drawImage(img, 0, 0)
 
-    // Process the image with MediaPipe Hands
-    const results = await processWithMediaPipe(canvas)
-
-    if (!results || !results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
-      console.log("No hands detected, using fallback detection")
+    // Check if MediaPipe is available
+    if (!handsModule) {
+      console.log("MediaPipe not initialized, using fallback detection")
       return fallbackNailDetection(imageUrl)
     }
 
-    // Extract nail positions from the MediaPipe results
-    const nailPositions: NailPosition[] = []
+    // Process with MediaPipe
+    try {
+      const results = await processWithMediaPipe(canvas)
 
-    for (const landmarks of results.multiHandLandmarks) {
-      // MediaPipe hand landmarks: https://developers.google.com/mediapipe/solutions/vision/hand_landmarker
-      // Fingertip indices: thumb (4), index (8), middle (12), ring (16), pinky (20)
-      // Middle joints: thumb (3), index (7), middle (11), ring (15), pinky (19)
-      // Base joints: thumb (2), index (6), middle (10), ring (14), pinky (18)
-
-      const fingertips = [4, 8, 12, 16, 20] // Fingertip indices
-      const middleJoints = [3, 7, 11, 15, 19] // Middle joint indices
-      const baseJoints = [2, 6, 10, 14, 18] // Base joint indices
-
-      for (let i = 0; i < fingertips.length; i++) {
-        const tipIndex = fingertips[i]
-        const midIndex = middleJoints[i]
-        const baseIndex = baseJoints[i]
-
-        const tip = landmarks[tipIndex]
-        const mid = landmarks[midIndex]
-        const base = landmarks[baseIndex]
-
-        // Calculate nail width based on the distance between points
-        // Convert normalized coordinates to pixel coordinates
-        const tipX = tip.x * canvas.width
-        const tipY = tip.y * canvas.height
-        const midX = mid.x * canvas.width
-        const midY = mid.y * canvas.height
-        const baseX = base.x * canvas.width
-        const baseY = base.y * canvas.height
-
-        // Calculate width based on the distance between mid and base joints
-        const fingerWidth = Math.sqrt(Math.pow(midX - baseX, 2) + Math.pow(midY - baseY, 2))
-
-        // Calculate nail width (typically about 70-80% of finger width)
-        const nailWidth = fingerWidth * 0.75
-
-        // Calculate angle for better placement
-        const angle = Math.atan2(tipY - midY, tipX - midX) * (180 / Math.PI)
-
-        // Estimate nail position (slightly above fingertip)
-        // The nail should be placed on the top surface of the finger
-        const offsetX = Math.sin(angle * (Math.PI / 180)) * (nailWidth * 0.3)
-        const offsetY = -Math.cos(angle * (Math.PI / 180)) * (nailWidth * 0.3)
-
-        nailPositions.push({
-          x: tipX - nailWidth / 2 + offsetX,
-          y: tipY - nailWidth / 2 + offsetY,
-          width: nailWidth,
-          height: nailWidth * 1.5, // Make nails slightly longer than wide
-          angle: angle,
-        })
+      // Check if hands were detected
+      if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+        console.log("No hands detected, using fallback detection")
+        return fallbackNailDetection(imageUrl)
       }
-    }
 
-    console.log(`Detected ${nailPositions.length} nail positions using MediaPipe`)
-    return nailPositions
+      // Extract nail positions from landmarks
+      const nailPositions: NailPosition[] = []
+
+      for (const landmarks of results.multiHandLandmarks) {
+        // Fingertip indices as specified: thumb (4), index (8), middle (12), ring (16), pinky (20)
+        const fingertips = [4, 8, 12, 16, 20]
+
+        // Middle joints for width calculation
+        const middleJoints = [3, 7, 11, 15, 19]
+
+        // Base joints for angle calculation
+        const baseJoints = [2, 6, 10, 14, 18]
+
+        for (let i = 0; i < fingertips.length; i++) {
+          const tipIndex = fingertips[i]
+          const midIndex = middleJoints[i]
+          const baseIndex = baseJoints[i]
+
+          const tip = landmarks[tipIndex]
+          const mid = landmarks[midIndex]
+          const base = landmarks[baseIndex]
+
+          // Convert normalized coordinates to pixel coordinates
+          const tipX = tip.x * canvas.width
+          const tipY = tip.y * canvas.height
+          const midX = mid.x * canvas.width
+          const midY = mid.y * canvas.height
+          const baseX = base.x * canvas.width
+          const baseY = base.y * canvas.height
+
+          // Calculate finger width based on distance between joints
+          const fingerWidth = Math.sqrt(Math.pow(midX - baseX, 2) + Math.pow(midY - baseY, 2))
+
+          // Calculate nail width (typically about 70-80% of finger width)
+          const nailWidth = fingerWidth * 0.75
+
+          // Calculate angle for proper nail orientation
+          const angle = Math.atan2(tipY - midY, tipX - midX) * (180 / Math.PI)
+
+          // Calculate nail position with offset for realistic placement
+          // The offset places the nail slightly above the fingertip on the nail bed
+          const offsetX = Math.sin(angle * (Math.PI / 180)) * (nailWidth * 0.3)
+          const offsetY = -Math.cos(angle * (Math.PI / 180)) * (nailWidth * 0.3)
+
+          nailPositions.push({
+            x: tipX - nailWidth / 2 + offsetX,
+            y: tipY - nailWidth / 2 + offsetY,
+            width: nailWidth,
+            height: nailWidth * 1.5, // Nails are typically longer than wide
+            angle: angle,
+          })
+        }
+      }
+
+      console.log(`Detected ${nailPositions.length} nail positions using MediaPipe`)
+      return nailPositions
+    } catch (processingError) {
+      console.error("Error processing with MediaPipe:", processingError)
+      return fallbackNailDetection(imageUrl)
+    }
   } catch (error) {
     console.error("Hand detection error:", error)
     return fallbackNailDetection(imageUrl)
   }
-}
-
-// Process image with MediaPipe Hands
-async function processWithMediaPipe(canvas: HTMLCanvasElement) {
-  return new Promise((resolve, reject) => {
-    if (!handsModule) {
-      reject(new Error("MediaPipe Hands not initialized"))
-      return
-    }
-
-    try {
-      // Set up the results callback
-      handsModule.onResults((results: any) => {
-        resolve(results)
-      })
-
-      // Send the canvas element directly to MediaPipe
-      handsModule.send({ image: canvas })
-    } catch (error) {
-      console.error("Error processing with MediaPipe:", error)
-      // Resolve with empty results to allow fallback to work
-      resolve({ multiHandLandmarks: [] })
-    }
-  })
 }
 
 // Extract the design from the original image
@@ -221,10 +200,10 @@ export async function extractNailDesign(designImageUrl: string): Promise<HTMLCan
     })
 
     // Create a canvas for the extracted design
-    const designCanvas = document.createElement("canvas")
     const size = 200 // Default nail size
+    const designCanvas = document.createElement("canvas")
     designCanvas.width = size
-    designCanvas.height = size * 1.5 // Oval shape
+    designCanvas.height = size * 1.5 // Oval shape for nail
     const ctx = designCanvas.getContext("2d")
 
     if (!ctx) {
@@ -309,10 +288,15 @@ async function createFallbackDesign(designImageUrl: string): Promise<HTMLCanvasE
 // Apply nail design to image with detected hands
 export async function applyNailDesign(sourceImageUrl: string, designImageUrl: string): Promise<string> {
   try {
+    console.log("Starting nail design application process")
+
     // First detect hands and nail positions
+    console.log("Detecting nail positions...")
     const nailPositions = await detectHands(sourceImageUrl)
+    console.log(`Detected ${nailPositions.length} nail positions`)
 
     // Extract the nail design
+    console.log("Extracting nail design...")
     const designCanvas = await extractNailDesign(designImageUrl)
 
     // Create a new canvas for the result
@@ -335,6 +319,8 @@ export async function applyNailDesign(sourceImageUrl: string, designImageUrl: st
 
     // Draw the source image
     context.drawImage(sourceImage, 0, 0)
+
+    console.log("Applying nail designs to detected positions...")
 
     // Apply the design to each detected nail
     if (nailPositions && nailPositions.length > 0) {
@@ -370,6 +356,8 @@ export async function applyNailDesign(sourceImageUrl: string, designImageUrl: st
         // Apply shine effect to make it look more realistic
         applyShineEffect(context, nail.x, nail.y, nail.width, nail.height, nail.angle)
       }
+
+      console.log("Nail designs applied successfully")
     } else {
       // If no nails detected, use a fallback method
       console.log("No nail positions detected, using fallback placement")

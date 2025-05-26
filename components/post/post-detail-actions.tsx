@@ -1,156 +1,138 @@
 "use client"
 
 import { useState } from "react"
-import { MessageCircle, Share2, Bookmark, LogIn } from "lucide-react"
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { useToast } from "@/hooks/use-toast"
-import { useAuth } from "@/context/auth-context"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { ReactionDisplay } from "@/components/reaction-display"
-import { ReactionButton } from "@/components/reaction-button"
-import type { Post } from "@/lib/post-data"
-import type { ReactionType } from "@/lib/services/reaction-service"
+import { Heart, MessageCircle, Bookmark, MoreHorizontal, Flag, Trash, Edit, Download } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { usePostOwnership } from "@/hooks/use-post-ownership"
+import { TryOnButton } from "@/components/try-on/try-on-button"
+import { ShareButton } from "@/components/share-button"
+import { useAuth } from "@/hooks/use-auth"
 
 interface PostDetailActionsProps {
-  post: Post
+  postId: string
+  authorId: string
+  imageUrl?: string
+  designTitle?: string
+  onEdit?: () => void
+  onDelete?: () => void
+  onReport?: () => void
 }
 
-export default function PostDetailActions({ post }: PostDetailActionsProps) {
-  const router = useRouter()
-  const { toast } = useToast()
+export function PostDetailActions({
+  postId,
+  authorId,
+  imageUrl,
+  designTitle = "Nail Design",
+  onEdit,
+  onDelete,
+  onReport,
+}: PostDetailActionsProps) {
+  const [liked, setLiked] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const { isOwner } = usePostOwnership(authorId)
   const { isAuthenticated } = useAuth()
-  const [isSaved, setIsSaved] = useState(false)
-  const [currentReaction, setCurrentReaction] = useState<ReactionType | null>(null)
 
-  // Handle save button click
+  const handleLike = () => {
+    setLiked(!liked)
+  }
+
   const handleSave = () => {
-    if (!isAuthenticated) {
-      promptLogin("save posts")
-      return
-    }
-
-    setIsSaved(!isSaved)
-    toast({
-      title: isSaved ? "Post unsaved" : "Post saved",
-      description: isSaved ? "Post removed from your saved items" : "Post added to your saved items",
-    })
+    setSaved(!saved)
   }
 
-  // Handle share button click
-  const handleShare = () => {
-    // Sharing is allowed for all users since it's a basic web functionality
-    if (navigator.share) {
-      navigator
-        .share({
-          title: post.title || `${post.username}'s post`,
-          text: post.description || "Check out this nail art post!",
-          url: window.location.href,
-        })
-        .catch((err) => {
-          console.error("Error sharing:", err)
-        })
-    } else {
-      // Fallback for browsers that don't support the Web Share API
-      navigator.clipboard.writeText(window.location.href)
-      toast({
-        title: "Link copied",
-        description: "Post link copied to clipboard",
-      })
+  const handleDownload = () => {
+    if (imageUrl) {
+      const link = document.createElement("a")
+      link.href = imageUrl
+      link.download = `nail-design-${postId}.jpg`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
     }
-  }
-
-  // Helper function to prompt login
-  const promptLogin = (action: string) => {
-    toast({
-      title: "Authentication required",
-      description: (
-        <div className="flex flex-col gap-2">
-          <p>Please log in or sign up to {action}.</p>
-          <Button
-            size="sm"
-            onClick={() => router.push("/auth")}
-            className="bg-pink-500 hover:bg-pink-600 text-white self-start mt-1"
-          >
-            <LogIn className="h-4 w-4 mr-2" />
-            Log in / Sign up
-          </Button>
-        </div>
-      ),
-      duration: 5000,
-    })
   }
 
   return (
-    <div className="p-4 sm:p-6">
-      {/* Authentication banner for non-logged in users */}
-      {!isAuthenticated && (
-        <div className="bg-pink-50 border border-pink-200 rounded-lg p-4 mb-4 flex items-center justify-between">
-          <div className="flex items-center">
-            <LogIn className="h-5 w-5 text-pink-500 mr-2" />
-            <p className="text-sm text-gray-700">Log in to like, comment, and save posts to your collections.</p>
-          </div>
-          <Button size="sm" onClick={() => router.push("/auth")} className="bg-pink-500 hover:bg-pink-600 text-white">
-            Log in / Sign up
-          </Button>
-        </div>
-      )}
+    <div className="flex items-center justify-between py-2">
+      <div className="flex items-center space-x-2">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleLike}
+          aria-label={liked ? "Unlike" : "Like"}
+          className={liked ? "text-pink-500" : ""}
+        >
+          <Heart className={`h-5 w-5 ${liked ? "fill-current" : ""}`} />
+        </Button>
 
-      {/* Reaction summary */}
-      <div className="mt-3 mb-2">
-        <div className="bg-gray-50 p-2 rounded-lg">
-          <ReactionDisplay postId={post.id} className="px-2 py-1" maxDisplay={5} />
-        </div>
+        <Button variant="ghost" size="icon" aria-label="Comment">
+          <MessageCircle className="h-5 w-5" />
+        </Button>
+
+        <ShareButton url={`/post/${postId}`} title={designTitle} />
       </div>
 
-      {/* Action buttons */}
-      <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-        <div className="flex items-center gap-4">
-          {/* Using the ReactionButton component for consistent behavior with feed page */}
-          <ReactionButton
-            postId={post.id}
-            postDocumentId={post.documentId || post.id.toString()}
-            onReactionChange={(type) => {
-              setCurrentReaction(type)
-            }}
-            className="flex-1"
-          />
+      <div className="flex items-center space-x-2">
+        {imageUrl && <TryOnButton designImageUrl={imageUrl} designTitle={designTitle} variant="outline" size="sm" />}
 
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => document.getElementById("comments-section")?.scrollIntoView({ behavior: "smooth" })}
-          >
-            <MessageCircle className="h-5 w-5 mr-1" />
-            {post.comments?.length || 0}
-          </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleSave}
+          aria-label={saved ? "Unsave" : "Save"}
+          className={saved ? "text-yellow-500" : ""}
+        >
+          <Bookmark className={`h-5 w-5 ${saved ? "fill-current" : ""}`} />
+        </Button>
 
-          <Button variant="ghost" size="sm" onClick={handleShare}>
-            <Share2 className="h-5 w-5 mr-1" />
-            Share
-          </Button>
-        </div>
-
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleSave}
-                className={`${isSaved ? "text-pink-500" : ""} ${!isAuthenticated ? "opacity-70" : ""}`}
-              >
-                <Bookmark className={`h-5 w-5 mr-1 ${isSaved ? "fill-current" : ""}`} />
-                {isSaved ? "Saved" : "Save"}
-              </Button>
-            </TooltipTrigger>
-            {!isAuthenticated && (
-              <TooltipContent>
-                <p>Log in to save this post</p>
-              </TooltipContent>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" aria-label="More options">
+              <MoreHorizontal className="h-5 w-5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {imageUrl && (
+              <DropdownMenuItem onClick={handleDownload}>
+                <Download className="h-4 w-4 mr-2" />
+                Download
+              </DropdownMenuItem>
             )}
-          </Tooltip>
-        </TooltipProvider>
+
+            {isOwner && (
+              <>
+                {onEdit && (
+                  <DropdownMenuItem onClick={onEdit}>
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit
+                  </DropdownMenuItem>
+                )}
+
+                {onDelete && (
+                  <DropdownMenuItem onClick={onDelete} className="text-red-500">
+                    <Trash className="h-4 w-4 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                )}
+
+                <DropdownMenuSeparator />
+              </>
+            )}
+
+            {!isOwner && onReport && (
+              <DropdownMenuItem onClick={onReport}>
+                <Flag className="h-4 w-4 mr-2" />
+                Report
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   )
