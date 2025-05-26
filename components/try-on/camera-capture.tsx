@@ -18,19 +18,26 @@ export function CameraCapture({ videoRef, canvasRef, onCapture, onFileUpload, on
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    // Ensure video plays when loaded
     const videoElement = videoRef.current
     if (videoElement) {
       videoElement.onloadedmetadata = () => {
-        videoElement.play()
+        videoElement.play().catch((error) => {
+          console.error("Error playing video:", error)
+        })
+      }
+
+      videoElement.onerror = (error) => {
+        console.error("Video element error:", error)
       }
     }
 
-    // Clean up on unmount
     return () => {
       const stream = videoElement?.srcObject as MediaStream
       if (stream) {
-        stream.getTracks().forEach((track) => track.stop())
+        stream.getTracks().forEach((track) => {
+          track.stop()
+          console.log("Camera track stopped")
+        })
       }
     }
   }, [videoRef])

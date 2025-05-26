@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { AlertCircle, Camera, Hand, ImageIcon } from "lucide-react"
@@ -90,6 +90,7 @@ export function TryOnModal({ open, onOpenChange, designImageUrl, designTitle = "
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Try On: {designTitle}</DialogTitle>
+          <DialogDescription>Use your camera or upload a photo to virtually try on this nail design</DialogDescription>
         </DialogHeader>
 
         {/* Tabs */}
