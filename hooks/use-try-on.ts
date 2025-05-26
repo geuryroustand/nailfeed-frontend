@@ -1,217 +1,95 @@
 "use client"
 
-import type React from "react"
-import { useState, useRef, useCallback, useEffect } from "react"
-import { applyNailDesign, initMediaPipe } from "@/lib/try-on-utils"
+import { useState } from "react"
 
-type TryOnState = "idle" | "capturing" | "processing" | "result" | "error"
+export function useTryOn() {
+  const [isLoading, setIsLoading] = useState(false)
 
-export function useTryOn(designImageUrl: string) {
-  const [state, setState] = useState<TryOnState>("idle")
-  const [capturedImage, setCapturedImage] = useState<string | null>(null)
-  const [resultImage, setResultImage] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [isMediaPipeInitialized, setIsMediaPipeInitialized] = useState(false)
-
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-
-  // Initialize MediaPipe when the hook is first used
-  useEffect(() => {
-    const initialize = async () => {
-      try {
-        const initialized = await initMediaPipe()
-        setIsMediaPipeInitialized(initialized)
-        if (!initialized) {
-          console.warn("MediaPipe initialization failed, will use fallback detection")
-        }
-      } catch (err) {
-        console.error("Error initializing MediaPipe:", err)
-      }
-    }
-
-    initialize()
-  }, [])
-
-  const startCapture = useCallback(async () => {
-    try {
-      setState("capturing")
-      setError(null)
-
-      // Request camera access with specific constraints for better quality
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          facingMode: "user",
-        },
-      })
-
-      streamRef.current = stream
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-
-        // Wait for video to be ready before playing
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play().catch((err) => {
-            console.error("Error playing video:", err)
-            setError("Failed to start video stream. Please try again.")
-            setState("idle")
-          })
-        }
-      }
-    } catch (err) {
-      console.error("Error accessing camera:", err)
-      let errorMessage = "Failed to access camera. Please ensure you have granted camera permissions."
-
-      if (err instanceof Error) {
-        if (err.name === "NotAllowedError") {
-          errorMessage = "Camera access denied. Please allow camera access in your browser settings."
-        } else if (err.name === "NotFoundError") {
-          errorMessage = "No camera found. Please connect a camera and try again."
-        } else if (err.name === "NotReadableError") {
-          errorMessage = "Camera is in use by another application. Please close other apps using your camera."
-        }
-      }
-
-      setError(errorMessage)
-      setState("idle")
-    }
-  }, [])
-
-  const stopCapture = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop())
-      streamRef.current = null
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null
-    }
-  }, [])
-
-  const capturePhoto = useCallback(async () => {
-    if (!videoRef.current || !canvasRef.current) return
+  /**
+   * Apply a nail design to a hand image
+   * @param handImageSrc Source of the hand image
+   * @param designImageSrc Source of the nail design image
+   * @returns Promise resolving to the processed image data URL
+   */
+  const applyDesign = async (handImageSrc: string, designImageSrc: string): Promise<string> => {
+    setIsLoading(true)
 
     try {
-      setState("processing")
+      // Load the hand image
+      const handImage = await loadImage(handImageSrc)
 
-      const video = videoRef.current
-      const canvas = canvasRef.current
-      const context = canvas.getContext("2d")
+      // Load the design image - handle local paths differently
+      const isLocalDesign = designImageSrc.startsWith("/") && !designImageSrc.startsWith("//")
+      const designImage = await loadImage(designImageSrc, !isLocalDesign)
 
-      if (!context) throw new Error("Could not get canvas context")
+      // Create a canvas to composite the images
+      const canvas = document.createElement("canvas")
+      const ctx = canvas.getContext("2d")
 
-      // Set canvas dimensions to match video
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
-
-      // Draw the current video frame to the canvas
-      context.drawImage(video, 0, 0)
-
-      // Get the captured image as data URL
-      const imageDataUrl = canvas.toDataURL("image/png")
-      setCapturedImage(imageDataUrl)
-
-      // Stop the camera
-      stopCapture()
-
-      // Apply the nail design
-      const result = await applyNailDesign(imageDataUrl, designImageUrl)
-      setResultImage(result)
-      setState("result")
-    } catch (err) {
-      console.error("Error capturing photo:", err)
-      setError("Failed to process the image. Please try again.")
-      setState("error")
-    }
-  }, [designImageUrl, stopCapture])
-
-  const handleFileUpload = useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0]
-      if (!file) return
-
-      try {
-        setState("processing")
-        setError(null)
-
-        // Validate file type
-        if (!file.type.startsWith("image/")) {
-          throw new Error("Please select an image file")
-        }
-
-        // Read the file as data URL
-        const reader = new FileReader()
-        reader.onload = async (e) => {
-          const imageDataUrl = e.target?.result as string
-          setCapturedImage(imageDataUrl)
-
-          // Preload the image to get dimensions
-          const img = new Image()
-          img.onload = async () => {
-            // Check if image is too small
-            if (img.width < 300 || img.height < 300) {
-              setError("Image is too small. Please use a larger image for better results.")
-              setState("error")
-              return
-            }
-
-            // Apply the nail design
-            try {
-              const result = await applyNailDesign(imageDataUrl, designImageUrl)
-              setResultImage(result)
-              setState("result")
-            } catch (err) {
-              console.error("Error processing uploaded image:", err)
-              setError("Failed to process the image. Please try again with a different image.")
-              setState("error")
-            }
-          }
-
-          img.onerror = () => {
-            setError("Failed to load the image. Please try a different image.")
-            setState("error")
-          }
-
-          img.src = imageDataUrl
-        }
-
-        reader.onerror = () => {
-          setError("Failed to read the image file. Please try again.")
-          setState("error")
-        }
-
-        reader.readAsDataURL(file)
-      } catch (err) {
-        console.error("Error reading file:", err)
-        setError(err instanceof Error ? err.message : "Failed to read the image file. Please try again.")
-        setState("error")
+      if (!ctx) {
+        throw new Error("Could not get canvas context")
       }
-    },
-    [designImageUrl],
-  )
 
-  const reset = useCallback(() => {
-    stopCapture()
-    setState("idle")
-    setCapturedImage(null)
-    setResultImage(null)
-    setError(null)
-  }, [stopCapture])
+      // Set canvas dimensions to match the hand image
+      canvas.width = handImage.width
+      canvas.height = handImage.height
+
+      // Draw the hand image as the base
+      ctx.drawImage(handImage, 0, 0, canvas.width, canvas.height)
+
+      // For a real implementation, we would use AI to detect nail positions
+      // and apply the design to each nail
+      // For this demo, we'll simulate by overlaying the design in a fixed position
+
+      // Calculate a position for the design (this is a simplified example)
+      // In a real app, you would use AI to detect nail positions
+      const designWidth = canvas.width * 0.3 // 30% of the hand image width
+      const designHeight = (designWidth / designImage.width) * designImage.height
+      const designX = canvas.width * 0.35 // Position at 35% from the left
+      const designY = canvas.height * 0.4 // Position at 40% from the top
+
+      // Draw the design with some transparency to blend it
+      ctx.globalAlpha = 0.85
+      ctx.drawImage(designImage, designX, designY, designWidth, designHeight)
+      ctx.globalAlpha = 1.0
+
+      // Return the composite image as a data URL
+      return canvas.toDataURL("image/png")
+    } catch (error) {
+      console.error("Error in applyDesign:", error)
+      throw error
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  /**
+   * Load an image from a source URL or data URL
+   * @param src Image source
+   * @param useCrossOrigin Whether to use crossOrigin for the image
+   * @returns Promise resolving to the loaded image
+   */
+  const loadImage = (src: string, useCrossOrigin = true): Promise<HTMLImageElement> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image()
+
+      img.onload = () => resolve(img)
+      img.onerror = (e) => {
+        console.error("Error loading image:", src, e)
+        reject(new Error(`Failed to load image: ${src}`))
+      }
+
+      // Only set crossOrigin for non-local images if specified
+      if (useCrossOrigin) {
+        img.crossOrigin = "anonymous"
+      }
+
+      img.src = src
+    })
+  }
 
   return {
-    state,
-    capturedImage,
-    resultImage,
-    error,
-    videoRef,
-    canvasRef,
-    startCapture,
-    capturePhoto,
-    handleFileUpload,
-    reset,
-    isMediaPipeInitialized,
+    applyDesign,
+    isLoading,
   }
 }

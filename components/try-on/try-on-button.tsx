@@ -52,23 +52,46 @@ export function TryOnButton({
       const fallbackUrl = "/placeholder.svg?height=400&width=400&text=Nail+Design"
       console.log("TryOnButton - Using fallback image URL:", fallbackUrl)
       setValidatedImageUrl(fallbackUrl)
-    } else {
-      // Pre-load the design image to ensure it's ready when needed
+      return
+    }
+
+    // Check if the image is a local path (starts with /)
+    const isLocalPath = cleanImageUrl.startsWith("/") && !cleanImageUrl.startsWith("//")
+
+    // For local images, we can skip preloading or handle it differently
+    if (isLocalPath) {
+      console.log("TryOnButton - Using local image path:", cleanImageUrl)
+      setValidatedImageUrl(cleanImageUrl)
+
+      // Optional: Still verify the image exists but without crossOrigin
       const img = new Image()
       img.onload = () => {
-        console.log("TryOnButton - Design image preloaded successfully:", cleanImageUrl)
-        setValidatedImageUrl(cleanImageUrl)
+        console.log("TryOnButton - Local image verified successfully:", cleanImageUrl)
       }
       img.onerror = (error) => {
-        console.error("TryOnButton - Failed to preload design image:", cleanImageUrl, error)
-        // Use fallback on error
-        setValidatedImageUrl("/placeholder.svg?height=400&width=400&text=Nail+Design")
+        console.warn("TryOnButton - Local image verification failed, but continuing:", cleanImageUrl, error)
+        // We'll still use the local path, but log a warning
       }
-
-      // Set crossOrigin to handle CORS issues
-      img.crossOrigin = "anonymous"
+      // Don't set crossOrigin for local images
       img.src = cleanImageUrl
+      return
     }
+
+    // For external images, preload with crossOrigin
+    const img = new Image()
+    img.onload = () => {
+      console.log("TryOnButton - External image preloaded successfully:", cleanImageUrl)
+      setValidatedImageUrl(cleanImageUrl)
+    }
+    img.onerror = (error) => {
+      console.error("TryOnButton - Failed to preload external image:", cleanImageUrl, error)
+      // Use fallback on error
+      setValidatedImageUrl("/placeholder.svg?height=400&width=400&text=Nail+Design")
+    }
+
+    // Only set crossOrigin for external images
+    img.crossOrigin = "anonymous"
+    img.src = cleanImageUrl
   }, [designImageUrl])
 
   const handleOpenModal = () => {
