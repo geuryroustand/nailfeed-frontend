@@ -1,204 +1,313 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Heart, MessageCircle, Bookmark } from "lucide-react"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { TryOnButton } from "@/components/try-on/try-on-button"
-import { PostDetailModal } from "./post-detail-modal"
-import { LoadMoreIndicator } from "./load-more-indicator"
-import { useInView } from "react-intersection-observer"
+import type React from "react"
+
+import { useState, useEffect, useRef, useCallback } from "react"
+import { motion } from "framer-motion"
+import { Heart, MessageCircle, AlertCircle } from "lucide-react"
+import PostDetailModal from "@/components/explore/post-detail-modal"
 import type { ExplorePostWithLiked } from "@/lib/explore-data"
-import { getMorePosts, likePost, savePost, addComment } from "@/lib/explore-actions"
+import { likePost, unlikePost, savePost, unsavePost, addComment, fetchMorePosts } from "@/lib/explore-actions"
+import { useToast } from "@/hooks/use-toast"
+import LoadMoreIndicator from "./load-more-indicator"
+import Link from "next/link"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface ExploreGridClientProps {
   initialPosts: ExplorePostWithLiked[]
-  hasMore?: boolean
+  initialNextCursor: string | null
+  initialHasMore: boolean
 }
 
-export default function ExploreGridClient({ initialPosts, hasMore = true }: ExploreGridClientProps) {
-  const [posts, setPosts] = useState<ExplorePostWithLiked[]>(initialPosts)
+export default function ExploreGridClient({ initialPosts, initialNextCursor, initialHasMore }: ExploreGridClientProps) {
   const [selectedPost, setSelectedPost] = useState<ExplorePostWithLiked | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [endReached, setEndReached] = useState(!hasMore)
-  const { ref, inView } = useInView()
+  const [posts, setPosts] = useState<ExplorePostWithLiked[]>(initialPosts)
+  const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor)
+  const [hasMore, setHasMore] = useState<boolean>(initialHasMore)
+  const [isLoading, setIsLoading] = useState<boolean>(false)
+  const [error, setError] = useState<string | null>(null)
+  const { toast } = useToast()
 
-  // Load more posts when the indicator comes into view
+  // Reference to the observer target element
+  const observerTarget = useRef<HTMLDivElement>(null)
+
+  // Function to load more posts
+  const loadMorePosts = useCallback(async () => {
+    if (isLoading || !hasMore) return
+
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const result = await fetchMorePosts(nextCursor)
+
+      if (result.success) {
+        setPosts((prevPosts) => [...prevPosts, ...result.posts])
+        setNextCursor(result.nextCursor)
+        setHasMore(result.hasMore)
+      } else {
+        setError("Failed to load more posts. Please try again.")
+        toast({
+          title: "Error",
+          description: result.error || "Failed to load more posts",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      setError("An unexpected error occurred. Please try again.")
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }, [nextCursor, isLoading, hasMore, toast])
+
+  // Set up intersection observer for infinite scroll
   useEffect(() => {
-    const loadMore = async () => {
-      if (inView && !loading && !endReached) {
-        setLoading(true)
-        try {
-          const lastPostId = posts[posts.length - 1]?.id
-          const newPosts = await getMorePosts(lastPostId)
-
-          if (newPosts.length === 0) {
-            setEndReached(true)
-          } else {
-            setPosts((prev) => [...prev, ...newPosts])
-          }
-        } catch (error) {
-          console.error("Error loading more posts:", error)
-        } finally {
-          setLoading(false)
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !isLoading) {
+          loadMorePosts()
         }
+      },
+      { threshold: 0.1 },
+    )
+
+    const currentTarget = observerTarget.current
+
+    if (currentTarget) {
+      observer.observe(currentTarget)
+    }
+
+    return () => {
+      if (currentTarget) {
+        observer.unobserve(currentTarget)
       }
     }
+  }, [loadMorePosts, hasMore, isLoading])
 
-    loadMore()
-  }, [inView, loading, endReached, posts])
+  const handleLike = async (post: ExplorePostWithLiked) => {
+    // Optimistic update
+    setPosts((currentPosts) =>
+      currentPosts.map((p) =>
+        p.id === post.id
+          ? {
+              ...p,
+              isLiked: !p.isLiked,
+              likes: p.isLiked ? p.likes - 1 : p.likes + 1,
+            }
+          : p,
+      ),
+    )
 
-  const handlePostClick = (post: ExplorePostWithLiked) => {
-    setSelectedPost(post)
-  }
+    // If selected post is the one being liked, update it too
+    if (selectedPost?.id === post.id) {
+      setSelectedPost((prev) =>
+        prev
+          ? {
+              ...prev,
+              isLiked: !prev.isLiked,
+              likes: prev.isLiked ? prev.likes - 1 : prev.likes + 1,
+            }
+          : null,
+      )
+    }
 
-  const handleCloseModal = () => {
-    setSelectedPost(null)
-  }
+    // Server action
+    const result = await (post.isLiked ? unlikePost(post.id) : likePost(post.id))
 
-  const handleLike = useCallback(async (postId: number) => {
-    try {
-      await likePost(postId)
-      setPosts((prev) =>
-        prev.map((post) =>
-          post.id === postId
+    if (!result.success) {
+      // Revert optimistic update on failure
+      setPosts((currentPosts) =>
+        currentPosts.map((p) =>
+          p.id === post.id
             ? {
-                ...post,
-                isLiked: !post.isLiked,
-                likes: post.isLiked ? post.likes - 1 : post.likes + 1,
+                ...p,
+                isLiked: post.isLiked,
+                likes: post.isLiked ? post.likes : post.likes - 1,
               }
-            : post,
+            : p,
         ),
       )
-    } catch (error) {
-      console.error("Error liking post:", error)
-    }
-  }, [])
 
-  const handleSave = useCallback(async (postId: number) => {
-    try {
-      await savePost(postId)
-      setPosts((prev) =>
-        prev.map((post) =>
-          post.id === postId
+      if (selectedPost?.id === post.id) {
+        setSelectedPost((prev) =>
+          prev
             ? {
-                ...post,
-                isSaved: !post.isSaved,
+                ...prev,
+                isLiked: post.isLiked,
+                likes: post.isLiked ? post.likes : post.likes - 1,
               }
-            : post,
-        ),
-      )
-    } catch (error) {
-      console.error("Error saving post:", error)
-    }
-  }, [])
-
-  const handleAddComment = useCallback(
-    async (comment: string) => {
-      if (!selectedPost) return
-
-      try {
-        const result = await addComment(selectedPost.id, comment)
-        return result
-      } catch (error) {
-        console.error("Error adding comment:", error)
-        throw error
+            : null,
+        )
       }
-    },
-    [selectedPost],
-  )
+
+      toast({
+        title: "Error",
+        description: result.error || "Failed to update like status",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleSave = async (post: ExplorePostWithLiked) => {
+    // Optimistic update
+    setPosts((currentPosts) => currentPosts.map((p) => (p.id === post.id ? { ...p, isSaved: !p.isSaved } : p)))
+
+    // If selected post is the one being saved, update it too
+    if (selectedPost?.id === post.id) {
+      setSelectedPost((prev) => (prev ? { ...prev, isSaved: !prev.isSaved } : null))
+    }
+
+    // Server action
+    const result = await (post.isSaved ? unsavePost(post.id) : savePost(post.id))
+
+    if (!result.success) {
+      // Revert optimistic update on failure
+      setPosts((currentPosts) => currentPosts.map((p) => (p.id === post.id ? { ...p, isSaved: post.isSaved } : p)))
+
+      if (selectedPost?.id === post.id) {
+        setSelectedPost((prev) => (prev ? { ...prev, isSaved: post.isSaved } : null))
+      }
+
+      toast({
+        title: "Error",
+        description: result.error || "Failed to update save status",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleAddComment = async (postId: number, comment: string) => {
+    const result = await addComment(postId, comment)
+
+    if (result.success) {
+      // Optimistic update for comment count
+      setPosts((currentPosts) => currentPosts.map((p) => (p.id === postId ? { ...p, comments: p.comments + 1 } : p)))
+
+      if (selectedPost?.id === postId) {
+        setSelectedPost((prev) => (prev ? { ...prev, comments: prev.comments + 1 } : null))
+      }
+
+      return result.comment
+    } else {
+      toast({
+        title: "Error",
+        description: result.error || "Failed to add comment",
+        variant: "destructive",
+      })
+      return null
+    }
+  }
+
+  // If there are no posts and no error, show a message
+  if (posts.length === 0 && !error && !isLoading) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-gray-500">No posts found. Check back later for new content.</p>
+      </div>
+    )
+  }
 
   return (
     <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {posts.map((post) => (
-          <Card key={post.id} className="overflow-hidden cursor-pointer hover:shadow-md transition-shadow">
-            <div className="aspect-square relative" onClick={() => handlePostClick(post)}>
-              <img
-                src={post.image || "/placeholder.svg"}
-                alt={`Nail art by ${post.username}`}
-                className="object-cover w-full h-full"
-              />
-              <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/50 opacity-0 hover:opacity-100 transition-opacity flex items-end">
-                <div className="p-4 text-white w-full">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-1">
-                      <Heart className={`h-4 w-4 ${post.isLiked ? "fill-red-500 text-red-500" : ""}`} />
-                      <span className="text-sm">{post.likes}</span>
-                    </div>
-                    <div className="flex items-center space-x-1">
-                      <MessageCircle className="h-4 w-4" />
-                      <span className="text-sm">{post.commentCount || 0}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <CardContent className="p-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <Avatar className="h-6 w-6">
-                    <AvatarImage src={post.userImage || "/placeholder.svg"} alt={post.username} />
-                    <AvatarFallback>{post.username.charAt(0).toUpperCase()}</AvatarFallback>
-                  </Avatar>
-                  <span className="text-sm font-medium">{post.username}</span>
-                </div>
-                <div className="flex items-center space-x-1">
-                  <TryOnButton
-                    designImageUrl={post.image || ""}
-                    designTitle={post.description?.split(" ").slice(0, 3).join(" ") || "Nail Design"}
-                    variant="ghost"
-                    size="sm"
-                    showIcon={false}
-                    className="text-xs px-2 py-1"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-xs px-2 py-1"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleLike(post.id)
-                    }}
-                  >
-                    <Heart className={`h-3 w-3 mr-1 ${post.isLiked ? "fill-red-500 text-red-500" : ""}`} />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-xs px-2 py-1"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleSave(post.id)
-                    }}
-                  >
-                    <Bookmark className={`h-3 w-3 ${post.isSaved ? "fill-black" : ""}`} />
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Load more indicator */}
-      {!endReached && (
-        <div ref={ref} className="mt-8 mb-4">
-          <LoadMoreIndicator loading={loading} />
-        </div>
+      {error && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
-      {/* Post detail modal */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.5, delay: 0.2 }}
+        className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1 md:gap-4"
+      >
+        {posts.map((post, index) => (
+          <ExploreGridItem key={post.id} post={post} index={index} onClick={() => setSelectedPost(post)} />
+        ))}
+      </motion.div>
+
+      {/* Intersection observer target for infinite scroll */}
+      <div ref={observerTarget} className="w-full h-20 mt-4">
+        {hasMore && <LoadMoreIndicator isLoading={isLoading} />}
+      </div>
+
       {selectedPost && (
         <PostDetailModal
           post={selectedPost}
-          onClose={handleCloseModal}
-          onLike={() => handleLike(selectedPost.id)}
-          onSave={() => handleSave(selectedPost.id)}
-          onAddComment={handleAddComment}
+          onClose={() => setSelectedPost(null)}
+          onLike={() => handleLike(selectedPost)}
+          onSave={() => handleSave(selectedPost)}
+          onAddComment={(comment) => handleAddComment(selectedPost.id, comment)}
         />
       )}
     </>
+  )
+}
+
+interface ExploreGridItemProps {
+  post: ExplorePostWithLiked
+  index: number
+  onClick: () => void
+}
+
+function ExploreGridItem({ post, index, onClick }: ExploreGridItemProps) {
+  const [imageError, setImageError] = useState(false)
+
+  const handleClick = (e: React.MouseEvent) => {
+    // If the user clicks with the middle mouse button or Ctrl+click, let the browser handle it
+    // This allows opening in a new tab
+    if (e.ctrlKey || e.metaKey || e.button === 1) {
+      return
+    }
+
+    e.preventDefault()
+    onClick()
+  }
+
+  // Use medium format if available, or small, or the original image
+  const imageUrl = post.image || "/intricate-nail-art.png"
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: Math.min(index * 0.05, 1.5) }} // Cap the delay to avoid too long animations
+      whileHover={{ scale: 0.98 }}
+      className="relative aspect-square cursor-pointer group overflow-hidden"
+    >
+      <Link href={`/post/${post.documentId || post.id}`} onClick={handleClick}>
+        {imageError ? (
+          <div className="w-full h-full flex items-center justify-center bg-gray-100">
+            <p className="text-sm text-gray-500">Image unavailable</p>
+          </div>
+        ) : (
+          <img
+            src={imageUrl || "/placeholder.svg"}
+            alt={post.description || `Nail art by ${post.username}`}
+            className="w-full h-full object-cover"
+            loading="lazy"
+            onError={() => setImageError(true)}
+          />
+        )}
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-200 flex items-center justify-center opacity-0 group-hover:opacity-100">
+          <div className="flex items-center space-x-4 text-white">
+            <div className="flex items-center">
+              <Heart className={`h-5 w-5 mr-1 ${post.isLiked ? "fill-white" : ""}`} />
+              <span className="text-sm font-medium">{post.likes}</span>
+            </div>
+            <div className="flex items-center">
+              <MessageCircle className="h-5 w-5 mr-1" />
+              <span className="text-sm font-medium">{post.comments}</span>
+            </div>
+          </div>
+        </div>
+      </Link>
+    </motion.div>
   )
 }
