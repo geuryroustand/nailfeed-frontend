@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Sparkles } from "lucide-react"
 import { TryOnModal } from "./try-on-modal"
@@ -12,6 +12,7 @@ interface TryOnButtonProps {
   variant?: "default" | "outline" | "secondary" | "ghost" | "link" | "destructive"
   size?: "default" | "sm" | "lg" | "icon"
   showIcon?: boolean
+  onClick?: () => void
 }
 
 export function TryOnButton({
@@ -21,10 +22,15 @@ export function TryOnButton({
   variant = "secondary",
   size = "default",
   showIcon = true,
+  onClick,
 }: TryOnButtonProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [validatedImageUrl, setValidatedImageUrl] = useState<string>(
+    designImageUrl || "/placeholder.svg?height=400&width=400&text=Nail+Design",
+  )
 
-  const handleOpenModal = () => {
+  // Validate the image URL when the component mounts or when designImageUrl changes
+  useEffect(() => {
     // Debug logging
     console.log("TryOnButton - Props received:", {
       designImageUrl,
@@ -42,34 +48,39 @@ export function TryOnButton({
         cleaned: cleanImageUrl,
       })
 
-      // Use a fallback image URL instead of blocking the modal
+      // Use a fallback image URL
       const fallbackUrl = "/placeholder.svg?height=400&width=400&text=Nail+Design"
       console.log("TryOnButton - Using fallback image URL:", fallbackUrl)
+      setValidatedImageUrl(fallbackUrl)
+    } else {
+      // Pre-load the design image to ensure it's ready when needed
+      const img = new Image()
+      img.onload = () => {
+        console.log("TryOnButton - Design image preloaded successfully:", cleanImageUrl)
+        setValidatedImageUrl(cleanImageUrl)
+      }
+      img.onerror = (error) => {
+        console.error("TryOnButton - Failed to preload design image:", cleanImageUrl, error)
+        // Use fallback on error
+        setValidatedImageUrl("/placeholder.svg?height=400&width=400&text=Nail+Design")
+      }
 
-      // Still open the modal with fallback image
-      setIsModalOpen(true)
+      // Set crossOrigin to handle CORS issues
+      img.crossOrigin = "anonymous"
+      img.src = cleanImageUrl
+    }
+  }, [designImageUrl])
+
+  const handleOpenModal = () => {
+    // If there's a custom onClick handler, call it
+    if (onClick) {
+      onClick()
       return
     }
 
-    // Pre-load the design image to ensure it's ready when needed
-    const img = new Image()
-    img.onload = () => {
-      console.log("TryOnButton - Design image preloaded successfully:", cleanImageUrl)
-      setIsModalOpen(true)
-    }
-    img.onerror = (error) => {
-      console.error("TryOnButton - Failed to preload design image:", cleanImageUrl, error)
-      // Still open the modal even if preload fails
-      setIsModalOpen(true)
-    }
-
-    // Set crossOrigin to handle CORS issues
-    img.crossOrigin = "anonymous"
-    img.src = cleanImageUrl
+    // Otherwise, open the modal
+    setIsModalOpen(true)
   }
-
-  // Ensure we always have a valid image URL to pass to the modal
-  const validImageUrl = designImageUrl?.trim() || "/placeholder.svg?height=400&width=400&text=Nail+Design"
 
   return (
     <>
@@ -87,7 +98,7 @@ export function TryOnButton({
       <TryOnModal
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
-        designImageUrl={validImageUrl}
+        designImageUrl={validatedImageUrl}
         designTitle={designTitle}
       />
     </>

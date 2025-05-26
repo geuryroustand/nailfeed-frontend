@@ -14,7 +14,6 @@ import { usePostOwnership } from "@/hooks/use-post-ownership"
 import { TryOnButton } from "@/components/try-on/try-on-button"
 import { ShareButton } from "@/components/share-button"
 import { useAuth } from "@/hooks/use-auth"
-import { extractPostImageUrl } from "@/lib/image-url-extractor"
 
 interface PostDetailActionsProps {
   postId: string
@@ -70,29 +69,28 @@ export function PostDetailActions({
 
   // Function to extract valid image URL from various possible sources
   const getValidImageUrl = (): string => {
-    console.log("PostDetailActions - Input props:", {
+    // Debug logging
+    console.log("PostDetailActions - Extracting image URL from:", {
       imageUrl,
       post,
-      postId,
-      authorId,
+      postImageUrl: post?.imageUrl,
+      postMedia: post?.media,
+      postImage: post?.image,
+      postImages: post?.images,
     })
 
-    // First try the direct imageUrl prop
-    if (imageUrl && imageUrl.trim() && !imageUrl.includes("undefined") && !imageUrl.includes("null")) {
-      console.log("PostDetailActions - Using direct imageUrl prop:", imageUrl)
-      return imageUrl
-    }
+    // Try different sources in order of preference
+    const possibleUrls = [imageUrl, post?.imageUrl, post?.media?.[0]?.url, post?.image, post?.images?.[0]].filter(
+      Boolean,
+    ) // Remove falsy values
 
-    // Then try extracting from post object
-    if (post) {
-      const extractedUrl = extractPostImageUrl(post)
-      console.log("PostDetailActions - Extracted URL from post:", extractedUrl)
-      return extractedUrl
-    }
+    console.log("PostDetailActions - Possible URLs found:", possibleUrls)
 
-    // Fallback
-    console.warn("PostDetailActions - No valid image source found, using fallback")
-    return "/placeholder.svg?height=400&width=400&text=No+Image+Available"
+    // Return the first valid URL or fallback
+    const validUrl = possibleUrls[0] || "/placeholder.svg?height=400&width=400&text=Nail+Design"
+    console.log("PostDetailActions - Selected image URL:", validUrl)
+
+    return validUrl
   }
 
   const finalImageUrl = getValidImageUrl()
