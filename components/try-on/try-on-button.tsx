@@ -25,12 +25,26 @@ export function TryOnButton({
   const [isModalOpen, setIsModalOpen] = useState(false)
 
   const handleOpenModal = () => {
+    console.log("TryOnButton - Opening modal with image:", designImageUrl)
+
+    // Validate the image URL
+    if (!designImageUrl) {
+      console.error("No design image URL provided to TryOnButton")
+      return
+    }
+
     // Pre-load the design image to ensure it's ready when needed
     const img = new Image()
+    img.onload = () => {
+      console.log("Design image preloaded successfully")
+      setIsModalOpen(true)
+    }
+    img.onerror = () => {
+      console.error("Failed to preload design image:", designImageUrl)
+      // Still open the modal even if preload fails
+      setIsModalOpen(true)
+    }
     img.src = designImageUrl
-
-    // Open the modal
-    setIsModalOpen(true)
   }
 
   return (

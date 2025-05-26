@@ -17,6 +17,11 @@ interface TryOnModalProps {
 }
 
 export function TryOnModal({ open, onOpenChange, designImageUrl, designTitle = "Nail Design" }: TryOnModalProps) {
+  // Add this right after the function declaration
+  useEffect(() => {
+    console.log("TryOnModal props:", { designImageUrl, designTitle, open })
+  }, [designImageUrl, designTitle, open])
+
   const {
     state,
     capturedImage,
@@ -135,11 +140,18 @@ export function TryOnModal({ open, onOpenChange, designImageUrl, designTitle = "
         <div className="py-2">
           {selectedTab === "info" && (
             <div className="space-y-4">
-              <div className="aspect-video relative rounded-lg overflow-hidden">
+              <div className="aspect-video relative rounded-lg overflow-hidden bg-gray-100">
                 <img
                   src={designImageUrl || "/placeholder.svg"}
                   alt={designTitle}
-                  className="w-full h-full object-contain"
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    console.error("Failed to load design image:", designImageUrl)
+                    e.currentTarget.src = "/placeholder.svg?height=300&width=400&text=Design+Image"
+                  }}
+                  onLoad={() => {
+                    console.log("Design image loaded successfully:", designImageUrl)
+                  }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent flex items-end">
                   <div className="p-4 text-white">
