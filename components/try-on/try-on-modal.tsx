@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Download, Share2 } from "lucide-react"
+import { AlertCircle, Camera, Hand, ImageIcon } from "lucide-react"
 import { CameraCapture } from "./camera-capture"
 import { ComparisonView } from "./comparison-view"
 import { useTryOn } from "@/hooks/use-try-on"
@@ -17,18 +17,25 @@ interface TryOnModalProps {
 }
 
 export function TryOnModal({ open, onOpenChange, designImageUrl, designTitle = "Nail Design" }: TryOnModalProps) {
-  const [activeTab, setActiveTab] = useState("camera")
+  // Add this right after the function declaration
+  useEffect(() => {
+    console.log("TryOnModal props:", { designImageUrl, designTitle, open })
+  }, [designImageUrl, designTitle, open])
+
+  const [selectedTab, setSelectedTab] = useState<"info" | "camera" | "result">("info")
   const [capturedImage, setCapturedImage] = useState<string | null>(null)
+  const [resultImage, setResultImage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
-  const [processedImage, setProcessedImage] = useState<string | null>(null)
   const { applyDesign, isLoading } = useTryOn()
 
-  // Reset state when modal is closed
+  // Reset when modal closes
   useEffect(() => {
     if (!open) {
+      setSelectedTab("info")
       setCapturedImage(null)
-      setProcessedImage(null)
-      setActiveTab("camera")
+      setResultImage(null)
+      setError(null)
     }
   }, [open])
 
@@ -59,127 +66,151 @@ export function TryOnModal({ open, onOpenChange, designImageUrl, designTitle = "
 
   const handleCapture = (imageSrc: string) => {
     setCapturedImage(imageSrc)
-    setActiveTab("preview")
+    setSelectedTab("result")
+    processImage(imageSrc)
   }
 
-  const handleApplyDesign = async () => {
-    if (!capturedImage) return
+  const processImage = async (imageSrc: string) => {
+    if (!imageSrc) return
 
     setIsProcessing(true)
+    setError(null)
+
     try {
       // Apply the design to the captured image
-      const result = await applyDesign(capturedImage, designImageUrl)
-      setProcessedImage(result)
-      setActiveTab("result")
-    } catch (error) {
-      console.error("Error applying design:", error)
-      // Handle error
+      const result = await applyDesign(imageSrc, designImageUrl)
+      setResultImage(result)
+    } catch (err) {
+      console.error("Error applying design:", err)
+      setError("Failed to process the image. Please try again.")
     } finally {
       setIsProcessing(false)
     }
   }
 
-  const handleDownload = () => {
-    if (!processedImage) return
-
-    const link = document.createElement("a")
-    link.href = processedImage
-    link.download = `nail-design-${new Date().getTime()}.png`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
-
-  const handleShare = async () => {
-    if (!processedImage) return
-
-    try {
-      // Convert the data URL to a blob
-      const response = await fetch(processedImage)
-      const blob = await response.blob()
-
-      // Check if Web Share API is available
-      if (navigator.share) {
-        await navigator.share({
-          title: designTitle,
-          text: "Check out my nail design!",
-          files: [new File([blob], "nail-design.png", { type: "image/png" })],
-        })
-      } else {
-        // Fallback if Web Share API is not available
-        const url = URL.createObjectURL(blob)
-        const link = document.createElement("a")
-        link.href = url
-        link.download = "nail-design.png"
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        URL.revokeObjectURL(url)
-      }
-    } catch (error) {
-      console.error("Error sharing image:", error)
-    }
+  const handleReset = () => {
+    setCapturedImage(null)
+    setResultImage(null)
+    setSelectedTab("info")
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Try On Nail Design</DialogTitle>
-          <DialogDescription>
-            Take a photo of your hand to see how this nail design would look on you.
-          </DialogDescription>
+          <DialogTitle>Try On: {designTitle}</DialogTitle>
+          <DialogDescription>Use your camera or upload a photo to virtually try on this nail design</DialogDescription>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="camera">Capture</TabsTrigger>
-            <TabsTrigger value="preview" disabled={!capturedImage}>
-              Preview
-            </TabsTrigger>
-            <TabsTrigger value="result" disabled={!processedImage}>
-              Result
-            </TabsTrigger>
-          </TabsList>
+        {/* Tabs */}
+        <div className="flex border-b">
+          <Button
+            variant={selectedTab === "info" ? "default" : "ghost"}
+            className="flex-1 rounded-none rounded-t-lg"
+            onClick={() => setSelectedTab("info")}
+          >
+            <Hand className="h-4 w-4 mr-2" />
+            Info
+          </Button>
+          <Button
+            variant={selectedTab === "camera" ? "default" : "ghost"}
+            className="flex-1 rounded-none rounded-t-lg"
+            onClick={() => setSelectedTab("camera")}
+            disabled={isProcessing}
+          >
+            <Camera className="h-4 w-4 mr-2" />
+            Camera
+          </Button>
+          <Button
+            variant={selectedTab === "result" ? "default" : "ghost"}
+            className="flex-1 rounded-none rounded-t-lg"
+            onClick={() => setSelectedTab("result")}
+            disabled={!resultImage}
+          >
+            <ImageIcon className="h-4 w-4 mr-2" />
+            Result
+          </Button>
+        </div>
 
-          <TabsContent value="camera" className="mt-4">
-            <CameraCapture onCapture={handleCapture} />
-          </TabsContent>
+        {/* Error alerts */}
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-          <TabsContent value="preview" className="mt-4">
-            {capturedImage && (
-              <div className="flex flex-col items-center">
+        {/* Tab content */}
+        <div className="py-2">
+          {selectedTab === "info" && (
+            <div className="space-y-4">
+              <div className="aspect-video relative rounded-lg overflow-hidden bg-gray-100">
                 <img
-                  src={capturedImage || "/placeholder.svg"}
-                  alt="Captured hand"
-                  className="max-w-full h-auto rounded-md mb-4"
+                  src={designImageUrl || "/placeholder.svg?height=300&width=400&text=Design+Image"}
+                  alt={designTitle}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    console.error("Failed to load design image:", designImageUrl)
+                    e.currentTarget.src = "/placeholder.svg?height=300&width=400&text=Design+Image"
+                  }}
+                  onLoad={() => {
+                    console.log("Design image loaded successfully:", designImageUrl)
+                  }}
                 />
-                <Button onClick={handleApplyDesign} disabled={isProcessing || isLoading} className="w-full">
-                  {isProcessing ? "Processing..." : "Apply Design"}
-                </Button>
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="result" className="mt-4">
-            {processedImage && (
-              <div className="flex flex-col items-center">
-                <ComparisonView beforeImage={capturedImage!} afterImage={processedImage} />
-
-                <div className="flex gap-2 mt-4 w-full">
-                  <Button onClick={handleDownload} className="flex-1" variant="outline">
-                    <Download className="h-4 w-4 mr-2" />
-                    Download
-                  </Button>
-                  <Button onClick={handleShare} className="flex-1">
-                    <Share2 className="h-4 w-4 mr-2" />
-                    Share
-                  </Button>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent flex items-end">
+                  <div className="p-4 text-white">
+                    <h3 className="font-bold">{designTitle}</h3>
+                    <p className="text-sm opacity-90">Try this design on your nails!</p>
+                  </div>
                 </div>
               </div>
-            )}
-          </TabsContent>
-        </Tabs>
+
+              <div className="space-y-2">
+                <h3 className="font-semibold">How to use:</h3>
+                <ol className="list-decimal list-inside space-y-1 text-sm pl-2">
+                  <li>Click "Start Try-On" to begin</li>
+                  <li>Allow camera access when prompted</li>
+                  <li>Point your camera at your hand, palm facing down</li>
+                  <li>Make sure your fingernails are clearly visible</li>
+                  <li>Take the photo when ready</li>
+                  <li>The design will be applied to your nails</li>
+                </ol>
+                <p className="text-xs text-gray-500 mt-2">
+                  You can also upload a photo of your hand if you prefer not to use the camera.
+                </p>
+              </div>
+
+              <Button className="w-full" onClick={() => setSelectedTab("camera")}>
+                Start Try-On
+              </Button>
+            </div>
+          )}
+
+          {selectedTab === "camera" && (
+            <CameraCapture onCapture={handleCapture} onCancel={() => setSelectedTab("info")} />
+          )}
+
+          {selectedTab === "result" && (
+            <div className="space-y-4">
+              {isProcessing ? (
+                <div className="flex flex-col items-center py-8">
+                  <div className="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                  <p className="text-sm text-gray-500">Processing your image...</p>
+                  <p className="text-xs text-gray-400 mt-2">Detecting hands and applying nail design</p>
+                </div>
+              ) : resultImage ? (
+                <ComparisonView originalImage={capturedImage!} resultImage={resultImage} onReset={handleReset} />
+              ) : (
+                <div className="flex flex-col items-center py-8">
+                  <p className="text-sm text-gray-500">No result available yet.</p>
+                  <Button onClick={() => setSelectedTab("camera")} className="mt-4">
+                    Take a Photo
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   )

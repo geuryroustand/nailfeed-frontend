@@ -3,8 +3,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
-import { saveImage, shareImage } from "@/lib/try-on-utils"
-import { Download, Share2, RotateCcw } from "lucide-react"
+import { Download, RotateCcw, Share2 } from "lucide-react"
 
 interface ComparisonViewProps {
   originalImage: string
@@ -15,62 +14,87 @@ interface ComparisonViewProps {
 export function ComparisonView({ originalImage, resultImage, onReset }: ComparisonViewProps) {
   const [sliderValue, setSliderValue] = useState(50)
 
-  const handleSliderChange = (value: number[]) => {
-    setSliderValue(value[0])
-  }
-
-  const handleSave = () => {
-    saveImage(resultImage)
+  const handleDownload = () => {
+    const link = document.createElement("a")
+    link.href = resultImage
+    link.download = `nail-design-${new Date().getTime()}.png`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
   const handleShare = async () => {
-    const shared = await shareImage(resultImage)
-    if (!shared) {
-      // If sharing failed, fall back to download
-      handleSave()
+    try {
+      // Convert the data URL to a blob
+      const response = await fetch(resultImage)
+      const blob = await response.blob()
+
+      // Check if Web Share API is available
+      if (navigator.share) {
+        await navigator.share({
+          title: "My Nail Design",
+          text: "Check out my nail design!",
+          files: [new File([blob], "nail-design.png", { type: "image/png" })],
+        })
+      } else {
+        // Fallback if Web Share API is not available
+        handleDownload()
+      }
+    } catch (error) {
+      console.error("Error sharing image:", error)
     }
   }
 
   return (
-    <div className="flex flex-col items-center w-full">
-      <div className="relative w-full max-w-md aspect-[3/4] bg-black rounded-lg overflow-hidden mb-4">
-        <div className="absolute inset-0 w-full h-full">
-          <img
-            src={originalImage || "/placeholder.svg"}
-            alt="Original"
-            className="absolute inset-0 w-full h-full object-cover"
-          />
+    <div className="flex flex-col items-center">
+      <div className="relative w-full aspect-[3/4] rounded-lg overflow-hidden mb-4">
+        {/* Original image as background */}
+        <div className="absolute inset-0">
+          <img src={originalImage || "/placeholder.svg"} alt="Original" className="w-full h-full object-cover" />
         </div>
-        <div className="absolute inset-0 h-full overflow-hidden" style={{ width: `${sliderValue}%` }}>
-          <img
-            src={resultImage || "/placeholder.svg"}
-            alt="Result"
-            className="absolute inset-0 w-full h-full object-cover"
-            style={{ width: `${100 / (sliderValue / 100)}%` }}
-          />
+
+        {/* Result image with clip-path based on slider */}
+        <div
+          className="absolute inset-0"
+          style={{
+            clipPath: `inset(0 ${100 - sliderValue}% 0 0)`,
+          }}
+        >
+          <img src={resultImage || "/placeholder.svg"} alt="Result" className="w-full h-full object-cover" />
         </div>
-        <div className="absolute inset-y-0 w-1 bg-white" style={{ left: `${sliderValue}%` }} />
+
+        {/* Slider indicator line */}
+        <div
+          className="absolute top-0 bottom-0 w-0.5 bg-white shadow-md pointer-events-none"
+          style={{ left: `${sliderValue}%` }}
+        ></div>
+
+        {/* Labels */}
+        <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded">Original</div>
+        <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded">With Design</div>
       </div>
 
-      <div className="w-full max-w-md mb-6">
-        <Slider value={[sliderValue]} min={0} max={100} step={1} onValueChange={handleSliderChange} className="my-4" />
-        <div className="flex justify-between text-sm text-gray-500">
-          <span>Original</span>
-          <span>Result</span>
-        </div>
-      </div>
+      <Slider
+        value={[sliderValue]}
+        onValueChange={(values) => setSliderValue(values[0])}
+        min={0}
+        max={100}
+        step={1}
+        className="w-full mb-4"
+      />
 
-      <div className="flex gap-3 w-full justify-center">
-        <Button variant="outline" size="icon" onClick={onReset} className="rounded-full h-12 w-12">
-          <RotateCcw className="h-5 w-5" />
+      <div className="flex gap-2 w-full">
+        <Button variant="outline" onClick={onReset} className="flex-1">
+          <RotateCcw className="h-4 w-4 mr-2" />
+          Try Again
         </Button>
-
-        <Button onClick={handleSave} className="rounded-full h-12 w-12" size="icon">
-          <Download className="h-5 w-5" />
+        <Button onClick={handleShare} className="flex-1">
+          <Share2 className="h-4 w-4 mr-2" />
+          Share
         </Button>
-
-        <Button variant="outline" size="icon" onClick={handleShare} className="rounded-full h-12 w-12">
-          <Share2 className="h-5 w-5" />
+        <Button variant="outline" onClick={handleDownload} className="flex-1">
+          <Download className="h-4 w-4 mr-2" />
+          Save
         </Button>
       </div>
     </div>
