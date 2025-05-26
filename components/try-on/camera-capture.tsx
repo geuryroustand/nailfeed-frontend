@@ -18,6 +18,7 @@ export function CameraCapture({ videoRef, canvasRef, onCapture, onFileUpload, on
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
+    // Ensure video plays when loaded
     const videoElement = videoRef.current
     if (videoElement) {
       videoElement.onloadedmetadata = () => {
@@ -25,19 +26,13 @@ export function CameraCapture({ videoRef, canvasRef, onCapture, onFileUpload, on
           console.error("Error playing video:", error)
         })
       }
-
-      videoElement.onerror = (error) => {
-        console.error("Video element error:", error)
-      }
     }
 
+    // Clean up on unmount
     return () => {
       const stream = videoElement?.srcObject as MediaStream
       if (stream) {
-        stream.getTracks().forEach((track) => {
-          track.stop()
-          console.log("Camera track stopped")
-        })
+        stream.getTracks().forEach((track) => track.stop())
       }
     }
   }, [videoRef])
@@ -49,7 +44,7 @@ export function CameraCapture({ videoRef, canvasRef, onCapture, onFileUpload, on
   return (
     <div className="flex flex-col items-center w-full">
       <div className="relative w-full max-w-md aspect-[3/4] bg-black rounded-lg overflow-hidden mb-4">
-        <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline />
+        <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline muted />
         <canvas ref={canvasRef} className="hidden" />
       </div>
 
