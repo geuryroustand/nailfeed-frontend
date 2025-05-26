@@ -38,7 +38,7 @@ export function TryOnButton({
       <Button
         variant={variant}
         size={size}
-        className={`bg-pink-500 hover:bg-pink-600 text-white ${className}`}
+        className={className}
         onClick={handleOpenModal}
         aria-label="Try this design on your nails"
       >
