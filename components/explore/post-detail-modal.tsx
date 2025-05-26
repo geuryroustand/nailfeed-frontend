@@ -21,7 +21,10 @@ interface Post {
   id: string
   title: string
   description?: string
-  imageUrl: string
+  imageUrl?: string
+  image?: string
+  media?: Array<{ url: string }>
+  images?: string[]
   author: {
     id: string
     name: string
@@ -48,6 +51,27 @@ export function PostDetailModal({ post, isOpen, onClose, onEdit, onDelete }: Pos
 
   if (!post) return null
 
+  // Function to extract valid image URL from various possible sources
+  const getValidImageUrl = (): string => {
+    console.log("PostDetailModal - Extracting image URL from post:", {
+      postImageUrl: post.imageUrl,
+      postImage: post.image,
+      postMedia: post.media,
+      postImages: post.images,
+    })
+
+    // Try different sources in order of preference
+    const possibleUrls = [post.imageUrl, post.image, post.media?.[0]?.url, post.images?.[0]].filter(Boolean) // Remove falsy values
+
+    console.log("PostDetailModal - Possible URLs found:", possibleUrls)
+
+    // Return the first valid URL or fallback
+    const validUrl = possibleUrls[0] || "/placeholder.svg?height=400&width=400&text=Nail+Design"
+    console.log("PostDetailModal - Selected image URL:", validUrl)
+
+    return validUrl
+  }
+
   const handleLike = () => {
     setLiked(!liked)
   }
@@ -67,18 +91,19 @@ export function PostDetailModal({ post, isOpen, onClose, onEdit, onDelete }: Pos
   }
 
   const handleDownload = () => {
-    const link = document.createElement("a")
-    link.href = post.imageUrl
-    link.download = `nail-design-${post.id}.jpg`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    const imageUrl = getValidImageUrl()
+    if (imageUrl && !imageUrl.includes("placeholder.svg")) {
+      const link = document.createElement("a")
+      link.href = imageUrl
+      link.download = `nail-design-${post.id}.jpg`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    }
   }
 
   const timeAgo = formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })
-
-  // Ensure we have a valid image URL for the Try On button
-  const validImageUrl = post.imageUrl || "/placeholder.svg?height=400&width=400&text=Nail+Design"
+  const validImageUrl = getValidImageUrl()
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -90,6 +115,10 @@ export function PostDetailModal({ post, isOpen, onClose, onEdit, onDelete }: Pos
               src={validImageUrl || "/placeholder.svg"}
               alt={post.title}
               className="w-full h-full object-contain max-h-[80vh]"
+              onError={(e) => {
+                console.error("PostDetailModal - Image failed to load:", validImageUrl)
+                e.currentTarget.src = "/placeholder.svg?height=400&width=400&text=Image+Not+Found"
+              }}
             />
           </div>
 
@@ -165,10 +194,12 @@ export function PostDetailModal({ post, isOpen, onClose, onEdit, onDelete }: Pos
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={handleDownload}>
-                        <Download className="h-4 w-4 mr-2" />
-                        Download
-                      </DropdownMenuItem>
+                      {validImageUrl && !validImageUrl.includes("placeholder.svg") && (
+                        <DropdownMenuItem onClick={handleDownload}>
+                          <Download className="h-4 w-4 mr-2" />
+                          Download
+                        </DropdownMenuItem>
+                      )}
 
                       {isOwner && (
                         <>
