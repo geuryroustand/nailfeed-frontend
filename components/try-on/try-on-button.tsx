@@ -36,9 +36,9 @@ export function TryOnButton({
   return (
     <>
       <Button
-        variant={variant}
+        variant="secondary"
         size={size}
-        className={`bg-transparent hover:bg-transparent ${className}`}
+        className={className}
         onClick={handleOpenModal}
         aria-label="Try this design on your nails"
       >
