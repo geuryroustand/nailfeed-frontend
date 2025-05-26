@@ -38,7 +38,7 @@ export function TryOnButton({
       <Button
         variant="secondary"
         size={size}
-        className={className}
+        className={`hover:bg-gray-100 hover:text-gray-700 transition-colors duration-200 ${className}`}
         onClick={handleOpenModal}
         aria-label="Try this design on your nails"
       >
