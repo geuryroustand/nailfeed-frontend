@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/enhanced-avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { TryOnButton } from "@/components/try-on/try-on-button"
 import { usePostOwnership } from "@/hooks/use-post-ownership"
 import { formatDistanceToNow } from "date-fns"
@@ -200,3 +200,6 @@ export function PostDetailModal({ post, isOpen, onClose, onEdit, onDelete }: Pos
     </Dialog>
   )
 }
+
+// Add default export
+export default PostDetailModal

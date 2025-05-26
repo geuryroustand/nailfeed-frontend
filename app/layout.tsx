@@ -12,6 +12,8 @@ import ApiStatusIndicator from "@/components/api-status-indicator"
 import { ReactionProvider } from "@/context/reaction-context"
 import AuthDebug from "@/components/auth-debug"
 import config from "@/lib/config"
+// Import our polyfill
+import "@/lib/polyfills"
 
 // Initialize configuration
 config.initialize()

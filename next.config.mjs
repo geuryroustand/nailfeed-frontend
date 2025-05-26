@@ -18,6 +18,12 @@ const nextConfig = {
       },
     ],
   },
+  // Add transpilePackages if needed for any packages that use require
+  transpilePackages: [],
+  // Ensure we're using the correct module system
+  experimental: {
+    esmExternals: 'loose',
+  },
 };
 
 export default nextConfig;

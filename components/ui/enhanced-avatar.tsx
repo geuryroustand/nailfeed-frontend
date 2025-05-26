@@ -1,8 +1,13 @@
 "use client"
 
 import { useState } from "react"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar as BaseAvatar, AvatarFallback as BaseFallback, AvatarImage as BaseImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
+
+// Re-export the components from @/components/ui/avatar
+export const Avatar = BaseAvatar
+export const AvatarFallback = BaseFallback
+export const AvatarImage = BaseImage
 
 interface EnhancedAvatarProps {
   src?: string

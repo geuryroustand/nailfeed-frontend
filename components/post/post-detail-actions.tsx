@@ -137,3 +137,6 @@ export function PostDetailActions({
     </div>
   )
 }
+
+// Add default export
+export default PostDetailActions
