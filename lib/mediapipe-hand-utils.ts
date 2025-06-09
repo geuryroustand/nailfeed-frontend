@@ -15,7 +15,7 @@ interface PixelCoordinate {
 }
 
 // Fingertip landmark indices in MediaPipe Hands
-const FINGERTIP_LANDMARK_INDICES = [4, 8, 12, 16, 20] // THUMB_TIP, INDEX_FINGER_TIP, MIDDLE_FINGER_TIP, RING_FINGER_TIP, PINKY_TIP
+// const FINGERTIP_LANDMARK_INDICES = [4, 8, 12, 16, 20] // THUMB_TIP, INDEX_FINGER_TIP, MIDDLE_FINGER_TIP, RING_FINGER_TIP, PINKY_TIP
 
 let handsInstance: any = null
 
@@ -93,21 +93,24 @@ export async function processImageWithMediaPipe(
   })
 }
 
-export function extractFingertipPixelCoords(results: any, imageWidth: number, imageHeight: number): PixelCoordinate[] {
-  const landmarks: PixelCoordinate[] = []
+export function extractAllHandLandmarksPixelCoords(
+  results: any,
+  imageWidth: number,
+  imageHeight: number,
+): PixelCoordinate[][] {
+  const allHandsPixelLandmarks: PixelCoordinate[][] = []
   if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-    // Assuming one hand as per maxNumHands: 1
-    const handLandmarks = results.multiHandLandmarks[0] as Landmark[]
-    FINGERTIP_LANDMARK_INDICES.forEach((index) => {
-      if (handLandmarks[index]) {
-        const landmark = handLandmarks[index]
-        landmarks.push({
+    for (const handLandmarks of results.multiHandLandmarks) {
+      const singleHandPixelLandmarks: PixelCoordinate[] = []
+      handLandmarks.forEach((landmark: Landmark, index: number) => {
+        singleHandPixelLandmarks.push({
           id: index,
           x: landmark.x * imageWidth,
           y: landmark.y * imageHeight,
         })
-      }
-    })
+      })
+      allHandsPixelLandmarks.push(singleHandPixelLandmarks)
+    }
   }
-  return landmarks
+  return allHandsPixelLandmarks
 }
