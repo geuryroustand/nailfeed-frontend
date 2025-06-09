@@ -15,7 +15,7 @@
     "@emotion/is-prop-valid": "latest",
     "@hookform/resolvers": "latest",
     "@imgly/background-removal": "latest",
-    "@mediapipe/hands": "^0.4.1646424915",
+    "@mediapipe/tasks-vision": "^0.10.9",
     "@radix-ui/react-accordion": "latest",
     "@radix-ui/react-alert-dialog": "latest",
     "@radix-ui/react-aspect-ratio": "latest",
@@ -51,6 +51,7 @@
     "date-fns": "latest",
     "embla-carousel-react": "latest",
     "emoji-picker-react": "latest",
+    "fabric": "latest",
     "framer-motion": "latest",
     "input-otp": "latest",
     "leo-profanity": "latest",
@@ -59,7 +60,6 @@
     "next-themes": "latest",
     "onnxruntime-web": "latest",
     "qrcode": "latest",
-    "qrcode.react": "^3.1.0",
     "qs": "latest",
     "react": "^18",
     "react-day-picker": "latest",
@@ -77,14 +77,15 @@
     "use-debounce": "latest",
     "vaul": "latest",
     "zod": "latest",
-    "zustand": "^4.5.2"
+    "zustand": "latest"
   },
   "devDependencies": {
+    "@types/fabric": "^5.3.7",
     "@types/node": "^22",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "eslint": "^8",
-    "eslint-config-next": "14.2.1",
+    "eslint-config-next": "14.2.3",
     "postcss": "^8.5",
     "tailwindcss": "^3.4.1",
     "typescript": "^5"
