@@ -8,40 +8,22 @@ const nextConfig = {
   },
   images: {
     unoptimized: true,
-  },
-  reactStrictMode: true, // Or your existing config
-  // Your existing headers function if you have one, for example:
-  async headers() {
-    return [
+    domains: ['nailfeed-backend-production.up.railway.app'],
+    remotePatterns: [
       {
-        source: '/:path*',
-        headers: [
-          {
-            key: 'Cross-Origin-Opener-Policy',
-            value: 'same-origin',
-          },
-          {
-            key: 'Cross-Origin-Embedder-Policy',
-            value: 'require-corp', // Required for SharedArrayBuffer, e.g. for @imgly/background-removal
-          },
-        ],
+        protocol: 'https',
+        hostname: 'nailfeed-backend-production.up.railway.app',
+        port: '',
+        pathname: '/**',
       },
-    ];
+    ],
   },
-  webpack: (config, { isServer }) => {
-    if (!isServer) {
-      // Prevent fs module from being bundled on the client
-      config.resolve.fallback = {
-        ...config.resolve.fallback, // Spread existing fallbacks
-        fs: false, // Tells webpack to use an empty module for 'fs'
-        path: false, // Often related, good to handle as well
-        // 'canvas' might also be needed if fabric tries to load node-canvas
-        // canvas: false, // Uncomment if you see errors related to 'canvas' module
-      };
-    }
-    return config;
+  // Add transpilePackages if needed for any packages that use require
+  transpilePackages: [],
+  // Ensure we're using the correct module system
+  experimental: {
+    esmExternals: 'loose',
   },
-  // Any other configurations you have
 };
 
-export default nextConfig
+export default nextConfig;
