@@ -6,24 +6,41 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  reactStrictMode: true,
   images: {
-    unoptimized: true,
-    domains: ['nailfeed-backend-production.up.railway.app'],
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'nailfeed-backend-production.up.railway.app',
-        port: '',
-        pathname: '/**',
+        hostname: 's3.amazonaws.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'imagedelivery.net',
+      },
+      {
+        protocol: 'http',
+        hostname: 'localhost',
       },
     ],
+    unoptimized: true,
   },
-  // Add transpilePackages if needed for any packages that use require
-  transpilePackages: [],
-  // Ensure we're using the correct module system
-  experimental: {
-    esmExternals: 'loose',
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'Cross-Origin-Opener-Policy',
+            value: 'same-origin',
+          },
+          {
+            key: 'Cross-Origin-Embedder-Policy',
+            value: 'require-corp',
+          },
+        ],
+      },
+    ];
   },
-};
+}
 
-export default nextConfig;
+export default nextConfig
