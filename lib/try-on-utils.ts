@@ -1,22 +1,26 @@
 // ===================================================================================
-// CRITICAL ADVISORY FOR MEDIAPIPE INTEGRATION:
+// CRITICAL ADVISORY FOR MEDIAPIPE INTEGRATION (REVISED):
 //
-// To prevent browser errors like "require('fs') is not defined" or "__dirname is not defined":
+// The errors "require('fs') is not defined" or "__dirname is not defined" strongly
+// indicate that your project's bundler (Webpack/Turbopack) is incorrectly including
+// Node.js-specific code from the '@mediapipe/hands' (or related) npm package
+// installed in your 'node_modules'.
 //
-// 1. DO NOT add any direct `import ... from '@mediapipe/hands'`,
-//    `@mediapipe/camera_utils'`, or any other '@mediapipe/*' packages
-//    AT THE TOP OF THIS FILE or any other client-side file that's part of this feature's bundle.
+// THIS FILE IS DESIGNED TO LOAD MEDIAPIPE STRICTLY FROM A CDN.
 //
-// 2. This file loads MediaPipe Hands PURELY from a CDN. The presence of npm packages
-//    `@mediapipe/hands` or `@mediapipe/camera_utils` in your `node_modules` (due to `npm install`)
-//    can cause your bundler (Webpack/Turbopack) to mistakenly include their Node.js-specific
-//    code if it sees an `import` statement for them anywhere in your client bundle.
+// TO FIX THIS:
+// 1. YOU MUST SEARCH YOUR ENTIRE PROJECT (all .ts, .tsx, .js, .jsx files)
+//    FOR ANY `import ... from '@mediapipe/hands'`, `@mediapipe/camera_utils'`,
+//    or any other `'@mediapipe/*'` statements IN CLIENT-SIDE CODE.
+// 2. REMOVE OR REFACTOR these imports. They are the most common cause of this issue.
+//    The bundler sees these and pulls in the Node.js version from node_modules.
+// 3. If you installed `@mediapipe/camera_utils` or other `@mediapipe/*` packages
+//    via npm and they are not strictly needed for server-side operations (unlikely),
+//    consider if they can be removed from package.json to prevent accidental bundling,
+//    OR ensure they are only imported in server-side specific files if used there.
 //
-// 3. If you are still getting errors related to 'fs' or '__dirname', you MUST thoroughly
-//    search your ENTIRE PROJECT for any such `import` statements in your client-side code
-//    and remove or conditionally load them.
-//
-// This utility is designed to be self-contained for CDN loading of MediaPipe Hands.
+// The changes below attempt to further isolate the CDN-loaded MediaPipe instance,
+// but the root cause is likely an external import.
 // ===================================================================================
 
 interface NailPosition {
@@ -29,134 +33,144 @@ interface NailPosition {
   centerY: number
 }
 
-let handsModuleInstance: any = null // Renamed to avoid potential conflict with global "handsModule" if any
-let mediaPipeInitializationPromise: Promise<boolean> | null = null
+// Ensure these are module-scoped and not accidentally re-declared or shadowed.
+let handsInstanceFromCDN: any = null
+let mediaPipeCDNInitializationPromise: Promise<boolean> | null = null
 
-const CDN_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915"
+const MEDIAPIPE_CDN_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915"
 
-async function initMediaPipe(): Promise<boolean> {
+async function initMediaPipeFromCDN(): Promise<boolean> {
   if (typeof window === "undefined") {
-    console.warn("MediaPipe initialization skipped: Not in browser environment.")
+    console.warn("MediaPipe (CDN) init skipped: Not in browser.")
     return false
   }
 
-  if (handsModuleInstance) {
-    console.log("MediaPipe Hands already initialized.")
+  if (handsInstanceFromCDN) {
+    console.log("MediaPipe Hands (CDN) already initialized.")
     return true
   }
 
-  if (mediaPipeInitializationPromise) {
-    console.log("MediaPipe Hands initialization in progress...")
-    return mediaPipeInitializationPromise
+  if (mediaPipeCDNInitializationPromise) {
+    console.log("MediaPipe Hands (CDN) initialization in progress...")
+    return mediaPipeCDNInitializationPromise
   }
 
-  mediaPipeInitializationPromise = (async () => {
+  mediaPipeCDNInitializationPromise = (async () => {
     try {
-      // Check if the script is already on the page using bracket notation for window property
-      if (!(window as any)["Hands"]) {
-        console.log(`Loading MediaPipe Hands script from CDN: ${CDN_URL}/hands.min.js`)
+      const HandsClassKey = "Hands" // Use a variable for the key
+      if (!(window as any)[HandsClassKey]) {
+        console.log(`Loading MediaPipe Hands script from CDN: ${MEDIAPIPE_CDN_URL}/hands.min.js`)
         const script = document.createElement("script")
-        script.src = `${CDN_URL}/hands.min.js`
+        script.src = `${MEDIAPIPE_CDN_URL}/hands.min.js`
         script.async = true
         script.crossOrigin = "anonymous"
-
-        await new Promise<void>((resolve, reject) => {
+        const scriptLoadPromise = new Promise<void>((resolve, reject) => {
           script.onload = () => {
-            console.log("MediaPipe Hands script loaded successfully from CDN.")
+            console.log("MediaPipe Hands script (CDN) loaded successfully.")
             resolve()
           }
           script.onerror = (e) => {
-            console.error("Failed to load MediaPipe Hands script from CDN:", e)
-            reject(new Error("Failed to load MediaPipe Hands script from CDN."))
+            console.error("Failed to load MediaPipe Hands script (CDN):", e)
+            reject(new Error("Failed to load MediaPipe Hands script (CDN)."))
           }
-          document.head.appendChild(script)
         })
-        // Brief pause to allow the browser to process the loaded script
-        await new Promise((resolve) => setTimeout(resolve, 150))
+        document.head.appendChild(script)
+        await scriptLoadPromise
+        await new Promise((resolve) => setTimeout(resolve, 200)) // Increased delay
       }
 
-      // Access window.Hands using bracket notation to prevent bundler interference
-      const HandsClass = (window as any)["Hands"]
-
-      if (!HandsClass) {
-        throw new Error(
-          "MediaPipe Hands class ('window.Hands') not found after script load. Check CDN integrity and network.",
-        )
+      const HandsConstructor = (window as any)[HandsClassKey]
+      if (!HandsConstructor) {
+        throw new Error(`MediaPipe Hands class ('window.${HandsClassKey}') not found after script load.`)
       }
 
-      console.log("Initializing MediaPipe Hands module from CDN version...")
-      const localHandsInstance = new HandsClass({
-        locateFile: (file: string) => `${CDN_URL}/${file}`,
+      console.log("Initializing MediaPipe Hands module from CDN constructor...")
+      const instance = new HandsConstructor({
+        locateFile: (file: string) => `${MEDIAPIPE_CDN_URL}/${file}`,
       })
 
-      localHandsInstance.setOptions({
+      instance.setOptions({
         maxNumHands: 1,
         modelComplexity: 1,
         minDetectionConfidence: 0.7,
         minTrackingConfidence: 0.5,
       })
 
-      // Warm up the model by sending a dummy canvas.
-      // This helps ensure model files are fetched if not already cached.
+      console.log("Warming up MediaPipe (CDN) model...")
       const dummyCanvas = document.createElement("canvas")
       dummyCanvas.width = 1
       dummyCanvas.height = 1
-      await new Promise<void>((resolve, reject) => {
+      const warmUpPromise = new Promise<void>((resolve) => {
         let resolved = false
         const timeoutId = setTimeout(() => {
           if (!resolved) {
-            console.warn("MediaPipe warm-up timed out. Proceeding, but model loading might be slow.")
-            resolve() // Resolve to not block indefinitely
+            console.warn("MediaPipe (CDN) warm-up timed out. Errors might occur if model files are not ready.")
+            resolve()
           }
-        }, 3000) // 3 second timeout for warm-up
+        }, 5000) // Increased timeout
 
-        localHandsInstance.onResults((results: any) => {
+        instance.onResults((results: any) => {
+          // Ensure this is the onResults of the CDN instance
           if (!resolved) {
             resolved = true
             clearTimeout(timeoutId)
+            console.log("MediaPipe (CDN) warm-up signal received.")
             resolve()
           }
         })
-        localHandsInstance.send({ image: dummyCanvas })
+        instance.send({ image: dummyCanvas }) // Ensure this is the send of the CDN instance
       })
+      await warmUpPromise
 
-      handsModuleInstance = localHandsInstance
-      console.log("MediaPipe Hands module (CDN version) initialized successfully.")
+      handsInstanceFromCDN = instance
+      console.log("MediaPipe Hands module (CDN version) fully initialized.")
       return true
     } catch (err) {
       console.error("Error initializing MediaPipe Hands (CDN version):", err)
-      handsModuleInstance = null
+      handsInstanceFromCDN = null
       return false
     } finally {
-      mediaPipeInitializationPromise = null
+      mediaPipeCDNInitializationPromise = null
     }
   })()
-  return mediaPipeInitializationPromise
+  return mediaPipeCDNInitializationPromise
 }
 
-async function processImageWithMediaPipe(canvas: HTMLCanvasElement): Promise<any> {
-  if (!handsModuleInstance) {
-    throw new Error("MediaPipe Hands (CDN version) not initialized.")
+async function processImageWithCDNHands(canvas: HTMLCanvasElement): Promise<any> {
+  if (!handsInstanceFromCDN) {
+    // Attempt to re-initialize if not ready, though this might indicate a deeper issue
+    console.warn("MediaPipe (CDN) instance not found in processImage. Attempting re-init.")
+    const ready = await initMediaPipeFromCDN()
+    if (!ready || !handsInstanceFromCDN) {
+      throw new Error("MediaPipe Hands (CDN version) could not be initialized for processing.")
+    }
   }
-  console.log("Processing image with MediaPipe (CDN version)...")
-  return new Promise((resolve) => {
-    handsModuleInstance.onResults(resolve) // onResults is persistent, will call back
-    handsModuleInstance.send({ image: canvas })
+  console.log("Processing image with MediaPipe (CDN instance)...")
+  return new Promise((resolve, reject) => {
+    // Ensure we are calling methods on the correct instance
+    const currentHandsInstance = handsInstanceFromCDN
+    if (!currentHandsInstance) {
+      // Should not happen if init was successful
+      reject(new Error("MediaPipe (CDN) instance became null before processing."))
+      return
+    }
+    currentHandsInstance.onResults(resolve)
+    currentHandsInstance.send({ image: canvas })
   })
 }
 
 function extractNailPositionsFromLandmarks(landmarks: any[], imageWidth: number, imageHeight: number): NailPosition[] {
+  // ... (This function's internal logic remains the same as previous correct version)
   const nailPositions: NailPosition[] = []
   const FINGER_TIPS_INDICES = [4, 8, 12, 16, 20]
   const FINGER_PIP_INDICES = [3, 6, 10, 14, 18]
-  const FINGER_DIP_INDICES = [null, 7, 11, 15, 19] // DIP for Index, Middle, Ring, Pinky
+  const FINGER_DIP_INDICES = [null, 7, 11, 15, 19]
 
   for (let i = 0; i < FINGER_TIPS_INDICES.length; i++) {
     const tipIndex = FINGER_TIPS_INDICES[i]
     const pipIndex = FINGER_PIP_INDICES[i]
     const dipIndex = FINGER_DIP_INDICES[i]
 
-    // Ensure landmarks exist
     if (!landmarks[tipIndex] || !landmarks[pipIndex] || (dipIndex !== null && !landmarks[dipIndex])) {
       console.warn(`Skipping finger ${i} due to missing landmarks.`)
       continue
@@ -170,9 +184,7 @@ function extractNailPositionsFromLandmarks(landmarks: any[], imageWidth: number,
       dipIndex !== null ? { x: landmarks[dipIndex].x * imageWidth, y: landmarks[dipIndex].y * imageHeight } : pip
 
     if (i === 0) {
-      // Thumb specific logic
       if (!landmarks[3]) {
-        // IP joint for thumb
         console.warn("Skipping thumb due to missing IP landmark (3).")
         continue
       }
@@ -181,18 +193,18 @@ function extractNailPositionsFromLandmarks(landmarks: any[], imageWidth: number,
     }
 
     const angleRad = Math.atan2(tip.y - referenceJointForAngle.y, tip.x - referenceJointForAngle.x)
-    const angleDeg = angleRad * (180 / Math.PI) + 90 // +90 because nail designs are typically vertical
+    const angleDeg = angleRad * (180 / Math.PI) + 90
 
     const distalSegmentLength = Math.hypot(tip.x - referenceJointForLength.x, tip.y - referenceJointForLength.y)
-    const nailHeight = distalSegmentLength * 0.6 // Nail is a portion of the last segment
-    const nailWidth = nailHeight * 0.8 // Maintain an aspect ratio
+    const nailHeight = distalSegmentLength * 0.6
+    const nailWidth = nailHeight * 0.8
 
     const centerX = tip.x
     const centerY = tip.y
 
     nailPositions.push({
-      x: -nailWidth / 2, // Relative to centerX for drawing
-      y: -nailHeight / 2, // Relative to centerY for drawing
+      x: -nailWidth / 2,
+      y: -nailHeight / 2,
       width: nailWidth,
       height: nailHeight,
       angle: angleDeg,
@@ -205,35 +217,39 @@ function extractNailPositionsFromLandmarks(landmarks: any[], imageWidth: number,
 }
 
 export async function detectHands(imageUrl: string): Promise<NailPosition[]> {
-  console.log("Attempting hand detection for image:", imageUrl)
-  const mediaPipeReady = await initMediaPipe()
+  console.log("Attempting hand detection (CDN priority) for image:", imageUrl)
+  const mediaPipeReady = await initMediaPipeFromCDN() // Use the renamed init function
 
-  if (!mediaPipeReady || !handsModuleInstance) {
+  if (!mediaPipeReady || !handsInstanceFromCDN) {
+    // Check the renamed instance variable
     console.warn("MediaPipe (CDN version) not ready. Falling back to heuristic detection.")
     return fallbackNailDetection(imageUrl)
   }
 
   try {
-    const canvas = await prepareImageOnCanvas(imageUrl) // Ensure this function is robust
+    const canvas = await prepareImageOnCanvas(imageUrl)
     if (canvas.width === 0 || canvas.height === 0) {
       console.warn("Prepared canvas for MediaPipe has zero dimensions. Falling back.")
       return fallbackNailDetection(imageUrl)
     }
-    const results = await processImageWithMediaPipe(canvas)
+    const results = await processImageWithCDNHands(canvas) // Use the renamed process function
 
     if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-      console.log(`MediaPipe (CDN version) detected ${results.multiHandLandmarks.length} hand(s). Using the first one.`)
+      console.log(`MediaPipe (CDN version) detected ${results.multiHandLandmarks.length} hand(s).`)
       return extractNailPositionsFromLandmarks(results.multiHandLandmarks[0], canvas.width, canvas.height)
     } else {
-      console.warn("MediaPipe (CDN version): No hands detected. Falling back to heuristic detection.")
+      console.warn("MediaPipe (CDN version): No hands detected. Falling back.")
       return fallbackNailDetection(imageUrl)
     }
   } catch (error) {
     console.error("Error during MediaPipe (CDN version) hand detection:", error)
-    console.log("Falling back to heuristic nail detection due to MediaPipe error.")
     return fallbackNailDetection(imageUrl)
   }
 }
+
+// Fallback, extractNailDesign, applyNailDesign, saveImage, shareImage, prepareImageOnCanvas
+// functions remain largely the same as the previous correct version.
+// Ensure they don't introduce any MediaPipe imports.
 
 async function fallbackNailDetection(imageUrl: string): Promise<NailPosition[]> {
   console.log("Using fallback heuristic nail detection for", imageUrl)
@@ -247,31 +263,27 @@ async function fallbackNailDetection(imageUrl: string): Promise<NailPosition[]> 
     })
   } catch (e) {
     console.error(e)
-    return [] // Return empty if image fails to load
+    return []
   }
-
-  const width = img.naturalWidth
-  const height = img.naturalHeight
+  const width = img.naturalWidth,
+    height = img.naturalHeight
   if (width === 0 || height === 0) {
     console.warn("Fallback detection: Image has zero dimensions.")
     return []
   }
-
   const nailPositions: NailPosition[] = []
   const numNails = 5
-  const nailWidth = width * 0.04
-  const nailHeight = nailWidth * 1.5
-  const handRegionWidth = width * 0.5
-  const startX = (width - handRegionWidth) / 2
+  const nailWidth = width * 0.04,
+    nailHeight = nailWidth * 1.5
+  const handRegionWidth = width * 0.5,
+    startX = (width - handRegionWidth) / 2
   const yPos = height * 0.65
-
   for (let i = 0; i < numNails; i++) {
     const nailCenterX = startX + (handRegionWidth / numNails) * (i + 0.5)
     let yOffset = 0
     if (i === 0 || i === numNails - 1) yOffset = nailHeight * 0.3
     if (i === 1 || i === numNails - 2) yOffset = nailHeight * 0.1
     const nailCenterY = yPos + yOffset
-
     nailPositions.push({
       x: -nailWidth / 2,
       y: -nailHeight / 2,
@@ -297,33 +309,29 @@ export async function extractNailDesign(designImageUrl: string): Promise<HTMLCan
     })
   } catch (e) {
     console.error(e)
-    // Return a fallback canvas or rethrow
-    const fallbackCanvas = document.createElement("canvas")
-    fallbackCanvas.width = 200
-    fallbackCanvas.height = 300
-    const ctx = fallbackCanvas.getContext("2d")
-    if (ctx) {
-      ctx.fillStyle = "grey"
-      ctx.fillRect(0, 0, 200, 300)
-      ctx.fillStyle = "red"
-      ctx.fillText("Design Load Error", 10, 50)
+    const fb = document.createElement("canvas")
+    fb.width = 200
+    fb.height = 300
+    const c = fb.getContext("2d")
+    if (c) {
+      c.fillStyle = "gray"
+      c.fillRect(0, 0, 200, 300)
+      c.fillStyle = "red"
+      c.fillText("Error", 10, 50)
     }
-    return fallbackCanvas
+    return fb
   }
-
   const size = 200
   const designCanvas = document.createElement("canvas")
   designCanvas.width = size
   designCanvas.height = size * 1.5
   const ctx = designCanvas.getContext("2d")
   if (!ctx) throw new Error("Could not create canvas context for design extraction")
-
   ctx.beginPath()
   ctx.ellipse(size / 2, (size * 1.5) / 2, size / 2, (size * 1.5) / 2, 0, 0, Math.PI * 2)
   ctx.clip()
-
-  const sourceAspect = img.width / img.height
-  const targetAspect = designCanvas.width / designCanvas.height
+  const sourceAspect = img.width / img.height,
+    targetAspect = designCanvas.width / designCanvas.height
   let sx = 0,
     sy = 0,
     sw = img.width,
@@ -342,7 +350,6 @@ export async function extractNailDesign(designImageUrl: string): Promise<HTMLCan
 export async function applyNailDesign(sourceImageUrl: string, designImageUrl: string): Promise<string> {
   const nailPositions = await detectHands(sourceImageUrl)
   const designTemplateCanvas = await extractNailDesign(designImageUrl)
-
   const sourceImage = new Image()
   sourceImage.crossOrigin = "anonymous"
   try {
@@ -353,19 +360,15 @@ export async function applyNailDesign(sourceImageUrl: string, designImageUrl: st
     })
   } catch (e) {
     console.error(e)
-    return sourceImageUrl // Return original if source fails to load
+    return sourceImageUrl
   }
-
   const outputCanvas = document.createElement("canvas")
   outputCanvas.width = sourceImage.naturalWidth
   outputCanvas.height = sourceImage.naturalHeight
   const ctx = outputCanvas.getContext("2d")
   if (!ctx) throw new Error("Could not get output canvas context")
-
   ctx.drawImage(sourceImage, 0, 0)
-
   if (nailPositions.length > 0) {
-    console.log(`Applying ${nailPositions.length} nail designs...`)
     for (const nail of nailPositions) {
       ctx.save()
       ctx.translate(nail.centerX, nail.centerY)
@@ -373,10 +376,7 @@ export async function applyNailDesign(sourceImageUrl: string, designImageUrl: st
       ctx.drawImage(designTemplateCanvas, nail.x, nail.y, nail.width, nail.height)
       ctx.restore()
     }
-  } else {
-    console.log("No nail positions to apply designs to.")
   }
-
   return outputCanvas.toDataURL("image/png")
 }
 
@@ -397,16 +397,12 @@ export async function shareImage(dataUrl: string, title = "My Virtual Nail Desig
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({ title, text: "Check out my virtual nail design try-on!", files: [file] })
       return true
-    } else {
-      console.log("Web Share API not fully supported or cannot share files, falling back to download.")
-      saveImage(dataUrl)
-      return false
     }
   } catch (error) {
     console.error("Error sharing image:", error)
-    saveImage(dataUrl)
-    return false
   }
+  saveImage(dataUrl)
+  return false
 }
 
 export async function prepareImageOnCanvas(imageSource: string | File): Promise<HTMLCanvasElement> {
@@ -415,15 +411,12 @@ export async function prepareImageOnCanvas(imageSource: string | File): Promise<
   if (!ctx) {
     throw new Error("Could not get canvas context for image preparation")
   }
-
   const img = new Image()
   img.crossOrigin = "anonymous"
-
   let objectUrl: string | null = null
   if (typeof imageSource !== "string") {
     objectUrl = URL.createObjectURL(imageSource)
   }
-
   try {
     await new Promise<void>((resolve, reject) => {
       img.onload = () => resolve()
@@ -435,12 +428,9 @@ export async function prepareImageOnCanvas(imageSource: string | File): Promise<
       URL.revokeObjectURL(objectUrl)
     }
   }
-
   if (img.naturalWidth === 0 || img.naturalHeight === 0) {
-    console.warn("Image loaded with zero dimensions. Canvas will be empty.")
-    // Still return a canvas, but it will be blank or match these zero dimensions
+    console.warn("Image loaded with zero dimensions.")
   }
-
   canvas.width = img.naturalWidth
   canvas.height = img.naturalHeight
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
