@@ -1,42 +1,27 @@
 "use client"
 
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
-import { Loader2 } from "lucide-react"
-import { SocialAuthService, type SocialProvider } from "@/lib/social-auth-service"
+import { Loader2 } from 'lucide-react'
 
 export default function AuthSocial() {
   const [isLoading, setIsLoading] = useState<string | null>(null)
   const { toast } = useToast()
 
-  const handleSocialLogin = async (provider: SocialProvider) => {
-    try {
-      setIsLoading(provider)
+  // Get the API URL from environment variables
+  const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1337'
 
-      // Initiate the social login process
-      SocialAuthService.initiateSocialLogin(provider)
-
-      // Note: The page will redirect, so we don't need to handle the response here
-    } catch (error) {
-      console.error(`${provider} login error:`, error)
-      setIsLoading(null)
-
-      toast({
-        title: `${provider} login failed`,
-        description: error instanceof Error ? error.message : "An unknown error occurred",
-        variant: "destructive",
-      })
-    }
+  const handleLinkClick = (provider: string) => {
+    setIsLoading(provider)
+    // The loading state will be cleared when the page redirects
   }
 
   return (
     <div className="grid grid-cols-1 gap-3 mt-4">
-      <Button
-        variant="outline"
-        className="w-full text-xs sm:text-sm flex items-center justify-center px-4 py-2 relative"
-        onClick={() => handleSocialLogin("google")}
-        disabled={isLoading !== null}
+      <a
+        href={`${baseURL}/api/connect/google`}
+        className="w-full text-xs sm:text-sm flex items-center justify-center px-4 py-2 relative border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
+        onClick={() => handleLinkClick("google")}
       >
         <div className="absolute left-4 flex justify-center items-center">
           {isLoading === "google" ? (
@@ -63,13 +48,12 @@ export default function AuthSocial() {
           )}
         </div>
         <span>Google</span>
-      </Button>
+      </a>
 
-      <Button
-        variant="outline"
-        className="w-full text-xs sm:text-sm flex items-center justify-center px-4 py-2 relative"
-        onClick={() => handleSocialLogin("facebook")}
-        disabled={isLoading !== null}
+      <a
+        href={`${baseURL}/api/connect/facebook`}
+        className="w-full text-xs sm:text-sm flex items-center justify-center px-4 py-2 relative border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
+        onClick={() => handleLinkClick("facebook")}
       >
         <div className="absolute left-4 flex justify-center items-center">
           {isLoading === "facebook" ? (
@@ -81,13 +65,12 @@ export default function AuthSocial() {
           )}
         </div>
         <span>Facebook</span>
-      </Button>
+      </a>
 
-      <Button
-        variant="outline"
-        className="w-full text-xs sm:text-sm flex items-center justify-center px-4 py-2 relative"
-        onClick={() => handleSocialLogin("instagram")}
-        disabled={isLoading !== null}
+      <a
+        href={`${baseURL}/api/connect/instagram`}
+        className="w-full text-xs sm:text-sm flex items-center justify-center px-4 py-2 relative border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
+        onClick={() => handleLinkClick("instagram")}
       >
         <div className="absolute left-4 flex justify-center items-center">
           {isLoading === "instagram" ? (
@@ -116,7 +99,7 @@ export default function AuthSocial() {
           )}
         </div>
         <span>Instagram</span>
-      </Button>
+      </a>
     </div>
   )
 }
