@@ -1,8 +1,6 @@
 "use server"
 import { z } from "zod"
 import { AuthService, type AuthResponse } from "@/lib/auth-service"
-import { cookies } from "next/headers"
-import { redirect } from "next/navigation"
 
 // Login schema
 const loginSchema = z.object({
@@ -107,41 +105,29 @@ export const registerAction = async (data: {
 
 // Social auth schema
 const socialAuthSchema = z.object({
-  provider: z.enum(["google", "facebook", "instagram"]),
+  provider: z.enum(["google", "facebook", "twitter"]),
   redirectUrl: z.string().url().optional(),
 })
 
 // Create the social auth action
-export const initiateSocialAuthAction = async (provider: string): Promise<{ 
-  success: boolean; 
-  error?: string; 
-  redirectUrl?: string 
-}> => {
+export const initiateSocialAuthAction = async (data: {
+  provider: string
+  redirectUrl?: string
+}): Promise<{ success: boolean; error?: string; redirectUrl?: string }> => {
   try {
-    // Validate provider
-    const validatedFields = socialAuthSchema.safeParse({ provider })
+    // Validate form data
+    const validatedFields = socialAuthSchema.safeParse(data)
 
     if (!validatedFields.success) {
       return {
         success: false,
-        error: "Invalid provider.",
+        error: "Invalid provider or redirect URL.",
       }
     }
 
-    // Get the appropriate URLs based on environment
-    const baseUrl = process.env.NODE_ENV === "development" 
-      ? "http://localhost:3000"
-      : process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
-    
-    const apiUrl = process.env.NODE_ENV === "development"
-      ? process.env.NEXT_PUBLIC_API_URL || "http://localhost:1337"
-      : process.env.NEXT_PUBLIC_API_URL || "http://localhost:1337"
-
-    // Construct the callback URL
-    const callbackUrl = `${baseUrl}/auth/callback/${provider}`
-    
-    // Strapi's social auth endpoint
-    const authUrl = `${apiUrl}/api/connect/${provider}?callback=${encodeURIComponent(callbackUrl)}`
+    // Generate social auth URL
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+    const authUrl = `${baseUrl}/auth/social/${data.provider}`
 
     return {
       success: true,
@@ -152,63 +138,6 @@ export const initiateSocialAuthAction = async (provider: string): Promise<{
     return {
       success: false,
       error: "An unexpected error occurred",
-    }
-  }
-}
-
-// Handle social auth callback
-export const handleSocialAuthCallback = async (
-  provider: string,
-  accessToken: string
-): Promise<{ success: boolean; error?: string }> => {
-  try {
-    const apiUrl = process.env.NODE_ENV === "development"
-      ? process.env.NEXT_PUBLIC_API_URL || "http://localhost:1337"
-      : process.env.NEXT_PUBLIC_API_URL || "http://localhost:1337"
-
-    // Exchange access token for user data and JWT
-    const response = await fetch(`${apiUrl}/api/auth/${provider}/callback?access_token=${accessToken}`)
-    
-    if (!response.ok) {
-      throw new Error(`Authentication failed: ${response.statusText}`)
-    }
-
-    const data = await response.json()
-    
-    if (data.jwt && data.user) {
-      const cookieStore = await cookies()
-      
-      // Set authentication cookies
-      cookieStore.set("jwt", data.jwt, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        maxAge: 30 * 24 * 60 * 60, // 30 days
-        path: "/",
-      })
-
-      cookieStore.set("user_data", JSON.stringify({
-        id: data.user.id,
-        username: data.user.username,
-        email: data.user.email,
-      }), {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        maxAge: 30 * 24 * 60 * 60, // 30 days
-        path: "/",
-      })
-
-      return { success: true }
-    } else {
-      return {
-        success: false,
-        error: "Invalid response from authentication server"
-      }
-    }
-  } catch (error) {
-    console.error("Social auth callback error:", error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Authentication failed"
     }
   }
 }

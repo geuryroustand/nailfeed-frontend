@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { z } from "zod"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -127,14 +127,7 @@ export default function LoginForm() {
             <FormItem>
               <FormLabel>Email</FormLabel>
               <FormControl>
-                <Input 
-                  name="email" 
-                  type="email"
-                  placeholder="your.email@example.com" 
-                  value={field.value}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                />
+                <Input name="email" placeholder="your.email@example.com" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -149,14 +142,7 @@ export default function LoginForm() {
               <FormLabel>Password</FormLabel>
               <FormControl>
                 <div className="relative">
-                  <Input 
-                    name="password" 
-                    type={showPassword ? "text" : "password"} 
-                    placeholder="••••••••" 
-                    value={field.value}
-                    onChange={field.onChange}
-                    onBlur={field.onBlur}
-                  />
+                  <Input name="password" type={showPassword ? "text" : "password"} placeholder="••••••••" {...field} />
                   <Button
                     type="button"
                     variant="ghost"
@@ -180,11 +166,7 @@ export default function LoginForm() {
             render={({ field }) => (
               <FormItem className="flex items-center space-x-2 space-y-0">
                 <FormControl>
-                  <Checkbox 
-                    name="rememberMe" 
-                    checked={field.value || false} 
-                    onCheckedChange={field.onChange} 
-                  />
+                  <Checkbox name="rememberMe" checked={field.value} onCheckedChange={field.onChange} />
                 </FormControl>
                 <FormLabel className="text-sm font-normal cursor-pointer">Remember me</FormLabel>
               </FormItem>

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { z } from "zod"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -137,14 +137,7 @@ export default function SignupForm() {
             <FormItem>
               <FormLabel>Username</FormLabel>
               <FormControl>
-                <Input 
-                  name="username" 
-                  type="text"
-                  placeholder="your_username" 
-                  value={field.value}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                />
+                <Input name="username" placeholder="your_username" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -158,14 +151,7 @@ export default function SignupForm() {
             <FormItem>
               <FormLabel>Email</FormLabel>
               <FormControl>
-                <Input 
-                  name="email" 
-                  type="email"
-                  placeholder="your.email@example.com" 
-                  value={field.value}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                />
+                <Input name="email" placeholder="your.email@example.com" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -184,12 +170,11 @@ export default function SignupForm() {
                     name="password"
                     type={showPassword ? "text" : "password"}
                     placeholder="••••••••"
-                    value={field.value}
+                    {...field}
                     onChange={(e) => {
                       field.onChange(e)
                       setPasswordStrength(calculatePasswordStrength(e.target.value))
                     }}
-                    onBlur={field.onBlur}
                   />
                   <Button
                     type="button"
@@ -229,9 +214,7 @@ export default function SignupForm() {
                     name="confirmPassword"
                     type={showConfirmPassword ? "text" : "password"}
                     placeholder="••••••••"
-                    value={field.value}
-                    onChange={field.onChange}
-                    onBlur={field.onBlur}
+                    {...field}
                   />
                   <Button
                     type="button"
@@ -255,11 +238,7 @@ export default function SignupForm() {
           render={({ field }) => (
             <FormItem className="flex items-start space-x-2 space-y-0">
               <FormControl>
-                <Checkbox 
-                  name="agreeTerms" 
-                  checked={field.value || false} 
-                  onCheckedChange={field.onChange} 
-                />
+                <Checkbox name="agreeTerms" checked={field.value} onCheckedChange={field.onChange} />
               </FormControl>
               <div className="space-y-1 leading-none">
                 <FormLabel className="text-sm font-normal cursor-pointer">
