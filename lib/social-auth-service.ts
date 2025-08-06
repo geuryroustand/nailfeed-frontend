@@ -1,80 +1,90 @@
-export type SocialProvider = "google" | "facebook" | "instagram"
+export type SocialProvider = 'google' | 'facebook' | 'instagram'
 
 export class SocialAuthService {
   private static getBaseUrl(): string {
-    // Use localhost in development, otherwise use the configured app URL
-    if (process.env.NODE_ENV === "development") {
-      return "http://localhost:3000"
+    // Use localhost in development, otherwise use the API_URL
+    if (typeof window !== 'undefined') {
+      return window.location.hostname === 'localhost' 
+        ? 'http://localhost:1337'
+        : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1337'
     }
-    return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+    return process.env.API_URL || 'http://localhost:1337'
   }
 
-  private static getApiUrl(): string {
-    // Use localhost API in development
-    if (process.env.NODE_ENV === "development") {
-      return process.env.NEXT_PUBLIC_API_URL || "http://localhost:1337"
+  private static getCallbackUrl(provider: SocialProvider): string {
+    // Use localhost in development for the frontend callback
+    if (typeof window !== 'undefined') {
+      const baseUrl = window.location.hostname === 'localhost' 
+        ? 'http://localhost:3000'
+        : process.env.NEXT_PUBLIC_APP_URL || window.location.origin
+      return `${baseUrl}/auth/callback/${provider}`
     }
-    return process.env.NEXT_PUBLIC_API_URL || "http://localhost:1337"
+    return `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/callback/${provider}`
   }
 
   static initiateSocialLogin(provider: SocialProvider): void {
     const baseUrl = this.getBaseUrl()
-    const apiUrl = this.getApiUrl()
+    const callbackUrl = this.getCallbackUrl(provider)
     
-    // Construct the callback URL that Strapi will redirect to after authentication
-    const callbackUrl = `${baseUrl}/auth/callback/${provider}`
+    // Strapi's OAuth URL format
+    const authUrl = `${baseUrl}/api/connect/${provider}?callback=${encodeURIComponent(callbackUrl)}`
     
-    // Strapi's social auth endpoint
-    const authUrl = `${apiUrl}/api/connect/${provider}?callback=${encodeURIComponent(callbackUrl)}`
+    console.log(`Initiating ${provider} login:`, authUrl)
     
-    // Redirect to Strapi's social auth endpoint
+    // Redirect to Strapi's OAuth endpoint
     window.location.href = authUrl
   }
 
-  static async handleCallback(provider: SocialProvider, searchParams: URLSearchParams): Promise<{
+  static async handleCallback(provider: SocialProvider, accessToken: string): Promise<{
     success: boolean
     user?: any
     jwt?: string
     error?: string
   }> {
     try {
-      const accessToken = searchParams.get('access_token')
+      const baseUrl = this.getBaseUrl()
       
-      if (!accessToken) {
-        return {
-          success: false,
-          error: "No access token received from provider"
-        }
-      }
+      // Exchange access token for user data and JWT from Strapi
+      const response = await fetch(`${baseUrl}/api/auth/${provider}/callback?access_token=${accessToken}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
 
-      const apiUrl = this.getApiUrl()
-      
-      // Exchange the access token for user data and JWT from Strapi
-      const response = await fetch(`${apiUrl}/api/auth/${provider}/callback?access_token=${accessToken}`)
-      
       if (!response.ok) {
-        throw new Error(`Authentication failed: ${response.statusText}`)
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || `${provider} authentication failed`)
       }
 
       const data = await response.json()
       
       if (data.jwt && data.user) {
+        // Store JWT in localStorage for client-side access
+        localStorage.setItem('auth_token', data.jwt)
+        
+        // Also set HTTP-only cookie via API route
+        await fetch('/api/auth/set-cookie', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ token: data.jwt }),
+        }).catch(err => console.error('Failed to set cookie:', err))
+
         return {
           success: true,
           user: data.user,
-          jwt: data.jwt
+          jwt: data.jwt,
         }
       } else {
-        return {
-          success: false,
-          error: "Invalid response from authentication server"
-        }
+        throw new Error('Invalid response from authentication server')
       }
     } catch (error) {
       console.error(`${provider} callback error:`, error)
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Authentication failed"
+        error: error instanceof Error ? error.message : 'Authentication failed',
       }
     }
   }

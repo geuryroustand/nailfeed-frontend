@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { z } from "zod"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Eye, EyeOff, Loader2 } from "lucide-react"
+import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -136,7 +136,13 @@ export default function RegistrationForm() {
             <FormItem>
               <FormLabel>Username</FormLabel>
               <FormControl>
-                <Input placeholder="your_username" {...field} />
+                <Input 
+                  type="text"
+                  placeholder="your_username" 
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -150,7 +156,13 @@ export default function RegistrationForm() {
             <FormItem>
               <FormLabel>Email</FormLabel>
               <FormControl>
-                <Input placeholder="your.email@example.com" {...field} />
+                <Input 
+                  type="email"
+                  placeholder="your.email@example.com" 
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -168,11 +180,12 @@ export default function RegistrationForm() {
                   <Input
                     type={showPassword ? "text" : "password"}
                     placeholder="••••••••"
-                    {...field}
+                    value={field.value}
                     onChange={(e) => {
                       field.onChange(e)
                       setPasswordStrength(calculatePasswordStrength(e.target.value))
                     }}
+                    onBlur={field.onBlur}
                   />
                   <Button
                     type="button"
@@ -208,7 +221,13 @@ export default function RegistrationForm() {
               <FormLabel>Confirm Password</FormLabel>
               <FormControl>
                 <div className="relative">
-                  <Input type={showConfirmPassword ? "text" : "password"} placeholder="••••••••" {...field} />
+                  <Input 
+                    type={showConfirmPassword ? "text" : "password"} 
+                    placeholder="••••••••" 
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                  />
                   <Button
                     type="button"
                     variant="ghost"
@@ -231,7 +250,10 @@ export default function RegistrationForm() {
           render={({ field }) => (
             <FormItem className="flex items-start space-x-2 space-y-0">
               <FormControl>
-                <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                <Checkbox 
+                  checked={field.value || false} 
+                  onCheckedChange={field.onChange} 
+                />
               </FormControl>
               <div className="space-y-1 leading-none">
                 <FormLabel className="text-sm font-normal cursor-pointer">
