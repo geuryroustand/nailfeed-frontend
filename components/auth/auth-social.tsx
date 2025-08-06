@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
-import { Loader2 } from "lucide-react"
+import { Loader2 } from 'lucide-react'
 import { SocialAuthService, type SocialProvider } from "@/lib/social-auth-service"
 
 export default function AuthSocial() {
@@ -62,7 +62,7 @@ export default function AuthSocial() {
             </svg>
           )}
         </div>
-        <span>Google</span>
+        <span>Continue with Google</span>
       </Button>
 
       <Button
@@ -80,7 +80,7 @@ export default function AuthSocial() {
             </svg>
           )}
         </div>
-        <span>Facebook</span>
+        <span>Continue with Facebook</span>
       </Button>
 
       <Button
@@ -115,7 +115,7 @@ export default function AuthSocial() {
             </svg>
           )}
         </div>
-        <span>Instagram</span>
+        <span>Continue with Instagram</span>
       </Button>
     </div>
   )
