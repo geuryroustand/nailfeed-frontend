@@ -57,7 +57,7 @@
     "next": "15.2.4",
     "next-themes": "latest",
     "qrcode": "latest",
-    "qs": "^6.14.0",
+    "qs": "latest",
     "react": "^19",
     "react-day-picker": "latest",
     "react-dom": "^19",
