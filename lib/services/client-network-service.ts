@@ -171,3 +171,38 @@ export async function getFollowing(username: string, page = 1, pageSize = 10): P
     return { users: [], total: 0, page, pageSize, totalPages: 0, isAuthenticated: false, usingSampleData: true }
   }
 }
+
+/**
+ * Toggle follow status (client) via proxy without exposing secrets
+ */
+export async function toggleFollowStatus(
+  targetUsername: string,
+  currentlyFollowing: boolean,
+): Promise<{ success: boolean; isFollowing: boolean; message?: string }> {
+  try {
+    const res = await fetch("/api/follow", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: targetUsername, unfollow: currentlyFollowing }),
+    })
+
+    if (!res.ok) {
+      let message = "Failed to update follow status"
+      try {
+        const data = await res.json()
+        if (data && typeof data.message === "string") message = data.message
+      } catch {
+        // ignore JSON parse errors
+      }
+      return { success: false, isFollowing: currentlyFollowing, message }
+    }
+
+    // consume response body to avoid leaking a reader
+    await res.json().catch(() => ({}))
+
+    return { success: true, isFollowing: !currentlyFollowing }
+  } catch (error) {
+    console.error("Client: Error toggling follow status:", error)
+    return { success: false, isFollowing: currentlyFollowing, message: "Failed to update follow status" }
+  }
+}
