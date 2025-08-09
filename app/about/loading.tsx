@@ -1,82 +1,48 @@
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { Skeleton } from "@/components/ui/skeleton"
-
 export default function AboutLoading() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50">
-      <div className="container mx-auto px-4 py-12">
-        {/* Hero Section Skeleton */}
-        <div className="text-center mb-16">
-          <Skeleton className="h-8 w-48 mx-auto mb-6" />
-          <Skeleton className="h-16 w-full max-w-4xl mx-auto mb-6" />
-          <Skeleton className="h-6 w-full max-w-3xl mx-auto" />
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 to-purple-50 py-12">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <div className="h-10 bg-gray-200 rounded-lg animate-pulse mb-4 max-w-md mx-auto"></div>
+          <div className="h-6 bg-gray-200 rounded-lg animate-pulse max-w-2xl mx-auto"></div>
         </div>
 
-        {/* Mission Section Skeleton */}
-        <Card className="mb-12 border-0 shadow-xl bg-white/80 backdrop-blur-sm">
-          <CardHeader className="text-center pb-8">
-            <Skeleton className="h-8 w-48 mx-auto mb-4" />
-            <Skeleton className="h-6 w-full max-w-2xl mx-auto" />
-          </CardHeader>
-        </Card>
-
-        {/* Features Grid Skeleton */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Card key={i} className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
-              <CardHeader className="text-center">
-                <Skeleton className="w-12 h-12 rounded-full mx-auto mb-4" />
-                <Skeleton className="h-6 w-32 mx-auto" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-4 w-full mb-2" />
-                <Skeleton className="h-4 w-full mb-2" />
-                <Skeleton className="h-4 w-3/4 mx-auto" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {/* Community Stats Skeleton */}
-        <Card className="mb-12 border-0 shadow-xl bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500">
-          <CardContent className="py-12">
-            <div className="grid md:grid-cols-3 gap-8 text-center">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i}>
-                  <Skeleton className="h-12 w-24 mx-auto mb-2 bg-white/20" />
-                  <Skeleton className="h-4 w-32 mx-auto bg-white/20" />
-                </div>
-              ))}
+        <div className="grid md:grid-cols-2 gap-8 mb-12">
+          <div className="bg-white rounded-lg shadow-lg p-8">
+            <div className="h-8 bg-gray-200 rounded-lg animate-pulse mb-4"></div>
+            <div className="space-y-3">
+              <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
+              <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
+              <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4"></div>
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Values Section Skeleton */}
-        <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
-          <CardHeader className="text-center pb-8">
-            <Skeleton className="h-8 w-48 mx-auto mb-4" />
-          </CardHeader>
-          <CardContent className="space-y-8">
-            <div className="grid md:grid-cols-2 gap-8">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="text-center">
-                  <Skeleton className="h-6 w-24 mx-auto mb-4" />
-                  <Skeleton className="h-4 w-full mb-2" />
-                  <Skeleton className="h-4 w-3/4 mx-auto" />
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Call to Action Skeleton */}
-        <div className="text-center mt-16">
-          <Skeleton className="h-8 w-96 mx-auto mb-4" />
-          <Skeleton className="h-6 w-full max-w-2xl mx-auto mb-8" />
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Skeleton className="h-12 w-32" />
-            <Skeleton className="h-12 w-32" />
           </div>
+
+          <div className="bg-white rounded-lg shadow-lg p-8">
+            <div className="h-8 bg-gray-200 rounded-lg animate-pulse mb-4"></div>
+            <div className="space-y-3">
+              <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
+              <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
+              <div className="h-4 bg-gray-200 rounded animate-pulse w-2/3"></div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-lg p-8 mb-12">
+          <div className="h-8 bg-gray-200 rounded-lg animate-pulse mb-6 max-w-sm mx-auto"></div>
+          <div className="grid sm:grid-cols-3 gap-6">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="text-center">
+                <div className="h-10 bg-gray-200 rounded-lg animate-pulse mb-2 max-w-20 mx-auto"></div>
+                <div className="h-4 bg-gray-200 rounded animate-pulse max-w-24 mx-auto"></div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="text-center">
+          <div className="h-8 bg-gray-200 rounded-lg animate-pulse mb-4 max-w-sm mx-auto"></div>
+          <div className="h-4 bg-gray-200 rounded animate-pulse mb-6 max-w-md mx-auto"></div>
+          <div className="h-12 bg-gray-200 rounded-lg animate-pulse max-w-40 mx-auto"></div>
         </div>
       </div>
     </div>

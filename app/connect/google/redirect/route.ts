@@ -20,12 +20,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL("/auth?error=no_token", request.url))
     }
 
-    const strapiUrl = process.env.NEXT_PUBLIC_API_URL || process.env.API_URL
+    // Use local Strapi URL in development, production URL otherwise
+    const strapiUrl =
+      process.env.NODE_ENV === "development"
+        ? "http://localhost:1337"
+        : process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
 
-    if (!strapiUrl) {
-      console.error("No Strapi URL configured")
-      return NextResponse.redirect(new URL("/auth?error=config_error", request.url))
-    }
+    console.log("Using Strapi URL:", strapiUrl)
 
     try {
       // Build the callback URL for Strapi
@@ -50,7 +51,15 @@ export async function GET(request: NextRequest) {
       if (!response.ok) {
         const errorText = await response.text()
         console.error("Strapi callback failed:", response.status, errorText)
-        return NextResponse.redirect(new URL("/auth?error=strapi_auth_failed", request.url))
+
+        // More specific error messages
+        if (response.status === 400) {
+          return NextResponse.redirect(new URL("/auth?error=provider_disabled", request.url))
+        } else if (response.status === 401) {
+          return NextResponse.redirect(new URL("/auth?error=invalid_token", request.url))
+        } else {
+          return NextResponse.redirect(new URL("/auth?error=strapi_auth_failed", request.url))
+        }
       }
 
       const data = await response.json()
