@@ -69,83 +69,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log("Found token in cookie:", token.substring(0, 10) + "...")
         setJwt(token)
 
-        // Try to verify token with Strapi first
-        try {
-          const userData = await getCurrentUser()
+        // Verify token with server
+        const userData = await getCurrentUser()
 
-          if (userData) {
-            console.log("User authenticated via Strapi:", userData)
-            setUser(userData)
-            setIsAuthenticated(true)
+        if (userData) {
+          console.log("User authenticated:", userData)
+          setUser(userData)
+          setIsAuthenticated(true)
 
-            // Ensure the token is available in all cookie formats for compatibility
-            if (!getCookie("jwt")) {
-              setCookie("jwt", token, 7)
-            }
-            if (!getCookie("authToken")) {
-              setCookie("authToken", token, 7)
-            }
-            if (!getCookie("auth_token")) {
-              setCookie("auth_token", token, 7)
-            }
-
-            // Also store user ID in cookie for easier access
-            if (userData.id) {
-              setCookie("userId", userData.id.toString(), 7)
-            }
-          } else {
-            throw new Error("No user data from Strapi")
+          // Ensure the token is available in all cookie formats for compatibility
+          if (!getCookie("jwt")) {
+            setCookie("jwt", token, 7)
           }
-        } catch (strapiError) {
-          console.log("Strapi auth failed, trying session fallback:", strapiError)
-
-          // Fallback to session endpoint
-          try {
-            const sessionResponse = await fetch("/api/auth/session", {
-              method: "GET",
-              cache: "no-store",
-            })
-
-            if (sessionResponse.ok) {
-              const sessionData = await sessionResponse.json()
-              if (sessionData?.user) {
-                console.log("User authenticated via session:", sessionData.user)
-                setUser(sessionData.user)
-                setIsAuthenticated(true)
-
-                // Ensure cookies are set
-                if (!getCookie("jwt")) {
-                  setCookie("jwt", token, 7)
-                }
-                if (!getCookie("authToken")) {
-                  setCookie("authToken", token, 7)
-                }
-                if (!getCookie("auth_token")) {
-                  setCookie("auth_token", token, 7)
-                }
-
-                if (sessionData.user.id) {
-                  setCookie("userId", sessionData.user.id.toString(), 7)
-                }
-              } else {
-                throw new Error("No user in session")
-              }
-            } else {
-              throw new Error("Session endpoint failed")
-            }
-          } catch (sessionError) {
-            console.log("Session fallback also failed:", sessionError)
-            // Clear invalid tokens
-            setUser(null)
-            setJwt(null)
-            setIsAuthenticated(false)
-
-            // Clear the cookies if the token is invalid
-            document.cookie = "authToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
-            document.cookie = "jwt=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
-            document.cookie = "auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
-            document.cookie = "userId=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
+          if (!getCookie("authToken")) {
+            setCookie("authToken", token, 7)
           }
+          if (!getCookie("auth_token")) {
+            setCookie("auth_token", token, 7)
+          }
+
+          // Also store user ID in cookie for easier access
+          if (userData.id) {
+            setCookie("userId", userData.id.toString(), 7)
+          }
+        } else {
+          console.log("No authenticated user found")
+          setUser(null)
+          setJwt(null)
+          setIsAuthenticated(false)
+
+          // Clear the cookies if the token is invalid
+          document.cookie = "authToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
+          document.cookie = "jwt=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
+          document.cookie = "auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
+          document.cookie = "userId=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
         }
       } else {
         console.log("No token found in cookies")

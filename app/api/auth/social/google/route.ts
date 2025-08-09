@@ -1,109 +1,61 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { cookies } from "next/headers"
+import { NextResponse } from "next/server"
 
-export async function GET(request: NextRequest) {
+/**
+ * Proxies Google id_token to Strapi's Google auth callback if the Strapi backend supports it.
+ * Query: ?id_token=...
+ * Returns the Strapi JSON response as-is, or a 400 if exchange fails.
+ */
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url)
+  const idToken = searchParams.get("id_token")
+
+  if (!idToken) {
+    return NextResponse.json({ error: "missing_id_token" }, { status: 400 })
+  }
+
+  const strapiUrl = process.env.NEXT_PUBLIC_API_URL
+  if (!strapiUrl) {
+    return NextResponse.json({ error: "missing_strapi_url" }, { status: 500 })
+  }
+
   try {
-    const { searchParams } = new URL(request.url)
-    const idToken = searchParams.get("id_token")
+    console.log("Proxying id_token to Strapi...")
 
-    if (!idToken) {
-      return NextResponse.redirect(new URL("/auth?error=no_token", request.url))
+    const res = await fetch(`${strapiUrl}/api/auth/google/callback?id_token=${encodeURIComponent(idToken)}`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    })
+
+    const text = await res.text()
+    let data: unknown
+
+    try {
+      data = JSON.parse(text)
+    } catch {
+      data = text
     }
 
-    // Try to exchange the id_token with Strapi
-    const strapiUrl = process.env.NEXT_PUBLIC_API_URL || process.env.API_URL
-
-    if (strapiUrl) {
-      try {
-        const response = await fetch(`${strapiUrl}/api/auth/google/callback?id_token=${idToken}`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        })
-
-        if (response.ok) {
-          const data = await response.json()
-
-          if (data.jwt) {
-            // Set cookies for the JWT
-            const cookieStore = cookies()
-            cookieStore.set("auth_token", data.jwt, {
-              httpOnly: true,
-              secure: process.env.NODE_ENV === "production",
-              sameSite: "lax",
-              maxAge: 60 * 60 * 24 * 7, // 7 days
-              path: "/",
-            })
-            cookieStore.set("jwt", data.jwt, {
-              httpOnly: false, // Allow client access
-              secure: process.env.NODE_ENV === "production",
-              sameSite: "lax",
-              maxAge: 60 * 60 * 24 * 7,
-              path: "/",
-            })
-            cookieStore.set("authToken", data.jwt, {
-              httpOnly: false,
-              secure: process.env.NODE_ENV === "production",
-              sameSite: "lax",
-              maxAge: 60 * 60 * 24 * 7,
-              path: "/",
-            })
-
-            if (data.user?.id) {
-              cookieStore.set("userId", String(data.user.id), {
-                httpOnly: false,
-                secure: process.env.NODE_ENV === "production",
-                sameSite: "lax",
-                maxAge: 60 * 60 * 24 * 7,
-                path: "/",
-              })
-            }
-
-            return NextResponse.redirect(new URL("/", request.url))
-          }
-        }
-      } catch (error) {
-        console.error("Strapi exchange failed:", error)
-      }
-    }
-
-    // Fallback: create a simple session token
-    const secret = process.env.REVALIDATE_SECRET || process.env.WEBHOOK_SECRET || process.env.API_TOKEN
-
-    if (secret) {
-      const jwt = require("jsonwebtoken")
-      const sessionToken = jwt.sign(
+    if (!res.ok) {
+      console.error("Strapi exchange failed:", res.status, data)
+      return NextResponse.json(
         {
-          id: `google_${Date.now()}`,
-          email: "user@example.com", // You'd extract this from id_token
-          provider: "google",
-          loginTime: Date.now(),
+          ok: false,
+          error: "strapi_exchange_failed",
+          status: res.status,
+          data,
         },
-        secret,
-        { expiresIn: "7d" },
+        { status: 400 },
       )
-
-      const cookieStore = cookies()
-      cookieStore.set("jwt", sessionToken, {
-        httpOnly: false,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 7,
-        path: "/",
-      })
-      cookieStore.set("authToken", sessionToken, {
-        httpOnly: false,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 7,
-        path: "/",
-      })
     }
 
-    return NextResponse.redirect(new URL("/", request.url))
-  } catch (error) {
-    console.error("Google auth error:", error)
-    return NextResponse.redirect(new URL("/auth?error=auth_failed", request.url))
+    console.log("Strapi exchange successful")
+    return NextResponse.json(data as any, { status: 200 })
+  } catch (e) {
+    console.error("Proxy failed:", e)
+    return NextResponse.json({ ok: false, error: "proxy_failed" }, { status: 500 })
   }
 }
