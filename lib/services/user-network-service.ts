@@ -32,9 +32,10 @@ function getApiUrl(): string {
   return process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
 }
 
-// Helper function to get auth token
+// Helper function to get auth token (server-only)
 function getApiToken(): string | null {
-  return process.env.API_TOKEN || process.env.NEXT_PUBLIC_API_TOKEN || null
+  // Important: do not read any NEXT_PUBLIC_ secret here
+  return process.env.API_TOKEN || null
 }
 
 // Helper function to ensure URL is absolute
@@ -118,8 +119,7 @@ export async function getFollowers(username: string, page = 1, pageSize = 10): P
     // Filter out unpublished followers
     const publishedFollowers = followers.filter((follow: any) => follow.publishedAt !== null)
 
-    // Since the follower field is null, we need to fetch the follower users separately
-    // First, collect all the follower relationship IDs
+    // Collect follower relationship IDs
     const followerRelationIds = publishedFollowers.map((follow: any) => follow.id)
 
     if (followerRelationIds.length === 0) {
@@ -134,8 +134,7 @@ export async function getFollowers(username: string, page = 1, pageSize = 10): P
       }
     }
 
-    // Now, fetch all users who have a follow relationship with this user
-    // We need to query for users where their ID matches the follower relationship ID
+    // Now, fetch all users (optimize as needed)
     const followersQuery = qs.stringify(
       {
         populate: ["profileImage"],
@@ -168,7 +167,6 @@ export async function getFollowers(username: string, page = 1, pageSize = 10): P
         if (followerUser.profileImage) {
           const imageUrl = followerUser.profileImage.url
           if (imageUrl) {
-            // Don't prepend the API URL here, we'll do it in the component
             profileImageUrl = imageUrl
           }
         }
@@ -176,7 +174,6 @@ export async function getFollowers(username: string, page = 1, pageSize = 10): P
         // Create thumbnail URL if available
         let thumbnailUrl = undefined
         if (followerUser.profileImage?.formats?.thumbnail?.url) {
-          // Don't prepend the API URL here, we'll do it in the component
           thumbnailUrl = followerUser.profileImage.formats.thumbnail.url
         }
 
@@ -213,9 +210,8 @@ export async function getFollowers(username: string, page = 1, pageSize = 10): P
             (follow: any) => follow.id?.toString() || follow.following?.id?.toString() || "",
           )
 
-          // Update isFollowing flag for each follower
-          followerUsers.forEach((user) => {
-            user.isFollowing = currentUserFollowing.includes(user.id.toString())
+          followerUsers.forEach((u) => {
+            u.isFollowing = currentUserFollowing.includes(u.id.toString())
           })
         }
       } catch (error) {
@@ -328,26 +324,18 @@ export async function getFollowing(username: string, page = 1, pageSize = 10): P
       }
     }
 
-    // Process following from the nested data
     const following = user.following || []
-
-    // Filter out unpublished following
     const publishedFollowing = following.filter((follow: any) => follow.publishedAt !== null)
 
-    // Extract following users from the relationship
     const followingUsers: NetworkUser[] = []
     const processedIds = new Set()
 
     for (const follow of publishedFollowing) {
-      // In this API structure, we need to look at who the user is following
-      // We'll need to make an additional request to get the following user details
       const followingId = follow.id
-
       if (followingId && !processedIds.has(followingId)) {
         processedIds.add(followingId)
 
         try {
-          // Get the following user details
           const followingQuery = qs.stringify(
             {
               filters: {
@@ -404,7 +392,7 @@ export async function getFollowing(username: string, page = 1, pageSize = 10): P
                       }
                     : undefined,
                 },
-                isFollowing: true, // Always true since this is a list of users the profile is following
+                isFollowing: true,
               })
             }
           }
@@ -414,10 +402,8 @@ export async function getFollowing(username: string, page = 1, pageSize = 10): P
       }
     }
 
-    // Get current user's following list if authenticated to set isFollowing flag
     if (isAuthenticated && userToken) {
       try {
-        // Use /api/users/me for the current user's following list
         const meResponse = await fetch(`${apiUrl}/api/users/me?populate=following`, {
           headers: {
             Authorization: `Bearer ${userToken}`,
@@ -431,9 +417,8 @@ export async function getFollowing(username: string, page = 1, pageSize = 10): P
             (follow: any) => follow.id?.toString() || follow.following?.id?.toString() || "",
           )
 
-          // Update isFollowing flag for each follower
-          followingUsers.forEach((user) => {
-            user.isFollowing = currentUserFollowing.includes(user.id.toString())
+          followingUsers.forEach((u) => {
+            u.isFollowing = currentUserFollowing.includes(u.id.toString())
           })
         }
       } catch (error) {
@@ -441,7 +426,6 @@ export async function getFollowing(username: string, page = 1, pageSize = 10): P
       }
     }
 
-    // Apply pagination
     const startIndex = (page - 1) * pageSize
     const paginatedUsers = followingUsers.slice(startIndex, startIndex + pageSize)
     const totalPages = Math.ceil(followingUsers.length / pageSize)
@@ -477,7 +461,6 @@ export async function toggleFollowStatus(
   currentlyFollowing: boolean,
 ): Promise<{ success: boolean; isFollowing: boolean; message?: string }> {
   try {
-    // For server-side actions, we need to check for user authentication
     const cookieStore = cookies()
     const token = cookieStore.get("jwt")?.value || cookieStore.get("authToken")?.value
 
@@ -529,34 +512,7 @@ export async function toggleFollowStatus(
     const targetUserId = targetUser.id
 
     if (currentlyFollowing) {
-      // Unfollow: Find and delete the follow relationship
-      // First, get the current user's following list
-      const meResponse = await fetch(`${apiUrl}/api/users/me?populate=following`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      if (!meResponse.ok) {
-        throw new Error(`API Error: ${meResponse.status} ${meResponse.statusText}`)
-      }
-
-      const meData = await meResponse.json()
-
-      // Find the follow relationship to delete
-      const followToDelete = (meData.following || []).find((follow: any) => {
-        return follow.id === targetUserId
-      })
-
-      if (!followToDelete) {
-        return {
-          success: true,
-          isFollowing: false,
-          message: "Already unfollowed",
-        }
-      }
-
-      // Delete the follow relationship
+      // Unfollow
       const unfollowResponse = await fetch(`${apiUrl}/api/users/unfollow/${targetUserId}`, {
         method: "DELETE",
         headers: {
@@ -573,7 +529,7 @@ export async function toggleFollowStatus(
         isFollowing: false,
       }
     } else {
-      // Follow: Create a new follow relationship
+      // Follow
       const followResponse = await fetch(`${apiUrl}/api/users/follow/${targetUserId}`, {
         method: "POST",
         headers: {

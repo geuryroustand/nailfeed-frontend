@@ -214,7 +214,7 @@ export class UserService {
         "Content-Type": "application/json",
       }
 
-      // If no token provided, use the API token from config
+      // If no token provided, use the API token from config (server-only; client receives null)
       const authToken = token || config.api.getApiToken()
 
       if (authToken) {
@@ -332,9 +332,6 @@ export class UserService {
 
   /**
    * Update a user's profile
-   * @param token JWT token for authentication
-   * @param userId User ID to update
-   * @param userData User data to update
    */
   static async updateProfile(
     token: string,
@@ -369,14 +366,12 @@ export class UserService {
         next: { revalidate: 0 },
       })
 
-      // Check for errors
       if (!response.ok) {
         const errorText = await response.text()
         console.error(`API error (${response.status}): ${errorText}`)
         throw new Error(`API error (${response.status}): ${errorText}`)
       }
 
-      // Parse the response
       const responseData = await response.json()
       console.log("Profile update response:", JSON.stringify(responseData, null, 2))
 
@@ -422,13 +417,13 @@ export class UserService {
       const uploadData = await uploadResponse.json()
       console.log("File upload response:", JSON.stringify(uploadData, null, 2))
 
-      if (!uploadData || !Array.isArray(uploadData) || uploadData.length === 0) {
+      if (!Array.isArray(uploadData) || uploadData.length === 0) {
         throw new Error("Failed to upload file: Invalid response")
       }
 
       const fileId = uploadData[0].id
 
-      // Now update the user profile with the new profile image ID using the correct endpoint
+      // Now update the user profile with the new profile image ID
       const updateResponse = await fetch(`${apiUrl}/api/users/${userId}`, {
         method: "PUT",
         headers: {
@@ -485,13 +480,13 @@ export class UserService {
       const uploadData = await uploadResponse.json()
       console.log("File upload response:", JSON.stringify(uploadData, null, 2))
 
-      if (!uploadData || !Array.isArray(uploadData) || uploadData.length === 0) {
+      if (!Array.isArray(uploadData) || uploadData.length === 0) {
         throw new Error("Failed to upload file: Invalid response")
       }
 
       const fileId = uploadData[0].id
 
-      // Now update the user profile with the new cover image ID using the correct endpoint
+      // Now update the user profile with the new cover image ID
       const updateResponse = await fetch(`${apiUrl}/api/users/${userId}`, {
         method: "PUT",
         headers: {
@@ -527,10 +522,9 @@ export class UserService {
     if (userData.profileImage && userData.profileImage.url) {
       userData.profileImage.url = UserService.ensureAbsoluteUrl(userData.profileImage.url, apiUrl)
 
-      // Process formats
       if (userData.profileImage.formats) {
         Object.keys(userData.profileImage.formats).forEach((format) => {
-          if (userData.profileImage.formats[format] && userData.profileImage.formats[format].url) {
+          if (userData.profileImage.formats[format]?.url) {
             userData.profileImage.formats[format].url = UserService.ensureAbsoluteUrl(
               userData.profileImage.formats[format].url,
               apiUrl,
@@ -544,10 +538,9 @@ export class UserService {
     if (userData.coverImage && userData.coverImage.url) {
       userData.coverImage.url = UserService.ensureAbsoluteUrl(userData.coverImage.url, apiUrl)
 
-      // Process formats
       if (userData.coverImage.formats) {
         Object.keys(userData.coverImage.formats).forEach((format) => {
-          if (userData.coverImage.formats[format] && userData.coverImage.formats[format].url) {
+          if (userData.coverImage.formats[format]?.url) {
             userData.coverImage.formats[format].url = UserService.ensureAbsoluteUrl(
               userData.coverImage.formats[format].url,
               apiUrl,
@@ -560,16 +553,14 @@ export class UserService {
     // Process posts and their media items
     if (userData.posts && Array.isArray(userData.posts)) {
       userData.posts = userData.posts.map((post) => {
-        // Process media items
         if (post.mediaItems && Array.isArray(post.mediaItems)) {
           post.mediaItems = post.mediaItems.map((item) => {
-            if (item.file && item.file.url) {
+            if (item.file?.url) {
               item.file.url = UserService.ensureAbsoluteUrl(item.file.url, apiUrl)
 
-              // Process formats
               if (item.file.formats) {
                 Object.keys(item.file.formats).forEach((format) => {
-                  if (item.file.formats[format] && item.file.formats[format].url) {
+                  if (item.file.formats[format]?.url) {
                     item.file.formats[format].url = UserService.ensureAbsoluteUrl(item.file.formats[format].url, apiUrl)
                   }
                 })
@@ -590,25 +581,16 @@ export class UserService {
    */
   static ensureAbsoluteUrl(url: string, baseUrl: string): string {
     if (!url) return url
-
-    // If it's already an absolute URL, return it as is
-    if (url.startsWith("http://") || url.startsWith("https://")) {
-      return url
-    }
-
-    // If it starts with a slash, append it to the base URL
+    if (url.startsWith("http://") || url.startsWith("https://")) return url
     if (url.startsWith("/")) {
-      // Remove trailing slash from base URL to prevent double slashes
       const cleanBaseUrl = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl
       return `${cleanBaseUrl}${url}`
     }
-
-    // If it doesn't start with a slash, add one
     return `${baseUrl}/${url}`
   }
 
   /**
-   * Get user engagement metrics - with improved error handling
+   * Get user engagement metrics - avoid client-side secrets
    */
   static async getUserEngagement(
     username: string,
@@ -618,46 +600,56 @@ export class UserService {
       const apiUrl = getApiUrl()
       console.log(`Fetching engagement for ${username} from ${apiUrl}`)
 
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
+      // If a token was provided, call Strapi directly
+      if (token) {
+        const response = await fetch(`${apiUrl}/api/users/engagement/${username}`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          cache: "no-store",
+        })
+
+        if (response.status === 404) {
+          console.log(`No engagement data found for ${username}, using default values`)
+          return { likes: 0, comments: 0, saves: 0 }
+        }
+
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error(`API error (${response.status}): ${errorText}`)
+          throw new Error(`API error (${response.status}): ${errorText}`)
+        }
+
+        return await response.json()
       }
 
-      // If no token provided, use the environment variable
-      const authToken = token || process.env.NEXT_PUBLIC_API_TOKEN || ""
-
-      if (authToken) {
-        headers["Authorization"] = `Bearer ${authToken}`
-      }
-
-      // Use cache: 'no-store' to ensure we get fresh data
-      const response = await fetch(`${apiUrl}/api/users/engagement/${username}`, {
-        method: "GET",
-        headers,
+      // No token available on the client: use the server proxy to attach credentials securely
+      const proxyResponse = await fetch("/api/auth-proxy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          method: "GET",
+          endpoint: `/api/users/engagement/${username}`,
+        }),
         cache: "no-store",
       })
 
-      // If we get a 404, the endpoint might not exist or the user might not have engagement data
-      // Return default values instead of throwing an error
-      if (response.status === 404) {
+      if (proxyResponse.status === 404) {
         console.log(`No engagement data found for ${username}, using default values`)
-        return {
-          likes: 0,
-          comments: 0,
-          saves: 0,
-        }
+        return { likes: 0, comments: 0, saves: 0 }
       }
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error(`API error (${response.status}): ${errorText}`)
-        throw new Error(`API error (${response.status}): ${errorText}`)
+      if (!proxyResponse.ok) {
+        const errorText = await proxyResponse.text()
+        console.error(`Proxy API error (${proxyResponse.status}): ${errorText}`)
+        throw new Error(`API error (${proxyResponse.status}): ${errorText}`)
       }
 
-      const data = await response.json()
-      return data
+      return await proxyResponse.json()
     } catch (error) {
       console.error(`Error fetching engagement for ${username}:`, error)
-      // Return default values instead of null to prevent UI errors
       return {
         likes: 0,
         comments: 0,
