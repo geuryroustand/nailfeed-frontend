@@ -32,12 +32,10 @@ const signupSchema = z
         message:
           "El nombre de usuario solo puede contener letras, números y guiones bajos.",
       }),
-    email: z
-      .string()
-      .email({
-        message:
-          "Por favor, introduce una dirección de correo electrónico válida.",
-      }),
+    email: z.string().email({
+      message:
+        "Por favor, introduce una dirección de correo electrónico válida.",
+    }),
     password: z
       .string()
       .min(8, { message: "La contraseña debe tener al menos 8 caracteres." })

@@ -1,21 +1,14 @@
 "use client";
 
-<<<<<<< HEAD
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
-=======
-import { useState } from "react"
-import { useToast } from "@/hooks/use-toast"
-import { Loader2 } from "lucide-react"
->>>>>>> main
 
 export default function AuthSocial() {
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const { toast } = useToast();
 
   // Get the API URL from environment variables
-<<<<<<< HEAD
   const baseURL =
     process.env.NODE_ENV === "development"
       ? "http://localhost:1337"
@@ -25,14 +18,6 @@ export default function AuthSocial() {
     setIsLoading(provider);
     // The loading state will be cleared when the page redirects
   };
-=======
-  const baseURL = process.env.NODE_ENV === "development" ? "http://localhost:1337" : process.env.NEXT_PUBLIC_API_URL
-
-  const handleLinkClick = (provider: string) => {
-    setIsLoading(provider)
-    // The loading state will be cleared when the page redirects
-  }
->>>>>>> main
 
   return (
     <div className="grid grid-cols-1 gap-3 mt-4">
@@ -68,10 +53,7 @@ export default function AuthSocial() {
         <span>Google</span>
       </a>
 
-<<<<<<< HEAD
-=======
       {/*
->>>>>>> main
       <a
         href={`${baseURL}/api/connect/facebook`}
         className="w-full text-xs sm:text-sm flex items-center justify-center px-4 py-2 relative border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
@@ -92,13 +74,9 @@ export default function AuthSocial() {
         </div>
         <span>Facebook</span>
       </a>
-<<<<<<< HEAD
-
-=======
       */}
 
       {/*
->>>>>>> main
       <a
         href={`${baseURL}/api/connect/instagram`}
         className="w-full text-xs sm:text-sm flex items-center justify-center px-4 py-2 relative border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
@@ -137,10 +115,7 @@ export default function AuthSocial() {
         </div>
         <span>Instagram</span>
       </a>
-<<<<<<< HEAD
-=======
       */}
->>>>>>> main
     </div>
   );
 }
