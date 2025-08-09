@@ -62,43 +62,90 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       console.log("Checking auth status...")
 
-      // Try to get token from cookie - check both possible formats
-      const token = getCookie("authToken") || getCookie("jwt")
+      // Try to get token from cookie - check all possible formats
+      const token = getCookie("authToken") || getCookie("jwt") || getCookie("auth_token")
 
       if (token) {
         console.log("Found token in cookie:", token.substring(0, 10) + "...")
         setJwt(token)
 
-        // Verify token with server
-        const userData = await getCurrentUser()
+        // Try to verify token with Strapi first
+        try {
+          const userData = await getCurrentUser()
 
-        if (userData) {
-          console.log("User authenticated:", userData)
-          setUser(userData)
-          setIsAuthenticated(true)
+          if (userData) {
+            console.log("User authenticated via Strapi:", userData)
+            setUser(userData)
+            setIsAuthenticated(true)
 
-          // Ensure the token is available in both cookie formats for compatibility
-          if (!getCookie("jwt")) {
-            setCookie("jwt", token, 7)
+            // Ensure the token is available in all cookie formats for compatibility
+            if (!getCookie("jwt")) {
+              setCookie("jwt", token, 7)
+            }
+            if (!getCookie("authToken")) {
+              setCookie("authToken", token, 7)
+            }
+            if (!getCookie("auth_token")) {
+              setCookie("auth_token", token, 7)
+            }
+
+            // Also store user ID in cookie for easier access
+            if (userData.id) {
+              setCookie("userId", userData.id.toString(), 7)
+            }
+          } else {
+            throw new Error("No user data from Strapi")
           }
-          if (!getCookie("authToken")) {
-            setCookie("authToken", token, 7)
-          }
+        } catch (strapiError) {
+          console.log("Strapi auth failed, trying session fallback:", strapiError)
 
-          // Also store user ID in cookie for easier access
-          if (userData.id) {
-            setCookie("userId", userData.id.toString(), 7)
-          }
-        } else {
-          console.log("No authenticated user found")
-          setUser(null)
-          setJwt(null)
-          setIsAuthenticated(false)
+          // Fallback to session endpoint
+          try {
+            const sessionResponse = await fetch("/api/auth/session", {
+              method: "GET",
+              cache: "no-store",
+            })
 
-          // Clear the cookies if the token is invalid
-          document.cookie = "authToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
-          document.cookie = "jwt=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
-          document.cookie = "userId=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
+            if (sessionResponse.ok) {
+              const sessionData = await sessionResponse.json()
+              if (sessionData?.user) {
+                console.log("User authenticated via session:", sessionData.user)
+                setUser(sessionData.user)
+                setIsAuthenticated(true)
+
+                // Ensure cookies are set
+                if (!getCookie("jwt")) {
+                  setCookie("jwt", token, 7)
+                }
+                if (!getCookie("authToken")) {
+                  setCookie("authToken", token, 7)
+                }
+                if (!getCookie("auth_token")) {
+                  setCookie("auth_token", token, 7)
+                }
+
+                if (sessionData.user.id) {
+                  setCookie("userId", sessionData.user.id.toString(), 7)
+                }
+              } else {
+                throw new Error("No user in session")
+              }
+            } else {
+              throw new Error("Session endpoint failed")
+            }
+          } catch (sessionError) {
+            console.log("Session fallback also failed:", sessionError)
+            // Clear invalid tokens
+            setUser(null)
+            setJwt(null)
+            setIsAuthenticated(false)
+
+            // Clear the cookies if the token is invalid
+            document.cookie = "authToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
+            document.cookie = "jwt=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
+            document.cookie = "auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
+            document.cookie = "userId=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
+          }
         }
       } else {
         console.log("No token found in cookies")
@@ -136,6 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Clear cookies on client side
       document.cookie = "authToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
       document.cookie = "jwt=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
+      document.cookie = "auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
       document.cookie = "userId=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
 
       // Redirect to auth page
@@ -162,9 +210,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log("Setting JWT in context:", token.substring(0, 10) + "...")
         setJwt(token)
 
-        // Set the token in both cookie formats for compatibility
+        // Set the token in all cookie formats for compatibility
         setCookie("authToken", token, 7)
         setCookie("jwt", token, 7)
+        setCookie("auth_token", token, 7)
 
         // Also store user ID in cookie for easier access
         if (userData.id) {

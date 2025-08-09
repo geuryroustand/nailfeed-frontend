@@ -1,96 +1,49 @@
-import { redirect } from "next/navigation"
-import { cookies } from "next/headers"
+"use client"
 
-interface CallbackPageProps {
-  params: {
-    provider: string
-  }
-  searchParams: {
-    access_token?: string
-    error?: string
-    code?: string
-    state?: string
-  }
-}
+import { useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { useAuth } from "@/context/auth-context"
 
-export default async function CallbackPage({ params, searchParams }: CallbackPageProps) {
-  const { provider } = params
-  const { access_token, error, code, state } = searchParams
+export default function AuthCallback({ params }: { params: { provider: string } }) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { checkAuthStatus } = useAuth()
 
-  // Check for errors
-  if (error) {
-    redirect(`/auth?error=${error}`)
-  }
+  useEffect(() => {
+    const handleCallback = async () => {
+      const idToken = searchParams.get("id_token")
+      const error = searchParams.get("error")
 
-  // Verify CSRF token if state is provided
-  if (state) {
-    const storedCsrf = cookies().get("social_auth_csrf")?.value
-    if (!storedCsrf || storedCsrf !== state) {
-      redirect("/auth?error=invalid_state")
-    }
-  }
-
-  try {
-    // Handle the authentication based on provider
-    if (access_token) {
-      // Exchange the access token for user data
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/auth/${provider}/callback?access_token=${access_token}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        },
-      )
-
-      if (!response.ok) {
-        throw new Error("Failed to authenticate")
+      if (error) {
+        console.error("Auth error:", error)
+        router.push("/auth?error=" + error)
+        return
       }
 
-      const data = await response.json()
-
-      // Set auth cookies
-      cookies().set("auth_token", data.jwt, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        maxAge: 60 * 60 * 24 * 7, // 1 week
-        path: "/",
-      })
-
-      // Redirect to home page
-      redirect("/")
-    } else if (code) {
-      // Exchange the code for an access token
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/${provider}/callback?code=${code}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      })
-
-      if (!response.ok) {
-        throw new Error("Failed to authenticate")
+      if (idToken && params.provider === "google") {
+        try {
+          // Redirect to our API route to handle the token exchange
+          window.location.href = `/api/auth/social/google?id_token=${idToken}`
+        } catch (error) {
+          console.error("Token exchange failed:", error)
+          router.push("/auth?error=token_exchange_failed")
+        }
+      } else {
+        // Check if we're already authenticated (cookies might be set)
+        await checkAuthStatus()
+        router.push("/")
       }
-
-      const data = await response.json()
-
-      // Set auth cookies
-      cookies().set("auth_token", data.jwt, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        maxAge: 60 * 60 * 24 * 7, // 1 week
-        path: "/",
-      })
-
-      // Redirect to home page
-      redirect("/")
-    } else {
-      // No token or code provided
-      redirect("/auth?error=missing_token")
     }
-  } catch (error) {
-    console.error("Social auth callback error:", error)
-    redirect("/auth?error=authentication_failed")
-  }
+
+    handleCallback()
+  }, [searchParams, params.provider, router, checkAuthStatus])
+
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500 mx-auto mb-4"></div>
+        <p className="text-gray-600">Completing authentication...</p>
+      </div>
+    </div>
+  )
 }
