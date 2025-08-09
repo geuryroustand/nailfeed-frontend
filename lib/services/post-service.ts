@@ -1,41 +1,88 @@
-import qs from "qs"
-import { fetchWithRetry, safeJsonParse } from "../fetch-with-retry"
-import { API_URL, API_TOKEN, REQUEST_CONFIG } from "../config"
+import qs from "qs";
+import { fetchWithRetry, safeJsonParse } from "../fetch-with-retry";
+import { API_URL, REQUEST_CONFIG, getServerApiToken } from "../config";
 
-// Global request tracker to implement client-side rate limiting
-const requestTracker = {
-  lastRequestTime: 0,
-  minRequestInterval: REQUEST_CONFIG.minRequestInterval,
-}
+// Runtime helpers
+const isServer = typeof window === "undefined";
+const serverToken = getServerApiToken();
+const useProxy = !isServer || !serverToken; // Use proxy on client or if no server token is available
 
-export type ContentType = "image" | "video" | "text" | "text-background" | "media-gallery"
-export type GalleryLayout = "grid" | "carousel" | "featured"
+// Join base and path
+const joinUrl = (base: string, path: string) => {
+  const b = base.endsWith("/") ? base.slice(0, -1) : base;
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return `${b}${p}`;
+};
+
+// Call our server proxy for JSON requests
+const proxyJson = async (endpoint: string, method = "GET", data?: any) => {
+  const res = await fetch("/api/auth-proxy", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+    body: JSON.stringify({ endpoint, method, data }),
+  });
+  return res;
+};
+
+// Call Strapi directly on server
+const directJson = async (
+  fullUrl: string,
+  method = "GET",
+  headers: HeadersInit = {},
+  body?: any
+) => {
+  return fetchWithRetry(
+    fullUrl,
+    {
+      method,
+      headers,
+      body:
+        body !== undefined
+          ? typeof body === "string"
+            ? body
+            : JSON.stringify(body)
+          : undefined,
+    },
+    2
+  );
+};
+
+export type ContentType =
+  | "image"
+  | "video"
+  | "text"
+  | "text-background"
+  | "media-gallery";
+export type GalleryLayout = "grid" | "carousel" | "featured";
 
 export class PostService {
   // Helper function to construct full URLs for media items
   private static getFullUrl(relativePath: string): string {
-    if (!relativePath) return ""
-    if (relativePath.startsWith("http")) return relativePath
-
-    return `${API_URL}${relativePath.startsWith("/") ? "" : "/"}${relativePath}`
+    if (!relativePath) return "";
+    if (relativePath.startsWith("http")) return relativePath;
+    return `${API_URL}${
+      relativePath.startsWith("/") ? "" : "/"
+    }${relativePath}`;
   }
 
   // Get posts with pagination
   static async getPosts(page = 1, pageSize = 10, cacheBuster?: number) {
-    // Implement client-side request throttling
-    const now = Date.now()
-    const timeSinceLastRequest = now - requestTracker.lastRequestTime
-
-    if (timeSinceLastRequest < requestTracker.minRequestInterval) {
-      // Wait before making the next request
-      await new Promise((resolve) => setTimeout(resolve, requestTracker.minRequestInterval - timeSinceLastRequest))
+    // Client-side throttling
+    const now = Date.now();
+    PostService.requestTracker.lastRequestTime ??= 0;
+    const timeSinceLast = now - PostService.requestTracker.lastRequestTime;
+    if (timeSinceLast < PostService.requestTracker.minRequestInterval) {
+      await new Promise((r) =>
+        setTimeout(
+          r,
+          PostService.requestTracker.minRequestInterval - timeSinceLast
+        )
+      );
     }
-
-    // Update last request time
-    requestTracker.lastRequestTime = Date.now()
+    PostService.requestTracker.lastRequestTime = Date.now();
 
     try {
-      // Build a structured query using qs
       const query = {
         fields: [
           "id",
@@ -51,113 +98,66 @@ export class PostService {
         populate: {
           user: {
             fields: ["id", "username", "displayName", "documentId"],
-            populate: {
-              profileImage: {
-                fields: ["url", "formats"],
-              },
-            },
+            populate: { profileImage: { fields: ["url", "formats"] } },
           },
           mediaItems: {
             fields: ["id", "type", "order", "documentId"],
-            populate: {
-              file: {
-                fields: ["url", "formats"],
-              },
-            },
+            populate: { file: { fields: ["url", "formats"] } },
           },
-          tags: {
-            fields: ["id", "name", "documentId"],
-          },
+          tags: { fields: ["id", "name", "documentId"] },
         },
-        pagination: {
-          page,
-          pageSize,
-        },
-        sort: ["publishedAt:desc"], // Sort by newest first
+        pagination: { page, pageSize },
+        sort: ["publishedAt:desc"],
+      };
+
+      const queryString = qs.stringify(query, { encodeValuesOnly: true });
+      const cacheParam = cacheBuster ? `&_cb=${cacheBuster}` : "";
+      const endpoint = `/api/posts?${queryString}${cacheParam}`;
+
+      // Perform request (proxy on client, direct on server)
+      let resp: Response;
+      if (useProxy) {
+        resp = await proxyJson(endpoint, "GET");
+      } else {
+        const fullUrl = joinUrl(API_URL, endpoint);
+        const headers: HeadersInit = { "Content-Type": "application/json" };
+        if (serverToken) headers["Authorization"] = `Bearer ${serverToken}`;
+        resp = await directJson(fullUrl, "GET", headers);
       }
 
-      // Convert the query to a string
-      const queryString = qs.stringify(query, { encodeValuesOnly: true })
-
-      // Add cache buster to avoid hitting cached errors
-      const cacheParam = cacheBuster ? `&_cb=${cacheBuster}` : ""
-
-      // Construct the endpoint
-      const endpoint = `/api/posts?${queryString}${cacheParam}`
-      const fullUrl = `${API_URL}${API_URL.endsWith("/") ? "" : "/"}${endpoint.startsWith("/") ? endpoint.substring(1) : endpoint}`
-
-      console.log(`PostService: Fetching posts from ${fullUrl}`)
-
-      // Prepare headers
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
+      if (resp.status === 429) {
+        return { error: { code: "429", message: "Too Many Requests" } };
       }
-
-      // Add authorization header if token exists
-      if (API_TOKEN) {
-        headers["Authorization"] = `Bearer ${API_TOKEN}`
-      }
-
-      // Make the request
-      const response = await fetchWithRetry(
-        fullUrl,
-        {
-          method: "GET",
-          headers,
-        },
-        2, // Reduce retries to 2 to avoid excessive retries
-      )
-
-      // Check for specific error status codes
-      if (response.status === 429) {
+      if (!resp.ok) {
         return {
           error: {
-            code: "429",
-            message: "Too Many Requests",
+            code: String(resp.status),
+            message: resp.statusText || "HTTP error",
           },
-        }
+        };
       }
 
-      if (!response.ok) {
-        return {
-          error: {
-            code: String(response.status),
-            message: response.statusText || "HTTP error",
-          },
-        }
-      }
-
-      // Safely parse the JSON response
-      const data = await safeJsonParse(response)
-
-      // Check if the response has an error property
-      if (data.error) {
-        return data
-      }
-
-      return data
+      const data = await safeJsonParse(resp);
+      if (data.error) return data;
+      return data;
     } catch (error) {
       return {
         error: {
           code: "UNKNOWN_ERROR",
           message: error instanceof Error ? error.message : "Unknown error",
         },
-      }
+      };
     }
   }
 
   // Get posts by username
-  static async getPostsByUsername(username: string, token?: string): Promise<any[]> {
+  static async getPostsByUsername(
+    username: string,
+    token?: string
+  ): Promise<any[]> {
     try {
-      // Build a structured query using qs
       const query = {
-        filters: {
-          user: {
-            username: {
-              $eq: username,
-            },
-          },
-        },
+        filters: { user: { username: { $eq: username } } },
         fields: [
           "id",
           "documentId",
@@ -172,86 +172,56 @@ export class PostService {
         populate: {
           user: {
             fields: ["id", "username", "displayName", "documentId"],
-            populate: {
-              profileImage: {
-                fields: ["url", "formats"],
-              },
-            },
+            populate: { profileImage: { fields: ["url", "formats"] } },
           },
           mediaItems: {
             fields: ["id", "type", "order", "documentId"],
-            populate: {
-              file: {
-                fields: ["url", "formats"],
-              },
-            },
+            populate: { file: { fields: ["url", "formats"] } },
           },
-          tags: {
-            fields: ["id", "name", "documentId"],
-          },
+          tags: { fields: ["id", "name", "documentId"] },
         },
-        sort: ["publishedAt:desc"], // Sort by newest first
-        pagination: {
-          pageSize: 50, // Get more posts at once
-        },
+        sort: ["publishedAt:desc"],
+        pagination: { pageSize: 50 },
+      };
+
+      const queryString = qs.stringify(query, { encodeValuesOnly: true });
+      const endpoint = `/api/posts?${queryString}`;
+
+      let res: Response;
+      if (useProxy) {
+        res = await proxyJson(endpoint, "GET");
+      } else {
+        const fullUrl = joinUrl(API_URL, endpoint);
+        const headers: HeadersInit = { "Content-Type": "application/json" };
+        const auth = token || serverToken;
+        if (auth) headers["Authorization"] = `Bearer ${auth}`;
+        res = await fetch(fullUrl, {
+          method: "GET",
+          headers,
+          cache: "no-store",
+        });
       }
 
-      // Convert the query to a string
-      const queryString = qs.stringify(query, { encodeValuesOnly: true })
+      if (!res.ok) return [];
+      const responseData = await res.json();
 
-      // Construct the endpoint
-      const endpoint = `/api/posts?${queryString}`
-      const fullUrl = `${API_URL}${API_URL.endsWith("/") ? "" : "/"}${endpoint.startsWith("/") ? endpoint.substring(1) : endpoint}`
+      let posts: any[] = [];
+      if (responseData.data && Array.isArray(responseData.data))
+        posts = responseData.data;
+      else if (responseData.results && Array.isArray(responseData.results))
+        posts = responseData.results;
+      else if (Array.isArray(responseData)) posts = responseData;
 
-      // Prepare headers
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
-      }
-
-      // Add authorization header if token exists
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`
-      } else if (API_TOKEN) {
-        headers["Authorization"] = `Bearer ${API_TOKEN}`
-      }
-
-      // Make the request
-      const response = await fetch(fullUrl, {
-        method: "GET",
-        headers,
-        cache: "no-store",
-      })
-
-      if (!response.ok) {
-        return []
-      }
-
-      // Parse the JSON response
-      const responseData = await response.json()
-
-      // Extract posts from the response
-      let posts = []
-      if (responseData.data && Array.isArray(responseData.data)) {
-        posts = responseData.data
-      } else if (responseData.results && Array.isArray(responseData.results)) {
-        posts = responseData.results
-      } else if (Array.isArray(responseData)) {
-        posts = responseData
-      }
-
-      return posts
-    } catch (error) {
-      return []
+      return posts;
+    } catch {
+      return [];
     }
   }
 
   // Get a single post by ID or documentId
   static async getPost(idOrDocumentId: string | number) {
     try {
-      // Determine if we're dealing with a numeric ID or a documentId string
-      const isNumericId = !isNaN(Number(idOrDocumentId))
-
-      // Build a structured query using qs
+      const isNumericId = !isNaN(Number(idOrDocumentId));
       const query = {
         fields: [
           "id",
@@ -267,355 +237,283 @@ export class PostService {
         populate: {
           user: {
             fields: ["id", "username", "displayName", "documentId"],
-            populate: {
-              profileImage: {
-                fields: ["url", "formats"],
-              },
-            },
+            populate: { profileImage: { fields: ["url", "formats"] } },
           },
           mediaItems: {
             fields: ["id", "type", "order", "documentId"],
-            populate: {
-              file: {
-                fields: ["url", "formats"],
-              },
-            },
+            populate: { file: { fields: ["url", "formats"] } },
           },
-          tags: {
-            fields: ["id", "name", "documentId"],
-          },
+          tags: { fields: ["id", "name", "documentId"] },
         },
-        // If it's a documentId (string), add a filter
         ...(!isNumericId
-          ? {
-              filters: {
-                documentId: {
-                  $eq: idOrDocumentId,
-                },
-              },
-            }
+          ? { filters: { documentId: { $eq: idOrDocumentId } } }
           : {}),
+      };
+
+      const queryString = qs.stringify(query, { encodeValuesOnly: true });
+      const endpoint = isNumericId
+        ? `/api/posts/${idOrDocumentId}?${queryString}`
+        : `/api/posts?${queryString}`;
+
+      let resp: Response;
+      if (useProxy) {
+        resp = await proxyJson(endpoint, "GET");
+      } else {
+        const fullUrl = joinUrl(API_URL, endpoint);
+        const headers: HeadersInit = { "Content-Type": "application/json" };
+        if (serverToken) headers["Authorization"] = `Bearer ${serverToken}`;
+        resp = await fetchWithRetry(fullUrl, { method: "GET", headers });
       }
 
-      // Convert the query to a string
-      const queryString = qs.stringify(query, { encodeValuesOnly: true })
-
-      // Construct the endpoint based on whether we're using ID or documentId
-      const endpoint = isNumericId ? `/api/posts/${idOrDocumentId}?${queryString}` : `/api/posts?${queryString}`
-
-      // Log the full URL that would be used
-      const fullUrl = `${API_URL}${API_URL.endsWith("/") ? "" : "/"}${endpoint.startsWith("/") ? endpoint.substring(1) : endpoint}`
-
-      // Prepare headers
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
-      }
-
-      // Add authorization header if token exists
-      if (API_TOKEN) {
-        headers["Authorization"] = `Bearer ${API_TOKEN}`
-      }
-
-      // Make the request using our improved fetch utility
-      const response = await fetchWithRetry(fullUrl, {
-        method: "GET",
-        headers,
-      })
-
-      if (!response.ok) {
-        const errorData = await safeJsonParse(response)
+      if (!resp.ok) {
+        const errorData = await safeJsonParse(resp);
         return {
           error: {
-            code: String(response.status),
-            message: errorData.error?.message || response.statusText || "Unknown error",
+            code: String(resp.status),
+            message:
+              errorData?.error?.message || resp.statusText || "Unknown error",
           },
-        }
+        };
       }
 
-      const data = await safeJsonParse(response)
+      const data = await safeJsonParse(resp);
 
-      // If we're using documentId, we need to extract the first item from the array
-      if (!isNumericId && data.data && Array.isArray(data.data) && data.data.length > 0) {
-        return {
-          data: data.data[0],
-          meta: data.meta,
-        }
+      if (
+        !isNumericId &&
+        data.data &&
+        Array.isArray(data.data) &&
+        data.data.length > 0
+      ) {
+        return { data: data.data[0], meta: data.meta };
       }
 
-      return data
+      return data;
     } catch (error) {
       return {
         error: {
           code: "UNKNOWN_ERROR",
           message: error instanceof Error ? error.message : "Unknown error",
         },
-      }
+      };
     }
   }
 
-  // The rest of the methods remain the same...
-  // For brevity, I'm not updating all methods, but in a real implementation,
-  // you would want to apply similar error handling improvements to all methods
-  // Create a new post with proper Strapi 5 format
+  // Create a new post (supports client via proxy upload)
   static async createPost(postData: {
-    title: string
-    description: string
-    contentType?: ContentType
-    background?: any
-    featured?: boolean
-    galleryLayout?: GalleryLayout
-    userId?: string // This should be the documentId, not the numeric ID
-    tags?: string[] // Add tags array
-    mediaFiles?: File[] // Add media files array
+    title: string;
+    description: string;
+    contentType?: ContentType;
+    background?: any;
+    featured?: boolean;
+    galleryLayout?: GalleryLayout;
+    userId?: string; // Strapi 5 relation (documentId)
+    tags?: string[];
+    mediaFiles?: File[];
   }) {
     try {
-      // Extract data
-      const { userId, tags = [], mediaFiles = [], ...postFields } = postData
+      const { userId, tags = [], mediaFiles = [], ...postFields } = postData;
+      const apiUrl = API_URL;
 
-      // Get the token from environment variable
-      const token = process.env.NEXT_PUBLIC_API_TOKEN || ""
-
-      // Prepare headers
-      const headers: HeadersInit = {
-        Authorization: `Bearer ${token}`,
-      }
-
-      // Construct the API URL
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
-
-      // STEP 1: Upload media files first if they exist
-      let uploadedMediaItems: any[] = []
-
+      // STEP 1: Upload media files
+      let uploadedMediaItems: any[] = [];
       if (mediaFiles.length > 0) {
-        console.log("PostService: Uploading media files first...")
-
-        try {
-          // Upload files to Strapi upload endpoint
-          const uploadFormData = new FormData()
-
-          for (let i = 0; i < mediaFiles.length; i++) {
-            const file = mediaFiles[i]
-            uploadFormData.append("files", file, `${i}-${file.name}`)
+        if (useProxy) {
+          // Upload through proxy to keep token server-side
+          const uploadFormData = new FormData();
+          mediaFiles.forEach((file, idx) =>
+            uploadFormData.append("files", file, `${idx}-${file.name}`)
+          );
+          const uploadRes = await fetch(
+            `/api/auth-proxy/upload?endpoint=${encodeURIComponent(
+              "/api/upload"
+            )}`,
+            {
+              method: "POST",
+              body: uploadFormData,
+            }
+          );
+          if (!uploadRes.ok) {
+            const errorText = await uploadRes.text();
+            throw new Error(
+              `File upload failed with status ${uploadRes.status}: ${errorText}`
+            );
           }
-
-          const uploadUrl = `${apiUrl}/api/upload`
+          const uploadedFiles = await uploadRes.json();
+          uploadedMediaItems = uploadedFiles.map(
+            (file: any, index: number) => ({
+              file: file.id,
+              type: file.mime?.startsWith("image/") ? "image" : "video",
+              order: index + 1,
+            })
+          );
+        } else {
+          // Server direct upload
+          const token = serverToken || "";
+          const headers: HeadersInit = { Authorization: `Bearer ${token}` };
+          const uploadFormData = new FormData();
+          mediaFiles.forEach((file, idx) =>
+            uploadFormData.append("files", file, `${idx}-${file.name}`)
+          );
+          const uploadUrl = joinUrl(apiUrl, "/api/upload");
           const uploadResponse = await fetch(uploadUrl, {
             method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
+            headers,
             body: uploadFormData,
-          })
-
+          });
           if (!uploadResponse.ok) {
-            const errorText = await uploadResponse.text()
-            throw new Error(`File upload failed with status ${uploadResponse.status}: ${errorText}`)
+            const errorText = await uploadResponse.text();
+            throw new Error(
+              `File upload failed with status ${uploadResponse.status}: ${errorText}`
+            );
           }
-
-          const uploadedFiles = await uploadResponse.json()
-          console.log("PostService: Files uploaded successfully:", uploadedFiles)
-
-          // Create mediaItems array with uploaded file IDs
-          uploadedMediaItems = uploadedFiles.map((file: any, index: number) => ({
-            file: file.id, // Use the uploaded file ID
-            type: file.mime.startsWith("image/") ? "image" : "video",
-            order: index + 1,
-          }))
-
-          console.log("PostService: Prepared media items:", uploadedMediaItems)
-        } catch (error) {
-          console.error("PostService: File upload failed:", error)
-          throw new Error(`File upload failed: ${error instanceof Error ? error.message : "Unknown error"}`)
+          const uploadedFiles = await uploadResponse.json();
+          uploadedMediaItems = uploadedFiles.map(
+            (file: any, index: number) => ({
+              file: file.id,
+              type: file.mime?.startsWith("image/") ? "image" : "video",
+              order: index + 1,
+            })
+          );
         }
       }
 
-      // STEP 2: Create the post data object with proper Strapi 5 format
+      // STEP 2: Create post
       const data = {
         data: {
           ...postFields,
-          // Only include user if userId is provided
-          ...(userId
-            ? {
-                user: {
-                  connect: [userId], // Strapi 5 relation format - must be documentId
-                },
-              }
-            : {}),
-          // Add tags array directly
-          tags: tags,
-          // Add mediaItems array with uploaded file references
+          ...(userId ? { user: { connect: [userId] } } : {}),
+          tags,
           mediaItems: uploadedMediaItems,
         },
-      }
+      };
 
-      console.log("PostService: Creating post with data:", JSON.stringify(data, null, 2))
-
-      // Construct the full URL for post creation
-      const endpoint = `/api/posts`
-      const fullUrl = `${apiUrl}${apiUrl.endsWith("/") ? "" : "/"}${endpoint.startsWith("/") ? endpoint.substring(1) : endpoint}`
-
-      // Make the post creation request
-      const fetchResponse = await fetch(fullUrl, {
-        method: "POST",
-        headers: {
+      let createRes: Response;
+      if (useProxy) {
+        createRes = await proxyJson("/api/posts", "POST", data);
+      } else {
+        const token = serverToken || "";
+        const headers: HeadersInit = {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(data),
-      })
-
-      if (!fetchResponse.ok) {
-        const errorText = await fetchResponse.text()
-        throw new Error(`API error (${fetchResponse.status}): ${errorText}`)
+        };
+        const fullUrl = joinUrl(apiUrl, "/api/posts");
+        createRes = await fetch(fullUrl, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(data),
+        });
       }
 
-      let response = await fetchResponse.json()
+      if (!createRes.ok) {
+        const errorText = await createRes.text();
+        throw new Error(`API error (${createRes.status}): ${errorText}`);
+      }
 
-      // Fetch complete post data with populated relations
+      let response = await createRes.json();
+
+      // STEP 3: Fetch complete post data
       try {
-        if (response.data && response.data.id) {
+        if (response.data?.id) {
           const query = qs.stringify(
             {
               populate: {
                 user: {
                   fields: ["id", "username", "displayName", "documentId"],
-                  populate: {
-                    profileImage: {
-                      fields: ["url", "formats"],
-                    },
-                  },
+                  populate: { profileImage: { fields: ["url", "formats"] } },
                 },
                 mediaItems: {
                   fields: ["id", "type", "order", "file"],
-                  populate: {
-                    file: {
-                      fields: ["url", "formats"],
-                    },
-                  },
+                  populate: { file: { fields: ["url", "formats"] } },
                 },
-                tags: {
-                  fields: ["id", "name", "documentId"],
-                },
+                tags: { fields: ["id", "name", "documentId"] },
               },
             },
-            { encodeValuesOnly: true },
-          )
-
-          const completeDataUrl = `${apiUrl}/api/posts/${response.data.id}?${query}`
-
-          const completeDataResponse = await fetch(completeDataUrl, {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          })
-
-          if (completeDataResponse.ok) {
-            const completeData = await completeDataResponse.json()
-            response = {
-              ...response,
-              completeData: completeData,
-            }
+            { encodeValuesOnly: true }
+          );
+          const completeEndpoint = `/api/posts/${response.data.id}?${query}`;
+          let completeRes: Response;
+          if (useProxy) {
+            completeRes = await proxyJson(completeEndpoint, "GET");
+          } else {
+            const token = serverToken || "";
+            const headers: HeadersInit = { Authorization: `Bearer ${token}` };
+            const fullUrl = joinUrl(apiUrl, completeEndpoint);
+            completeRes = await fetch(fullUrl, { method: "GET", headers });
+          }
+          if (completeRes.ok) {
+            const completeData = await completeRes.json();
+            response = { ...response, completeData };
           }
         }
-      } catch (error) {
-        console.error("PostService: Failed to fetch complete post data:", error)
+      } catch (err) {
+        console.error("PostService: Failed to fetch complete post data:", err);
       }
 
-      return response
+      return response;
     } catch (error) {
-      throw error
+      throw error;
     }
   }
 
-  // Update an existing post
   static async updatePost(id: number | string, postData: any) {
     try {
-      // Format the data for Strapi 5
-      const data = {
-        data: postData,
+      const data = { data: postData };
+
+      let res: Response;
+      if (useProxy) {
+        res = await proxyJson(`/api/posts/${id}`, "PUT", data);
+      } else {
+        const token = serverToken || "";
+        const headers: HeadersInit = {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        };
+        const fullUrl = joinUrl(API_URL, `/api/posts/${id}`);
+        res = await fetch(fullUrl, {
+          method: "PUT",
+          headers,
+          body: JSON.stringify(data),
+        });
       }
 
-      // Get the token from environment variable
-      const token = process.env.NEXT_PUBLIC_API_TOKEN || ""
-
-      // Prepare headers
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`API error (${res.status}): ${errorText}`);
       }
-
-      // Add authorization header if token exists
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`
-      }
-
-      // Construct the full URL
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
-      const endpoint = `/api/posts/${id}`
-      const fullUrl = `${apiUrl}${apiUrl.endsWith("/") ? "" : "/"}${endpoint.startsWith("/") ? endpoint.substring(1) : endpoint}`
-
-      // Make the request
-      const fetchResponse = await fetch(fullUrl, {
-        method: "PUT",
-        headers,
-        body: JSON.stringify(data),
-      })
-
-      if (!fetchResponse.ok) {
-        const errorText = await fetchResponse.text()
-        throw new Error(`API error (${fetchResponse.status}): ${errorText}`)
-      }
-
-      const response = await fetchResponse.json()
-      return response
+      return await res.json();
     } catch (error) {
-      throw error
+      throw error;
     }
   }
 
-  // Delete a post
   static async deletePost(id: number | string) {
     try {
-      // Get the token from environment variable
-      const token = process.env.NEXT_PUBLIC_API_TOKEN || ""
-
-      // Prepare headers
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
+      let res: Response;
+      if (useProxy) {
+        res = await proxyJson(`/api/posts/${id}`, "DELETE");
+      } else {
+        const token = serverToken || "";
+        const headers: HeadersInit = {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        };
+        const fullUrl = joinUrl(API_URL, `/api/posts/${id}`);
+        res = await fetch(fullUrl, { method: "DELETE", headers });
       }
 
-      // Add authorization header if token exists
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`API error (${res.status}): ${errorText}`);
       }
-
-      // Construct the full URL
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
-      const endpoint = `/api/posts/${id}`
-      const fullUrl = `${apiUrl}${apiUrl.endsWith("/") ? "" : "/"}${endpoint.startsWith("/") ? endpoint.substring(1) : endpoint}`
-
-      // Make the request
-      const fetchResponse = await fetch(fullUrl, {
-        method: "DELETE",
-        headers,
-      })
-
-      if (!fetchResponse.ok) {
-        const errorText = await fetchResponse.text()
-        throw new Error(`API error (${fetchResponse.status}): ${errorText}`)
-      }
-
-      const response = await fetchResponse.json()
-      return response
+      return await res.json();
     } catch (error) {
-      throw error
+      throw error;
     }
   }
 
   // Like a post
   static async likePost(postId: number | string, userId: number | string) {
     try {
-      // Format the data for Strapi 5
       const data = {
         data: {
           post: {
@@ -625,232 +523,82 @@ export class PostService {
             connect: [typeof userId === "string" ? userId : userId.toString()],
           },
         },
+      };
+
+      let res: Response;
+      if (useProxy) {
+        res = await proxyJson("/api/likes", "POST", data);
+      } else {
+        const token = serverToken || "";
+        const headers: HeadersInit = {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        };
+        const fullUrl = joinUrl(API_URL, "/api/likes");
+        res = await fetch(fullUrl, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(data),
+        });
       }
 
-      // Get the token from environment variable
-      const token = process.env.NEXT_PUBLIC_API_TOKEN || ""
-
-      // Prepare headers
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`API error (${res.status}): ${errorText}`);
       }
 
-      // Add authorization header if token exists
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`
-      }
-
-      // Construct the full URL
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
-      const endpoint = `/api/likes`
-      const fullUrl = `${apiUrl}${apiUrl.endsWith("/") ? "" : "/"}${endpoint.startsWith("/") ? endpoint.substring(1) : endpoint}`
-
-      // Make the request
-      const fetchResponse = await fetch(fullUrl, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(data),
-      })
-
-      if (!fetchResponse.ok) {
-        const errorText = await fetchResponse.text()
-        throw new Error(`API error (${fetchResponse.status}): ${errorText}`)
-      }
-
-      const response = await fetchResponse.json()
-      return response
+      return await res.json();
     } catch (error) {
-      throw error
+      throw error;
     }
   }
 
   // Unlike a post
   static async unlikePost(likeId: number | string) {
     try {
-      // Get the token from environment variable
-      const token = process.env.NEXT_PUBLIC_API_TOKEN || ""
-
-      // Prepare headers
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
+      let res: Response;
+      if (useProxy) {
+        res = await proxyJson(`/api/likes/${likeId}`, "DELETE");
+      } else {
+        const token = serverToken || "";
+        const headers: HeadersInit = {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        };
+        const fullUrl = joinUrl(API_URL, `/api/likes/${likeId}`);
+        res = await fetch(fullUrl, { method: "DELETE", headers });
       }
 
-      // Add authorization header if token exists
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`API error (${res.status}): ${errorText}`);
       }
 
-      // Construct the full URL
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
-      const endpoint = `/api/likes/${likeId}`
-      const fullUrl = `${apiUrl}${apiUrl.endsWith("/") ? "" : "/"}${endpoint.startsWith("/") ? endpoint.substring(1) : endpoint}`
-
-      // Make the request
-      const fetchResponse = await fetch(fullUrl, {
-        method: "DELETE",
-        headers,
-      })
-
-      if (!fetchResponse.ok) {
-        const errorText = await fetchResponse.text()
-        throw new Error(`API error (${fetchResponse.status}): ${errorText}`)
-      }
-
-      const response = await fetchResponse.json()
-      return response
+      return await res.json();
     } catch (error) {
-      throw error
+      throw error;
     }
   }
 
   // Add tags to a post
   static async addTagsToPost(postId: number | string, tags: string[]) {
     try {
-      // Get the current post data
-      const postResponse = await this.getPost(postId)
-      const postData = postResponse.data
+      const postResponse = await this.getPost(postId);
+      const postData = (postResponse as any)?.data || {};
 
-      // Prepare the updated tags
-      const existingTags = postData.tags || []
-      const newTags = [...existingTags, ...tags.map((tag) => ({ name: tag }))]
+      const existingTags = postData.tags || [];
+      const newTags = [...existingTags, ...tags.map((name) => ({ name }))];
 
-      // Update the post with the new tags
-      const updateData = {
-        tags: newTags,
-      }
-
-      // Update the post
-      const response = await this.updatePost(postId, updateData)
-      return response
+      const updateData = { tags: newTags };
+      return await this.updatePost(postId, updateData);
     } catch (error) {
-      throw error
+      throw error;
     }
   }
 
-  // Upload media files for a post - Updated for Strapi v5 and MediaItem collection type
-  // static async uploadMedia(files: File[], postId: number | string) {
-  //   try {
-  //     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
-  //     const uploadEndpoint = `/api/upload`
-  //     const uploadUrl = `${apiUrl}${apiUrl.endsWith("/") ? "" : "/"}${uploadEndpoint.startsWith("/") ? uploadEndpoint.substring(1) : uploadEndpoint}`
-
-  //     // Get the token from environment variable
-  //     const token = process.env.NEXT_PUBLIC_API_TOKEN || ""
-
-  //     // Prepare headers for upload (without Content-Type as it will be set by FormData)
-  //     const headers: HeadersInit = {}
-
-  //     // Add authorization header if token exists
-  //     if (token) {
-  //       headers["Authorization"] = `Bearer ${token}`
-  //     }
-
-  //     // Upload each file and collect results
-  //     const uploadResults = await Promise.all(
-  //       files.map(async (file) => {
-  //         const formData = new FormData()
-  //         formData.append("files", file)
-
-  //         const uploadResponse = await fetch(uploadUrl, {
-  //           method: "POST",
-  //           headers,
-  //           body: formData,
-  //         })
-
-  //         if (!uploadResponse.ok) {
-  //           const errorText = await uploadResponse.text()
-  //           throw new Error(`Upload API error (${uploadResponse.status}): ${errorText}`)
-  //         }
-
-  //         return await uploadResponse.json()
-  //       }),
-  //     )
-
-  //     // Create MediaItems for each uploaded file
-  //     const mediaItems = await Promise.all(
-  //       uploadResults.flat().map(async (fileData, index) => {
-  //         const mediaItemData = {
-  //           post: postId,
-  //           file: fileData.id,
-  //           type: fileData.mime.startsWith("video/") ? "video" : "image",
-  //           order: index,
-  //         }
-
-  //         const mediaItem = await PostService.createMediaItem(mediaItemData)
-  //         return {
-  //           ...fileData,
-  //           mediaItemId: mediaItem.data.id,
-  //           mediaItemDocumentId: mediaItem.data.documentId,
-  //           type: mediaItemData.type,
-  //           order: mediaItemData.order,
-  //         }
-  //       }),
-  //     )
-
-  //     return mediaItems
-  //   } catch (error) {
-  //     throw error
-  //   }
-  // }
-
-  // Create a MediaItem that links a file to a post
-  // static async createMediaItem(mediaData: {
-  //   post: number | string
-  //   file: number | string
-  //   type: "image" | "video"
-  //   order?: number
-  // }) {
-  //   try {
-  //     // Format the data according to Strapi 5 requirements
-  //     const { post, file, type, order } = mediaData
-
-  //     const data = {
-  //       data: {
-  //         type,
-  //         order: order || 0,
-  //         file: {
-  //           connect: [typeof file === "string" ? file : file.toString()],
-  //         },
-  //         post: {
-  //           connect: [typeof post === "string" ? post : post.toString()],
-  //         },
-  //       },
-  //     }
-
-  //     // Get the token from environment variable
-  //     const token = process.env.NEXT_PUBLIC_API_TOKEN || ""
-
-  //     // Prepare headers
-  //     const headers: HeadersInit = {
-  //       "Content-Type": "application/json",
-  //     }
-
-  //     // Add authorization header if token exists
-  //     if (token) {
-  //       headers["Authorization"] = `Bearer ${token}`
-  //     }
-
-  //     // Construct the full URL
-  //     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
-  //     const endpoint = `/api/media-items`
-  //     const fullUrl = `${apiUrl}${apiUrl.endsWith("/") ? "" : "/"}${endpoint.startsWith("/") ? endpoint.substring(1) : endpoint}`
-
-  //     // Make the request
-  //     const fetchResponse = await fetch(fullUrl, {
-  //       method: "POST",
-  //       headers,
-  //       body: JSON.stringify(data),
-  //     })
-
-  //     if (!fetchResponse.ok) {
-  //       const errorText = await fetchResponse.text()
-  //       throw new Error(`API error (${fetchResponse.status}): ${errorText}`)
-  //     }
-
-  //     const response = await fetchResponse.json()
-  //     return response
-  //   } catch (error) {
-  //     throw error
-  //   }
-  // }
+  // internal request throttling
+  private static requestTracker = {
+    lastRequestTime: 0,
+    minRequestInterval: REQUEST_CONFIG.minRequestInterval,
+  };
 }

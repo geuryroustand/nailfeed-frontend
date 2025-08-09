@@ -1,158 +1,172 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+type EnvStatus = {
+  tokenExists: boolean;
+  apiUrl: string;
+};
 
 export default function ApiDiagnostics() {
-  const [isVisible, setIsVisible] = useState(false)
-  const [apiResponse, setApiResponse] = useState<string | null>(null)
-  const [responseStatus, setResponseStatus] = useState<number | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [requestDetails, setRequestDetails] = useState<any>(null)
+  const [isVisible, setIsVisible] = useState(false);
+  const [apiResponse, setApiResponse] = useState<string | null>(null);
+  const [responseStatus, setResponseStatus] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [requestDetails, setRequestDetails] = useState<any>(null);
+  const [envStatus, setEnvStatus] = useState<EnvStatus | null>(null);
 
-  // Default API URL from environment or hardcoded fallback
-  const defaultApiUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
-  const [apiUrl, setApiUrl] = useState(defaultApiUrl)
-  const [endpoint, setEndpoint] = useState("/api/posts")
-  const [queryParams, setQueryParams] = useState("populate=*&pagination[page]=1&pagination[pageSize]=5")
-  const [token, setToken] = useState(process.env.NEXT_PUBLIC_API_TOKEN || "")
+  // Load API URL and "token exists" from server (no secrets leaked)
+  useEffect(() => {
+    const loadEnv = async () => {
+      try {
+        const res = await fetch("/api/env/status", { cache: "no-store" });
+        const data = (await res.json()) as EnvStatus;
+        setEnvStatus(data);
+        setApiUrl(data.apiUrl || "");
+      } catch {
+        setEnvStatus({ tokenExists: false, apiUrl: "" });
+      }
+    };
+    loadEnv();
+  }, []);
+
+  const [apiUrl, setApiUrl] = useState("");
+  const [endpoint, setEndpoint] = useState("/api/posts");
+  const [queryParams, setQueryParams] = useState(
+    "populate=*&pagination[page]=1&pagination[pageSize]=5"
+  );
+  // Keep the UI input for token, but do NOT read from env; optional override path via proxy
+  const [token, setToken] = useState("");
 
   const constructFullUrl = () => {
-    // Ensure proper URL construction with double slashes
-    let baseUrl = apiUrl
-    if (!baseUrl.endsWith("/")) baseUrl += "/"
-
-    let path = endpoint
-    if (path.startsWith("/")) path = path.substring(1)
-
-    const fullUrl = `${baseUrl}${path}${queryParams ? `?${queryParams}` : ""}`
-    return fullUrl
-  }
+    let baseUrl = apiUrl;
+    if (!baseUrl.endsWith("/")) baseUrl += "/";
+    let path = endpoint;
+    if (path.startsWith("/")) path = path.substring(1);
+    const fullUrl = `${baseUrl}${path}${queryParams ? `?${queryParams}` : ""}`;
+    return fullUrl;
+  };
 
   const testApi = async () => {
-    setIsLoading(true)
-    setError(null)
-    setApiResponse(null)
-    setResponseStatus(null)
-    setRequestDetails(null)
+    setIsLoading(true);
+    setError(null);
+    setApiResponse(null);
+    setResponseStatus(null);
+    setRequestDetails(null);
 
     try {
-      const fullUrl = constructFullUrl()
+      const fullPath = `${endpoint}${queryParams ? `?${queryParams}` : ""}`;
 
-      // Prepare headers
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
-      }
-
-      // Add authorization header if token exists
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`
-      }
-
-      // Store request details for debugging
-      const requestInfo = {
-        url: fullUrl,
-        headers: { ...headers },
+      setRequestDetails({
+        url: constructFullUrl(),
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         method: "GET",
-      }
-      setRequestDetails(requestInfo)
+        via: "/api/auth-proxy",
+      });
 
-      // Make the actual request
-      const response = await fetch(fullUrl, {
-        method: "GET",
-        headers,
-        cache: "no-store",
-      })
+      const response = await fetch("/api/auth-proxy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          endpoint: fullPath,
+          method: "GET",
+          // If user provided a token in the diagnostics UI, allow an override (server decides final precedence)
+          authorizationOverride: token ? `Bearer ${token}` : undefined,
+        }),
+      });
 
-      setResponseStatus(response.status)
-
-      // Get response as text first to handle both JSON and non-JSON responses
-      const responseText = await response.text()
+      setResponseStatus(response.status);
+      const responseText = await response.text();
 
       if (!response.ok) {
-        throw new Error(`API error (${response.status}): ${responseText}`)
+        throw new Error(`API error (${response.status}): ${responseText}`);
       }
 
-      // Try to parse as JSON if possible
       try {
-        const jsonData = JSON.parse(responseText)
-        setApiResponse(JSON.stringify(jsonData, null, 2))
-      } catch (e) {
-        // If not valid JSON, just show the text
-        setApiResponse(responseText)
+        const jsonData = JSON.parse(responseText);
+        setApiResponse(JSON.stringify(jsonData, null, 2));
+      } catch {
+        setApiResponse(responseText);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const testDirectFetch = async () => {
-    setIsLoading(true)
-    setError(null)
-    setApiResponse(null)
-    setResponseStatus(null)
+    setIsLoading(true);
+    setError(null);
+    setApiResponse(null);
+    setResponseStatus(null);
 
     try {
-      // Hardcoded URL to test direct fetch without any URL construction logic
-      const hardcodedUrl =
-        "https://nailfeed-backend-production.up.railway.app/api/posts?populate=*&pagination[page]=1&pagination[pageSize]=5"
+      const directUrl = "/api/auth-proxy";
 
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
-      }
+      setRequestDetails({
+        url: directUrl,
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        method: "POST",
+        via: "/api/auth-proxy (server)",
+      });
 
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`
-      }
+      const response = await fetch(directUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          endpoint:
+            "/api/posts?populate=*&pagination[page]=1&pagination[pageSize]=5",
+          method: "GET",
+          authorizationOverride: token ? `Bearer ${token}` : undefined,
+        }),
+      });
 
-      const requestInfo = {
-        url: hardcodedUrl,
-        headers: { ...headers },
-        method: "GET",
-      }
-      setRequestDetails(requestInfo)
-
-      const response = await fetch(hardcodedUrl, {
-        method: "GET",
-        headers,
-        cache: "no-store",
-      })
-
-      setResponseStatus(response.status)
-      const responseText = await response.text()
+      setResponseStatus(response.status);
+      const responseText = await response.text();
 
       if (!response.ok) {
-        throw new Error(`API error (${response.status}): ${responseText}`)
+        throw new Error(`API error (${response.status}): ${responseText}`);
       }
 
       try {
-        const jsonData = JSON.parse(responseText)
-        setApiResponse(JSON.stringify(jsonData, null, 2))
-      } catch (e) {
-        setApiResponse(responseText)
+        const jsonData = JSON.parse(responseText);
+        setApiResponse(JSON.stringify(jsonData, null, 2));
+      } catch {
+        setApiResponse(responseText);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   if (!isVisible) {
     return (
       <div className="fixed bottom-4 right-4 z-50">
-        <Button variant="outline" size="sm" onClick={() => setIsVisible(true)}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setIsVisible(true)}
+          aria-label="Open API Diagnostics"
+        >
           API Diagnostics
         </Button>
       </div>
-    )
+    );
   }
 
   return (
@@ -160,7 +174,12 @@ export default function ApiDiagnostics() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">API Diagnostics</CardTitle>
-          <Button variant="ghost" size="sm" onClick={() => setIsVisible(false)}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsVisible(false)}
+            aria-label="Close API Diagnostics"
+          >
             Close
           </Button>
         </CardHeader>
@@ -210,13 +229,20 @@ export default function ApiDiagnostics() {
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
                   type="password"
-                  placeholder="JWT token"
+                  placeholder="Optional JWT or token"
                 />
               </div>
 
               <div className="pt-2">
-                <p className="text-xs text-gray-500 mb-2">Full URL: {constructFullUrl()}</p>
-                <Button onClick={testApi} disabled={isLoading} className="w-full">
+                <p className="text-xs text-gray-500 mb-2">
+                  Full URL: {constructFullUrl()}
+                </p>
+                <Button
+                  onClick={testApi}
+                  disabled={isLoading}
+                  className="w-full"
+                  aria-label="Test API Connection"
+                >
                   {isLoading ? "Testing..." : "Test API Connection"}
                 </Button>
               </div>
@@ -224,7 +250,8 @@ export default function ApiDiagnostics() {
 
             <TabsContent value="direct" className="space-y-4">
               <p className="text-sm">
-                This will make a direct fetch request to the hardcoded URL without any URL construction logic.
+                This makes a request via the server proxy with a hardcoded
+                endpoint.
               </p>
 
               <div className="grid gap-2">
@@ -234,19 +261,24 @@ export default function ApiDiagnostics() {
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
                   type="password"
-                  placeholder="JWT token"
+                  placeholder="Optional JWT or token"
                 />
               </div>
 
-              <Button onClick={testDirectFetch} disabled={isLoading} className="w-full">
+              <Button
+                onClick={testDirectFetch}
+                disabled={isLoading}
+                className="w-full"
+                aria-label="Test Direct Fetch"
+              >
                 {isLoading ? "Testing..." : "Test Direct Fetch"}
               </Button>
             </TabsContent>
 
             <TabsContent value="env" className="space-y-2">
               <div className="text-xs space-y-1">
-                <p>API URL: {process.env.NEXT_PUBLIC_API_URL || "Not set"}</p>
-                <p>Token exists: {process.env.NEXT_PUBLIC_API_TOKEN ? "Yes" : "No"}</p>
+                <p>API URL: {envStatus?.apiUrl || "Not set"}</p>
+                <p>Token exists: {envStatus?.tokenExists ? "Yes" : "No"}</p>
                 <p>Environment: {process.env.NODE_ENV || "Not set"}</p>
               </div>
             </TabsContent>
@@ -296,5 +328,5 @@ export default function ApiDiagnostics() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

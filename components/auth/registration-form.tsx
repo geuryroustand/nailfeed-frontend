@@ -1,276 +1,298 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { z } from "zod"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { Eye, EyeOff, Loader2 } from "lucide-react"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
-import { useToast } from "@/hooks/use-toast"
-import { Progress } from "@/components/ui/progress"
-import { useTransition } from "react"
-import { registerUser } from "@/app/actions/auth-actions"
-import { useAuth } from "@/context/auth-context"
+import { useEffect, useMemo, useState } from "react";
+import { useActionState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  registerWithFormAction,
+  type AuthActionState,
+} from "@/app/auth/actions";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 
-const signupSchema = z
-  .object({
-    username: z
-      .string()
-      .min(3, { message: "Username must be at least 3 characters" })
-      .regex(/^[a-zA-Z0-9_]+$/, {
-        message: "Username can only contain letters, numbers, and underscores",
-      }),
-    email: z.string().email({ message: "Please enter a valid email address" }),
-    password: z
-      .string()
-      .min(8, { message: "Password must be at least 8 characters" })
-      .regex(/[A-Z]/, { message: "Password must contain at least one uppercase letter" })
-      .regex(/[a-z]/, { message: "Password must contain at least one lowercase letter" })
-      .regex(/[0-9]/, { message: "Password must contain at least one number" }),
-    confirmPassword: z.string(),
-    agreeTerms: z.literal(true, {
-      errorMap: () => ({ message: "You must agree to the terms and conditions" }),
-    }),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords do not match",
-    path: ["confirmPassword"],
-  })
-
-type SignupFormValues = z.infer<typeof signupSchema>
+const initialState: AuthActionState = { status: "idle" };
 
 export default function RegistrationForm() {
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [passwordStrength, setPasswordStrength] = useState(0)
-  const [serverError, setServerError] = useState<string | null>(null)
-  const [isPending, startTransition] = useTransition()
-  const router = useRouter()
-  const { toast } = useToast()
-  const { setUserData } = useAuth()
+  const router = useRouter();
+  const [state, action, isPending] = useActionState(
+    registerWithFormAction,
+    initialState
+  );
 
-  const form = useForm<SignupFormValues>({
-    resolver: zodResolver(signupSchema),
-    defaultValues: {
-      username: "",
-      email: "",
-      password: "",
-      confirmPassword: "",
-      agreeTerms: false,
-    },
-    mode: "onChange",
-  })
+  // Controlled inputs to preserve values on error
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [agree, setAgree] = useState(false);
 
-  const calculatePasswordStrength = (password: string) => {
-    if (!password) return 0
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
-    let strength = 0
-    // Length check
-    if (password.length >= 8) strength += 20
-    // Uppercase check
-    if (/[A-Z]/.test(password)) strength += 20
-    // Lowercase check
-    if (/[a-z]/.test(password)) strength += 20
-    // Number check
-    if (/[0-9]/.test(password)) strength += 20
-    // Special character check
-    if (/[^A-Za-z0-9]/.test(password)) strength += 20
+  // Hydrate inputs from server-returned values on error (we never echo passwords back)
+  useEffect(() => {
+    if (state.status === "error" && state.values) {
+      if (state.values.username) setUsername(state.values.username);
+      if (state.values.email) setEmail(state.values.email);
+    }
+  }, [state]);
 
-    return strength
-  }
+  useEffect(() => {
+    if (state.status === "success") {
+      router.replace("/");
+    }
+  }, [state.status, router]);
 
-  const getPasswordStrengthColor = (strength: number) => {
-    if (strength < 40) return "bg-red-500"
-    if (strength < 80) return "bg-yellow-500"
-    return "bg-green-500"
-  }
-
-  const onSubmit = (data: SignupFormValues) => {
-    setServerError(null)
-
-    // Use startTransition to wrap the server action call
-    startTransition(async () => {
-      try {
-        // Call the registerUser server action
-        const result = await registerUser({
-          username: data.username,
-          email: data.email,
-          password: data.password,
-        })
-
-        if (result.success && result.user && result.jwt) {
-          console.log("Registration successful, full response:", result)
-
-          // Directly set the user data in the auth context with JWT
-          setUserData(result.user, result.jwt)
-
-          toast({
-            title: "Registration successful!",
-            description: "Your account has been created and you're now logged in.",
-            variant: "default",
-          })
-
-          // Redirect to home page
-          router.push("/")
-        } else {
-          setServerError(result.error || "Registration failed. Please try again.")
-        }
-      } catch (error) {
-        console.error("Registration error:", error)
-        setServerError("An unexpected error occurred. Please try again later.")
-      }
-    })
-  }
+  const passwordStrength = useMemo(() => {
+    if (!password) return 0;
+    let s = 0;
+    if (password.length >= 8) s += 25;
+    if (/[A-Z]/.test(password)) s += 25;
+    if (/[a-z]/.test(password)) s += 25;
+    if (/[0-9]/.test(password)) s += 25;
+    return s;
+  }, [password]);
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <FormField
-          control={form.control}
+    <form
+      action={action}
+      className="space-y-4"
+      aria-describedby="signup-form-status"
+    >
+      <div>
+        <label
+          htmlFor="username"
+          className="block text-sm font-medium text-gray-700"
+        >
+          Username
+        </label>
+        <Input
+          id="username"
           name="username"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Username</FormLabel>
-              <FormControl>
-                <Input placeholder="your_username" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+          placeholder="your_username"
+          autoComplete="username"
+          required
+          minLength={3}
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          aria-invalid={Boolean(state.fieldErrors?.username)}
+          aria-errormessage={
+            state.fieldErrors?.username ? "username-error" : undefined
+          }
         />
+        {state.fieldErrors?.username && (
+          <p id="username-error" className="mt-1 text-sm text-red-600">
+            {state.fieldErrors.username}
+          </p>
+        )}
+      </div>
 
-        <FormField
-          control={form.control}
+      <div>
+        <label
+          htmlFor="email"
+          className="block text-sm font-medium text-gray-700"
+        >
+          Email
+        </label>
+        <Input
+          id="email"
           name="email"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Email</FormLabel>
-              <FormControl>
-                <Input placeholder="your.email@example.com" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+          type="email"
+          placeholder="you@example.com"
+          autoComplete="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          aria-invalid={Boolean(state.fieldErrors?.email)}
+          aria-errormessage={
+            state.fieldErrors?.email ? "email-error" : undefined
+          }
         />
+        {state.fieldErrors?.email && (
+          <p id="email-error" className="mt-1 text-sm text-red-600">
+            {state.fieldErrors.email}
+          </p>
+        )}
+      </div>
 
-        <FormField
-          control={form.control}
-          name="password"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Password</FormLabel>
-              <FormControl>
-                <div className="relative">
-                  <Input
-                    type={showPassword ? "text" : "password"}
-                    placeholder="••••••••"
-                    {...field}
-                    onChange={(e) => {
-                      field.onChange(e)
-                      setPasswordStrength(calculatePasswordStrength(e.target.value))
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0 h-full px-3 py-2 text-gray-400 hover:text-gray-600"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                </div>
-              </FormControl>
-              {field.value && (
-                <div className="mt-2 space-y-1">
-                  <Progress value={passwordStrength} className={getPasswordStrengthColor(passwordStrength)} />
-                  <p className="text-xs text-gray-500">
-                    {passwordStrength < 40 && "Weak password"}
-                    {passwordStrength >= 40 && passwordStrength < 80 && "Moderate password"}
-                    {passwordStrength >= 80 && "Strong password"}
-                  </p>
-                </div>
-              )}
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+      <div>
+        <label
+          htmlFor="password"
+          className="block text-sm font-medium text-gray-700"
+        >
+          Password
+        </label>
+        <div className="relative">
+          <Input
+            id="password"
+            name="password"
+            type={showPassword ? "text" : "password"}
+            placeholder="••••••••"
+            autoComplete="new-password"
+            required
+            minLength={8}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            aria-invalid={Boolean(state.fieldErrors?.password)}
+            aria-errormessage={
+              state.fieldErrors?.password ? "password-error" : undefined
+            }
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="absolute right-0 top-0 h-full px-3 py-2 text-gray-500 hover:text-gray-700"
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            aria-pressed={showPassword}
+            onClick={() => setShowPassword((s) => !s)}
+          >
+            {showPassword ? (
+              <EyeOff className="h-4 w-4" />
+            ) : (
+              <Eye className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
 
-        <FormField
-          control={form.control}
-          name="confirmPassword"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Confirm Password</FormLabel>
-              <FormControl>
-                <div className="relative">
-                  <Input type={showConfirmPassword ? "text" : "password"} placeholder="••••••••" {...field} />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0 h-full px-3 py-2 text-gray-400 hover:text-gray-600"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  >
-                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                </div>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="agreeTerms"
-          render={({ field }) => (
-            <FormItem className="flex items-start space-x-2 space-y-0">
-              <FormControl>
-                <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-              </FormControl>
-              <div className="space-y-1 leading-none">
-                <FormLabel className="text-sm font-normal cursor-pointer">
-                  I agree to the{" "}
-                  <a href="#" className="text-pink-500 hover:underline">
-                    Terms of Service
-                  </a>{" "}
-                  and{" "}
-                  <a href="#" className="text-pink-500 hover:underline">
-                    Privacy Policy
-                  </a>
-                </FormLabel>
-                <FormMessage />
-              </div>
-            </FormItem>
-          )}
-        />
-
-        {serverError && (
-          <div className="p-3 rounded-md bg-red-50 text-red-500 text-sm">
-            <p>{serverError}</p>
+        {password && (
+          <div className="mt-2 space-y-1">
+            <Progress value={passwordStrength} />
+            <p className="text-xs text-gray-500">
+              {passwordStrength < 50
+                ? "Weak"
+                : passwordStrength < 100
+                ? "Medium"
+                : "Strong"}
+            </p>
           </div>
         )}
 
-        <Button
-          type="submit"
-          className="w-full bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600"
-          disabled={isPending}
+        {state.fieldErrors?.password && (
+          <p id="password-error" className="mt-1 text-sm text-red-600">
+            {state.fieldErrors.password}
+          </p>
+        )}
+      </div>
+
+      <div>
+        <label
+          htmlFor="confirmPassword"
+          className="block text-sm font-medium text-gray-700"
         >
-          {isPending ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Creating account...
-            </>
-          ) : (
-            "Create account"
-          )}
-        </Button>
-      </form>
-    </Form>
-  )
+          Confirm Password
+        </label>
+        <div className="relative">
+          <Input
+            id="confirmPassword"
+            name="confirmPassword"
+            type={showConfirm ? "text" : "password"}
+            placeholder="••••••••"
+            autoComplete="new-password"
+            required
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            aria-invalid={Boolean(state.fieldErrors?.confirmPassword)}
+            aria-errormessage={
+              state.fieldErrors?.confirmPassword ? "confirm-error" : undefined
+            }
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="absolute right-0 top-0 h-full px-3 py-2 text-gray-500 hover:text-gray-700"
+            aria-label={
+              showConfirm ? "Hide confirm password" : "Show confirm password"
+            }
+            aria-pressed={showConfirm}
+            onClick={() => setShowConfirm((s) => !s)}
+          >
+            {showConfirm ? (
+              <EyeOff className="h-4 w-4" />
+            ) : (
+              <Eye className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+        {state.fieldErrors?.confirmPassword && (
+          <p id="confirm-error" className="mt-1 text-sm text-red-600">
+            {state.fieldErrors.confirmPassword}
+          </p>
+        )}
+      </div>
+
+      {/* Terms agreement: ensure a proper value gets submitted */}
+      <div className="flex items-start gap-3">
+        <Checkbox
+          id="agreeTerms"
+          checked={agree}
+          onCheckedChange={(v) => setAgree(Boolean(v))}
+          aria-label="I agree to the Terms and Privacy Policy"
+        />
+        {/* Hidden input to carry the boolean to FormData reliably */}
+        <input type="hidden" name="agreeTerms" value={agree ? "on" : ""} />
+        <label
+          htmlFor="agreeTerms"
+          className="text-sm text-gray-700 cursor-pointer leading-6"
+        >
+          I agree to the{" "}
+          <a
+            href="/policies/terms-of-service"
+            className="text-pink-500 hover:underline"
+          >
+            Terms of Service
+          </a>{" "}
+          and{" "}
+          <a
+            href="/policies/privacy-policy"
+            className="text-pink-500 hover:underline"
+          >
+            Privacy Policy
+          </a>
+          .
+        </label>
+      </div>
+      {state.fieldErrors?.agreeTerms && (
+        <p className="mt-1 text-sm text-red-600">
+          {state.fieldErrors.agreeTerms}
+        </p>
+      )}
+
+      <Button
+        type="submit"
+        disabled={isPending}
+        className="w-full bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600"
+        aria-busy={isPending}
+      >
+        {isPending ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Creating account...
+          </>
+        ) : (
+          "Create account"
+        )}
+      </Button>
+
+      <div
+        id="signup-form-status"
+        className="min-h-[1.25rem]"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {state.status === "error" && (
+          <p className="text-sm text-red-600">
+            {state.message || "Something went wrong. Try again."}
+          </p>
+        )}
+        {state.status === "success" && (
+          <p className="text-sm text-green-600">Success! Redirecting…</p>
+        )}
+      </div>
+    </form>
+  );
 }

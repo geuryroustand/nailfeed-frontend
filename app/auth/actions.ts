@@ -1,143 +1,273 @@
-"use server"
-import { z } from "zod"
-import { AuthService, type AuthResponse } from "@/lib/auth-service"
+"use server";
 
-// Login schema
+import { z } from "zod";
+import { cookies } from "next/headers";
+import { AuthService, type AuthResponse } from "@/lib/auth-service";
+import { redirect } from "next/navigation";
+
+type FieldErrors = Record<string, string>;
+
+export type AuthActionState = {
+  status: "idle" | "success" | "error";
+  message?: string;
+  fieldErrors?: FieldErrors;
+  // values are returned on error to repopulate inputs without clearing them
+  values?: Partial<{
+    identifier: string;
+    rememberMe: string;
+    username: string;
+    email: string;
+  }>;
+};
+
+const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
 const loginSchema = z.object({
   identifier: z.string().min(1, { message: "Email or username is required" }),
   password: z.string().min(1, { message: "Password is required" }),
-  rememberMe: z.boolean().optional(),
-})
+  rememberMe: z.boolean().default(false),
+});
 
-// Create the login action
-export const loginAction = async (data: {
-  identifier: string
-  password: string
-  rememberMe?: boolean
-}): Promise<{ success: boolean; error?: string; user?: any; jwt?: string }> => {
-  try {
-    // Validate form data
-    const validatedFields = loginSchema.safeParse(data)
-
-    if (!validatedFields.success) {
-      return {
-        success: false,
-        error: "Invalid form data. Please check your inputs.",
-      }
-    }
-
-    // Log in user
-    const result: AuthResponse | { error: string } | null = await AuthService.login(data.identifier, data.password)
-
-    if (!result || result.error) {
-      return { success: false, error: result?.error || "Login failed" }
-    }
-
-    return {
-      success: true,
-      user: result.user,
-      jwt: result.jwt,
-    }
-  } catch (error) {
-    console.error("Login error:", error)
-    return {
-      success: false,
-      error: "An unexpected error occurred",
-    }
-  }
-}
-
-// Registration schema
 const registerSchema = z
   .object({
-    username: z.string().min(3, { message: "Username must be at least 3 characters" }),
-    email: z.string().email({ message: "Please enter a valid email address" }),
-    password: z.string().min(6, { message: "Password must be at least 6 characters" }),
-    confirmPassword: z.string().min(1, { message: "Please confirm your password" }),
+    username: z
+      .string()
+      .min(3, { message: "Username must be at least 3 characters" })
+      .max(20, { message: "Username must be less than 20 characters" })
+      .regex(/^[a-zA-Z0-9_]+$/, {
+        message: "Username can only contain letters, numbers, and underscores",
+      }),
+    email: z
+      .string()
+      .regex(emailRegex, { message: "Please enter a valid email address" }),
+    password: z
+      .string()
+      .min(8, { message: "Password must be at least 8 characters" })
+      .regex(/[A-Z]/, {
+        message: "Password must contain at least one uppercase letter",
+      })
+      .regex(/[a-z]/, {
+        message: "Password must contain at least one lowercase letter",
+      })
+      .regex(/[0-9]/, { message: "Password must contain at least one number" }),
+    confirmPassword: z
+      .string()
+      .min(1, { message: "Please confirm your password" }),
+    agreeTerms: z.literal(true, {
+      errorMap: () => ({
+        message: "You must agree to the terms and conditions",
+      }),
+    }),
   })
   .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords don't match",
+    message: "Passwords do not match",
     path: ["confirmPassword"],
-  })
+  });
 
-// Create the registration action
-export const registerAction = async (data: {
-  username: string
-  email: string
-  password: string
-  confirmPassword: string
-}): Promise<{ success: boolean; error?: string; user?: any; jwt?: string }> => {
+const toBoolean = (value: FormDataEntryValue | null): boolean => {
+  if (!value) return false;
+  const v = String(value).toLowerCase();
+  return v === "true" || v === "on" || v === "1" || v === "yes";
+};
+
+const setSessionCookie = (jwt: string, rememberMe: boolean) => {
+  const isProd = process.env.NODE_ENV === "production";
+  cookies().set("auth_token", jwt, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: isProd,
+    path: "/",
+    maxAge: rememberMe ? 60 * 60 * 24 * 30 : 60 * 60 * 4, // 30d or 4h
+  });
+};
+
+/**
+ * Server Action: Login via FormData
+ */
+export async function loginWithFormAction(
+  _prevState: AuthActionState,
+  formData: FormData
+): Promise<AuthActionState> {
   try {
-    // Validate form data
-    const validatedFields = registerSchema.safeParse(data)
+    const identifier = (formData.get("identifier") as string) || "";
+    const password = (formData.get("password") as string) || "";
+    const rememberMeBool = toBoolean(formData.get("rememberMe"));
 
-    if (!validatedFields.success) {
-      return {
-        success: false,
-        error: "Invalid form data. Please check your inputs.",
+    const parsed = loginSchema.safeParse({
+      identifier,
+      password,
+      rememberMe: rememberMeBool,
+    });
+    if (!parsed.success) {
+      const fieldErrors: FieldErrors = {};
+      for (const issue of parsed.error.issues) {
+        const key = (issue.path?.[0] as string) || "form";
+        fieldErrors[key] = issue.message;
       }
+      return {
+        status: "error",
+        message: "Please fix the errors and try again.",
+        fieldErrors,
+        values: { identifier, rememberMe: rememberMeBool ? "on" : "" },
+      };
     }
 
-    // Register user
-    const result: AuthResponse | { error: string } | null = await AuthService.register(
-      data.username,
-      data.email,
-      data.password,
-    )
+    const result: AuthResponse | { error: string } | null =
+      await AuthService.login(parsed.data.identifier, parsed.data.password);
 
-    if (!result || result.error) {
-      return { success: false, error: result?.error || "Registration failed" }
+    if (!result || "error" in result) {
+      return {
+        status: "error",
+        message: result?.error || "Invalid credentials",
+        values: {
+          identifier: parsed.data.identifier,
+          rememberMe: parsed.data.rememberMe ? "on" : "",
+        },
+      };
     }
 
+    setSessionCookie(result.jwt, parsed.data.rememberMe);
+    return { status: "success", message: "Login successful" };
+  } catch (err) {
+    console.error("Login server action error:", err);
     return {
-      success: true,
-      user: result.user,
-      jwt: result.jwt,
-    }
-  } catch (error) {
-    console.error("Registration error:", error)
-    return {
-      success: false,
-      error: "An unexpected error occurred",
-    }
+      status: "error",
+      message: "An unexpected error occurred. Please try again.",
+    };
   }
 }
 
-// Social auth schema
-const socialAuthSchema = z.object({
-  provider: z.enum(["google", "facebook", "twitter"]),
-  redirectUrl: z.string().url().optional(),
-})
-
-// Create the social auth action
-export const initiateSocialAuthAction = async (data: {
-  provider: string
-  redirectUrl?: string
-}): Promise<{ success: boolean; error?: string; redirectUrl?: string }> => {
+/**
+ * Server Action: Register via FormData
+ */
+export async function registerWithFormAction(
+  _prevState: AuthActionState,
+  formData: FormData
+): Promise<AuthActionState> {
   try {
-    // Validate form data
-    const validatedFields = socialAuthSchema.safeParse(data)
+    const username = (formData.get("username") as string) || "";
+    const email = (formData.get("email") as string) || "";
+    const password = (formData.get("password") as string) || "";
+    const confirmPassword = (formData.get("confirmPassword") as string) || "";
+    const agreeTerms = toBoolean(formData.get("agreeTerms"));
 
-    if (!validatedFields.success) {
+    const parsed = registerSchema.safeParse({
+      username,
+      email,
+      password,
+      confirmPassword,
+      agreeTerms,
+    });
+    if (!parsed.success) {
+      const fieldErrors: FieldErrors = {};
+      for (const issue of parsed.error.issues) {
+        const key = (issue.path?.[0] as string) || "form";
+        fieldErrors[key] = issue.message;
+      }
+      return {
+        status: "error",
+        message: "Please fix the errors and try again.",
+        fieldErrors,
+        values: { username, email },
+      };
+    }
+
+    const result: AuthResponse | { error: string } | null =
+      await AuthService.register(
+        parsed.data.username,
+        parsed.data.email,
+        parsed.data.password
+      );
+
+    if (!result || "error" in result) {
+      return {
+        status: "error",
+        message: result?.error || "Registration failed",
+        values: { username: parsed.data.username, email: parsed.data.email },
+      };
+    }
+
+    // After registration, sign the user in
+    setSessionCookie(result.jwt, true);
+    return { status: "success", message: "Registration successful" };
+  } catch (err) {
+    console.error("Registration server action error:", err);
+    return {
+      status: "error",
+      message: "An unexpected error occurred. Please try again.",
+    };
+  }
+}
+
+/**
+ * Backwards-compatible object-based login action (if needed elsewhere)
+ */
+export const loginAction = async (data: {
+  identifier: string;
+  password: string;
+  rememberMe?: boolean;
+}): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const parsed = loginSchema.safeParse({
+      identifier: data.identifier,
+      password: data.password,
+      rememberMe: Boolean(data.rememberMe),
+    });
+    if (!parsed.success) {
       return {
         success: false,
-        error: "Invalid provider or redirect URL.",
-      }
+        error: parsed.error.errors.map((e) => e.message).join(", "),
+      };
+    }
+    const result: AuthResponse | { error: string } | null =
+      await AuthService.login(parsed.data.identifier, parsed.data.password);
+    if (!result || "error" in result) {
+      return { success: false, error: result?.error || "Invalid credentials" };
+    }
+    setSessionCookie(result.jwt, parsed.data.rememberMe);
+    return { success: true };
+  } catch (e) {
+    console.error("loginAction error:", e);
+    return { success: false, error: "Unexpected error" };
+  }
+};
+
+/**
+ * Backwards-compatible object-based register action (if needed elsewhere)
+ */
+export const registerAction = async (
+  _prevState: any,
+  formData: FormData
+): Promise<{ success: boolean; error?: string }> => {
+  const state = await registerWithFormAction({ status: "idle" }, formData);
+  return { success: state.status === "success", error: state.message };
+};
+
+/**
+ * Server Action: Initiate Social Authentication
+ */
+export async function initiateSocialAuthAction(
+  prevState: unknown,
+  formData: FormData
+) {
+  try {
+    const provider = String(formData.get("provider") || "")
+      .trim()
+      .toLowerCase();
+    if (!provider) {
+      redirect("/auth?error=invalid_provider");
+      return;
     }
 
-    // Generate social auth URL
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
-    const authUrl = `${baseUrl}/auth/social/${data.provider}`
+    // Allow-list providers you support; keep flexible to avoid breaking flows
+    const allowed = new Set(["google", "facebook", "instagram"]);
+    if (!allowed.has(provider)) {
+      redirect("/auth?error=invalid_provider");
+      return;
+    }
 
-    return {
-      success: true,
-      redirectUrl: authUrl,
-    }
-  } catch (error) {
-    console.error("Social auth error:", error)
-    return {
-      success: false,
-      error: "An unexpected error occurred",
-    }
+    redirect(`/auth/social/${provider}`);
+  } catch {
+    redirect("/auth?error=unexpected_error");
   }
 }

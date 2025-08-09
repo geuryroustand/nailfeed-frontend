@@ -37,14 +37,6 @@ export function TryOnButton({
 
   // Validate the image URL when the component mounts or when designImageUrl changes
   useEffect(() => {
-    // Debug logging
-    console.log("TryOnButton - Props received:", {
-      designImageUrl,
-      designTitle,
-      designImageUrlType: typeof designImageUrl,
-      designImageUrlLength: designImageUrl?.length,
-    });
-
     // Validate and clean the image URL
     const cleanImageUrl = designImageUrl?.trim();
 
@@ -54,15 +46,9 @@ export function TryOnButton({
       cleanImageUrl === "undefined" ||
       cleanImageUrl === "null"
     ) {
-      console.error("TryOnButton - No valid design image URL provided:", {
-        original: designImageUrl,
-        cleaned: cleanImageUrl,
-      });
-
       // Use a fallback image URL
       const fallbackUrl =
         "/placeholder.svg?height=400&width=400&text=Nail+Design";
-      console.log("TryOnButton - Using fallback image URL:", fallbackUrl);
       setValidatedImageUrl(fallbackUrl);
       return;
     }
@@ -71,54 +57,23 @@ export function TryOnButton({
     const isLocalPath =
       cleanImageUrl.startsWith("/") && !cleanImageUrl.startsWith("//");
 
-    // For local images, we can skip preloading or handle it differently
+    // For local images, use directly
     if (isLocalPath) {
-      console.log("TryOnButton - Using local image path:", cleanImageUrl);
       setValidatedImageUrl(cleanImageUrl);
-
-      // Optional: Still verify the image exists but without crossOrigin
-      const img = new Image();
-      img.onload = () => {
-        console.log(
-          "TryOnButton - Local image verified successfully:",
-          cleanImageUrl
-        );
-      };
-      img.onerror = (error) => {
-        console.warn(
-          "TryOnButton - Local image verification failed, but continuing:",
-          cleanImageUrl,
-          error
-        );
-        // We'll still use the local path, but log a warning
-      };
-      // Don't set crossOrigin for local images
-      img.src = cleanImageUrl;
       return;
     }
 
-    // For external images, preload with crossOrigin
+    // For external images, validate
     const img = new Image();
     img.onload = () => {
-      console.log(
-        "TryOnButton - External image preloaded successfully:",
-        cleanImageUrl
-      );
       setValidatedImageUrl(cleanImageUrl);
     };
-    img.onerror = (error) => {
-      console.error(
-        "TryOnButton - Failed to preload external image:",
-        cleanImageUrl,
-        error
-      );
+    img.onerror = () => {
       // Use fallback on error
       setValidatedImageUrl(
         "/placeholder.svg?height=400&width=400&text=Nail+Design"
       );
     };
-
-    // Only set crossOrigin for external images
     img.crossOrigin = "anonymous";
     img.src = cleanImageUrl;
   }, [designImageUrl]);

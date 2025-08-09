@@ -1,133 +1,145 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useRef } from "react"
-import { useRouter } from "next/navigation"
-import { z } from "zod"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { Eye, EyeOff } from "lucide-react"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
-import { useToast } from "@/hooks/use-toast"
-import Link from "next/link"
-import { useActionState } from "react"
-import { useFormStatus } from "react-dom"
-import { loginAction } from "./actions"
-import { useAuth } from "@/hooks/use-auth"
-import { AuthService } from "@/lib/auth-service"
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { useToast } from "@/hooks/use-toast";
 
+// Login schema with proper validation
 const loginSchema = z.object({
-  email: z.string().email({ message: "Please enter a valid email address" }),
-  password: z.string().min(6, { message: "Password must be at least 6 characters" }),
-  rememberMe: z.boolean().optional(),
-})
+  identifier: z
+    .string()
+    .min(1, { message: "Email or username is required" })
+    .refine(
+      (value) => {
+        // Check if it's an email or username
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/;
+        return emailRegex.test(value) || usernameRegex.test(value);
+      },
+      { message: "Please enter a valid email or username" }
+    ),
+  password: z.string().min(1, { message: "Password is required" }),
+  rememberMe: z.boolean().optional().default(false),
+});
 
-type LoginFormValues = z.infer<typeof loginSchema>
-
-// Initial state for the form
-const initialState = {
-  success: false,
-  error: null,
-  user: null,
-  jwt: null,
-}
-
-function SubmitButton() {
-  const { pending } = useFormStatus()
-
-  return (
-    <Button
-      type="submit"
-      className="w-full bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600"
-      disabled={pending}
-    >
-      {pending ? (
-        <>
-          <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-          Signing in...
-        </>
-      ) : (
-        "Sign in"
-      )}
-    </Button>
-  )
-}
+type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginForm() {
-  const [showPassword, setShowPassword] = useState(false)
-  const router = useRouter()
-  const { toast } = useToast()
-  const [state, formAction] = useActionState(loginAction, initialState)
-  const { setUserData, refreshUser } = useAuth()
-  const hasRedirected = useRef(false)
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const router = useRouter();
+  const { toast } = useToast();
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: "",
+      identifier: "",
       password: "",
       rememberMe: false,
     },
-  })
+    mode: "onChange",
+    reValidateMode: "onChange",
+  });
 
-  // Handle successful login after form submission
-  useEffect(() => {
-    if (state.success && state.user && !hasRedirected.current) {
-      console.log("Login successful, user data:", state.user)
+  const onSubmit = async (data: LoginFormValues) => {
+    setIsSubmitting(true);
 
-      // Set flag to prevent multiple redirects
-      hasRedirected.current = true
+    try {
+      // Validate data before submission
+      const validatedData = loginSchema.parse(data);
 
-      // Update auth context with user data
-      setUserData(state.user)
-
-      // Store JWT in both localStorage and cookies
-      if (state.jwt) {
-        // Store in localStorage for client-side access
-        localStorage.setItem("auth_token", state.jwt)
-
-        // Store in cookies using AuthService
-        AuthService.storeTokenInCookie(state.jwt)
-
-        // Also store using fetch to ensure server-side cookie is set
-        fetch("/api/auth/set-cookie", {
+      // Make API call to login
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/auth/local`,
+        {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ token: state.jwt }),
-        }).catch((err) => console.error("Failed to set cookie:", err))
+          body: JSON.stringify({
+            identifier: validatedData.identifier,
+            password: validatedData.password,
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error?.message || "Login failed");
       }
 
+      // Handle successful login
       toast({
         title: "Login successful!",
-        description: "Welcome back to NailFeed",
-      })
+        description: "Welcome back to your account.",
+      });
 
-      // Force a refresh of the user data
-      refreshUser().then(() => {
-        // Redirect to home page with a slight delay
-        setTimeout(() => {
-          router.push("/")
-          router.refresh()
-        }, 500)
-      })
+      // Store JWT token
+      if (result.jwt) {
+        localStorage.setItem("authToken", result.jwt);
+      }
+
+      // Redirect to dashboard or home
+      router.push("/");
+    } catch (error) {
+      console.error("Login error:", error);
+
+      if (error instanceof z.ZodError) {
+        // Handle validation errors
+        error.errors.forEach((err) => {
+          const fieldName = err.path[0] as keyof LoginFormValues;
+          form.setError(fieldName, {
+            type: "manual",
+            message: err.message,
+          });
+        });
+      } else {
+        toast({
+          title: "Login failed",
+          description:
+            error instanceof Error ? error.message : "Invalid credentials",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setIsSubmitting(false);
     }
-  }, [state.success, state.user, state.jwt, router, toast, setUserData, refreshUser])
+  };
 
   return (
     <Form {...form}>
-      <form action={formAction} className="space-y-4">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <FormField
           control={form.control}
-          name="email"
+          name="identifier"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Email</FormLabel>
+              <FormLabel>Email or Username</FormLabel>
               <FormControl>
-                <Input name="email" placeholder="your.email@example.com" {...field} />
+                <Input
+                  placeholder="Enter your email or username"
+                  {...field}
+                  onChange={(e) => {
+                    field.onChange(e);
+                    form.trigger("identifier");
+                  }}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -142,7 +154,15 @@ export default function LoginForm() {
               <FormLabel>Password</FormLabel>
               <FormControl>
                 <div className="relative">
-                  <Input name="password" type={showPassword ? "text" : "password"} placeholder="••••••••" {...field} />
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter your password"
+                    {...field}
+                    onChange={(e) => {
+                      field.onChange(e);
+                      form.trigger("password");
+                    }}
+                  />
                   <Button
                     type="button"
                     variant="ghost"
@@ -150,7 +170,11 @@ export default function LoginForm() {
                     className="absolute right-0 top-0 h-full px-3 py-2 text-gray-400 hover:text-gray-600"
                     onClick={() => setShowPassword(!showPassword)}
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
                   </Button>
                 </div>
               </FormControl>
@@ -159,33 +183,39 @@ export default function LoginForm() {
           )}
         />
 
-        <div className="flex items-center justify-between">
-          <FormField
-            control={form.control}
-            name="rememberMe"
-            render={({ field }) => (
-              <FormItem className="flex items-center space-x-2 space-y-0">
-                <FormControl>
-                  <Checkbox name="rememberMe" checked={field.value} onCheckedChange={field.onChange} />
-                </FormControl>
-                <FormLabel className="text-sm font-normal cursor-pointer">Remember me</FormLabel>
-              </FormItem>
-            )}
-          />
+        <FormField
+          control={form.control}
+          name="rememberMe"
+          render={({ field }) => (
+            <FormItem className="flex items-center space-x-2 space-y-0">
+              <FormControl>
+                <Checkbox
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+              </FormControl>
+              <FormLabel className="text-sm font-normal cursor-pointer">
+                Remember me
+              </FormLabel>
+            </FormItem>
+          )}
+        />
 
-          <Link href="/auth/forgot-password" className="text-sm text-pink-500 p-0 h-auto font-medium hover:underline">
-            Forgot password?
-          </Link>
-        </div>
-
-        {state.error && (
-          <div className="p-3 rounded-md bg-red-50 text-red-500 text-sm">
-            <p>{state.error}</p>
-          </div>
-        )}
-
-        <SubmitButton />
+        <Button
+          type="submit"
+          className="w-full bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600"
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Signing in...
+            </>
+          ) : (
+            "Sign in"
+          )}
+        </Button>
       </form>
     </Form>
-  )
+  );
 }

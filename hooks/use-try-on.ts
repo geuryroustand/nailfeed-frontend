@@ -1,39 +1,64 @@
 // hooks/use-try-on.ts
-"use client"
+"use client";
 
-import { useState } from "react"
-import { applyNailDesign } from "@/lib/try-on-utils"
+import { useState } from "react";
 
 export function useTryOn() {
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(false);
 
   /**
-   * Apply a nail design to a hand image using a simplified, browser-safe method.
-   * @param handImageSrc Source of the hand image (data URL).
-   * @param designImageSrc Source of the nail design image (URL).
-   * @returns Promise resolving to the processed image data URL.
+   * Simple function to save an image to device
+   * @param imageDataUrl The image data URL to save
+   * @param filename The filename for the saved image
    */
-  const applyDesign = async (handImageSrc: string, designImageSrc: string): Promise<string> => {
-    setIsLoading(true)
-    console.log("Starting simplified design application process...")
+  const saveImage = (imageDataUrl: string, filename = "nail-photo.png") => {
+    const link = document.createElement("a");
+    link.href = imageDataUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  /**
+   * Share an image using Web Share API or fallback to download
+   * @param imageDataUrl The image data URL to share
+   * @param title The title for sharing
+   */
+  const shareImage = async (
+    imageDataUrl: string,
+    title = "My Nail Photo"
+  ): Promise<boolean> => {
+    setIsLoading(true);
 
     try {
-      // Directly call the simplified applyNailDesign function.
-      // This function no longer uses MediaPipe.
-      const result = await applyNailDesign(handImageSrc, designImageSrc)
-      console.log("Simplified design application completed successfully.")
-      return result
+      const response = await fetch(imageDataUrl);
+      const blob = await response.blob();
+      const file = new File([blob], "nail-photo.png", { type: "image/png" });
+
+      if (navigator.share && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title,
+          text: "Check out my nail photo!",
+          files: [file],
+        });
+        return true;
+      } else {
+        // Fallback to download
+        saveImage(imageDataUrl);
+        return false;
+      }
     } catch (error) {
-      console.error("Error in simplified applyDesign:", error)
-      // If an error occurs, return the original image to avoid a broken state.
-      return handImageSrc
+      console.error("Error sharing image:", error);
+      return false;
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   return {
-    applyDesign,
+    saveImage,
+    shareImage,
     isLoading,
-  }
+  };
 }
