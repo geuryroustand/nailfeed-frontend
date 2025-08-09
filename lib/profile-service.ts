@@ -42,8 +42,8 @@ export type UpdateProfileInput = Partial<{
   }
 }>
 
-// Production API URL
-const API_URL = "https://nailfeed-backend-production.up.railway.app"
+// Use NEXT_PUBLIC_APP_URL instead of API_URL
+const API_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
 
 // Helper function to build API endpoints correctly
 const buildApiUrl = (endpoint: string): string => {
@@ -54,7 +54,7 @@ const buildApiUrl = (endpoint: string): string => {
 
 export const ProfileService = {
   // Get user profile
-  async getProfile(token: string, userId?: number): Promise<UserProfile | null> {
+  async getProfile(token: string, forceRefresh = false): Promise<UserProfile | null> {
     try {
       // Validate inputs
       if (!token) {
@@ -73,7 +73,9 @@ export const ProfileService = {
       }
 
       // Build the correct API URL
-      const apiUrl = buildApiUrl("/api/users/me")
+      // Add a cache-busting query parameter when forceRefresh is true
+      const cacheBuster = forceRefresh ? `&_t=${Date.now()}` : ""
+      const apiUrl = buildApiUrl(`/api/users/me?${cacheBuster}`)
       console.log(`Fetching user profile from ${apiUrl}`)
 
       // Create a timeout for the request
@@ -164,6 +166,7 @@ export const ProfileService = {
       // Build the correct API URL with the user ID
       const apiUrl = buildApiUrl(`/api/users/${currentUser.id}`)
 
+      // Log the data being sent
       console.log(`Updating profile at ${apiUrl} with data:`, JSON.stringify(profileData, null, 2))
 
       // Create a timeout for the request
@@ -178,7 +181,7 @@ export const ProfileService = {
           Authorization: "Bearer [token redacted]",
         })
 
-        // Make the update request
+        // Make the update request with direct JSON payload
         const response = await fetch(apiUrl, {
           method: "PUT",
           headers: {
@@ -261,10 +264,10 @@ export const ProfileService = {
       id: userData.id,
       username: userData.username || "",
       email: userData.email || "",
-      displayName: userData.displayName || "",
-      bio: userData.bio || "",
-      location: userData.location || "",
-      website: userData.website || "",
+      displayName: userData.displayName === undefined ? "" : userData.displayName,
+      bio: userData.bio === undefined ? "" : userData.bio,
+      location: userData.location === undefined ? "" : userData.location,
+      website: userData.website === undefined ? "" : userData.website,
       profileImage: userData.profileImage
         ? { url: userData.profileImage.url || userData.profileImage.formats?.thumbnail?.url || "" }
         : undefined,

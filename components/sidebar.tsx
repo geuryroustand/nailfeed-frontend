@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
+import { useRouter, usePathname } from "next/navigation"
 
 interface SidebarProps {
   activeItem?: string
@@ -16,6 +17,8 @@ interface SidebarProps {
 export default function Sidebar({ activeItem = "home" }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
   const { isAuthenticated } = useAuth()
+  const router = useRouter()
+  const pathname = usePathname()
 
   const menuItems = [
     { id: "home", icon: Home, label: "Home", href: "/" },
@@ -55,6 +58,39 @@ export default function Sidebar({ activeItem = "home" }: SidebarProps) {
           const Icon = item.icon
           const isActive = activeItem === item.id
 
+          // For authenticated routes, we'll handle the click manually
+          const requiresAuth = ["/profile", "/collections", "/mood", "/messages", "/notifications"].some((path) =>
+            item.href.startsWith(path),
+          )
+
+          if (requiresAuth) {
+            return (
+              <div key={item.id} className="w-full block">
+                <motion.div
+                  className={cn(
+                    "flex items-center w-full px-4 py-3 mb-1 rounded-lg transition-colors cursor-pointer",
+                    isActive ? "font-medium text-pink-500" : "text-gray-700 hover:bg-gray-100",
+                    collapsed ? "justify-center" : "justify-start",
+                  )}
+                  whileHover={{ x: collapsed ? 0 : 4 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => {
+                    if (isAuthenticated) {
+                      router.push(item.href)
+                    } else {
+                      const callbackUrl = encodeURIComponent(item.href)
+                      router.push(`/auth?callbackUrl=${callbackUrl}`)
+                    }
+                  }}
+                >
+                  <Icon className={cn("h-6 w-6", isActive && "text-pink-500")} />
+                  {!collapsed && <span className="ml-4">{item.label}</span>}
+                </motion.div>
+              </div>
+            )
+          }
+
+          // For public routes, use regular Link
           return (
             <Link href={item.href} key={item.id} className="w-full block">
               <motion.div

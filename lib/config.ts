@@ -1,77 +1,79 @@
-// API Configuration
-export const API_CONFIG = {
-  // Base URL for API requests
-  BASE_URL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:1337",
+/**
+ * Application Configuration (client-safe)
+ *
+ * - Do NOT reference NEXT_PUBLIC_API_TOKEN here.
+ * - Only server code should access process.env.API_TOKEN directly.
+ */
 
-  // API Token for server-side requests
-  API_TOKEN: process.env.API_TOKEN,
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
 
-  // Public API Token for client-side requests
-  PUBLIC_API_TOKEN: process.env.NEXT_PUBLIC_API_TOKEN,
-} as const;
-
-// Helper function to construct API URLs
-export function constructApiUrl(endpoint: string): string {
-  if (!API_CONFIG.BASE_URL) {
-    throw new Error("NEXT_PUBLIC_API_URL environment variable is not set");
-  }
-
-  // Remove trailing slash from base URL if present
-  const baseUrl = API_CONFIG.BASE_URL.endsWith("/")
-    ? API_CONFIG.BASE_URL.slice(0, -1)
-    : API_CONFIG.BASE_URL;
-
-  // Remove leading slash from endpoint if present
-  const cleanEndpoint = endpoint.startsWith("/") ? endpoint.slice(1) : endpoint;
-
-  // Remove 'api/' from endpoint if it's already there
-  const finalEndpoint = cleanEndpoint.startsWith("api/")
-    ? cleanEndpoint.slice(4)
-    : cleanEndpoint;
-
-  // If the base URL already ends with /api, don't add it again
-  if (baseUrl.endsWith("/api")) {
-    return `${baseUrl}/${finalEndpoint}`;
-  }
-
-  return `${baseUrl}/api/${finalEndpoint}`;
+// Server-only token getter (returns null on client)
+export const getServerApiToken = (): string | null => {
+  if (typeof window !== "undefined") return null
+  return process.env.API_TOKEN || null
 }
 
-// Helper function to get auth headers
-export function getAuthHeaders(token?: string): HeadersInit {
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  };
-
-  // Add API token if available
-  if (API_CONFIG.PUBLIC_API_TOKEN) {
-    headers["Authorization"] = `Bearer ${API_CONFIG.PUBLIC_API_TOKEN}`;
-  }
-
-  // Add JWT token if provided
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-
-  return headers;
+export const REQUEST_CONFIG = {
+  minRequestInterval: 800,
+  maxRetries: 3,
+  initialBackoff: 500,
 }
 
-// Cookie names
-export const TOKEN_COOKIE = "auth_token";
-export const USER_COOKIE = "user_data";
-export const CSRF_COOKIE = "social_auth_csrf";
-
-// Auth response types
-export interface AuthResponse {
-  jwt: string;
-  user: {
-    id: number;
-    username: string;
-    email: string;
-    displayName?: string;
-  };
+export const FEATURES = {
+  enableDetailedLogging: true,
+  useFallbackData: false,
 }
 
-export interface AuthError {
-  error: string;
+const config = {
+  api: {
+    API_URL,
+    getFullApiUrl: (path: string): string => {
+      const normalizedBase = API_URL.endsWith("/") ? API_URL.slice(0, -1) : API_URL
+      const normalizedPath = path.startsWith("/") ? path.substring(1) : path
+      return `${normalizedBase}/${normalizedPath}`
+    },
+    // Server-only token accessor. Client will receive null.
+    getApiToken: (): string | null => getServerApiToken(),
+    useSampleData: () => false,
+  },
+  app: {
+    APP_URL: process.env.NEXT_PUBLIC_APP_URL || (typeof window !== "undefined" ? window.location.origin : ""),
+    getFullUrl: (path: string): string => {
+      const baseUrl = config.app.APP_URL
+      const normalizedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl
+      const normalizedPath = path.startsWith("/") ? path.substring(1) : path
+      return `${normalizedBase}/${normalizedPath}`
+    },
+    getPostShareUrl: (postId: number | string): string => config.app.getFullUrl(`post/${postId}`),
+    getProfileUrl: (username: string): string => config.app.getFullUrl(`profile/${username}`),
+    getCollectionUrl: (collectionId: number | string): string => config.app.getFullUrl(`collections/${collectionId}`),
+  },
+  features: {
+    USE_SAMPLE_DATA: false,
+    ENABLE_ANALYTICS: process.env.NEXT_PUBLIC_ENABLE_ANALYTICS === "true",
+    ENABLE_COMMENTS: process.env.NEXT_PUBLIC_ENABLE_COMMENTS === "true",
+    ENABLE_REACTIONS: process.env.NEXT_PUBLIC_ENABLE_REACTIONS === "true",
+    ENABLE_SOCIAL_AUTH: process.env.NEXT_PUBLIC_ENABLE_SOCIAL_AUTH === "true",
+  },
+  isInitialized: false,
+  initialize: () => {
+    if (config.isInitialized) return
+    if (process.env.NODE_ENV === "development") {
+      console.log("🔧 App Configuration:", {
+        API_URL: config.api.API_URL,
+        APP_URL: config.app.APP_URL,
+        HAS_SERVER_API_TOKEN: !!getServerApiToken(),
+        FEATURES: config.features,
+      })
+    }
+    config.isInitialized = true
+  },
 }
+
+config.initialize()
+
+export function useSampleData(): boolean {
+  return false
+}
+
+export default config

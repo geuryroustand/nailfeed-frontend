@@ -1,5 +1,5 @@
 import type React from "react"
-import { Inter } from "next/font/google"
+import { Inter } from 'next/font/google'
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
@@ -10,6 +10,12 @@ import { ProfileProvider } from "@/context/profile-context"
 import ClientHeaderWrapper from "@/components/client-header-wrapper"
 import ApiStatusIndicator from "@/components/api-status-indicator"
 import { ReactionProvider } from "@/context/reaction-context"
+import config from "@/lib/config"
+// Import our polyfill
+import "@/lib/polyfills"
+
+// Initialize configuration
+config.initialize()
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -28,10 +34,7 @@ export default function RootLayout({
                 <MoodProvider>
                   <ClientHeaderWrapper />
                   {/* Wrap with ReactionProvider */}
-                  <ReactionProvider>
-                    {/* Your existing layout content */}
-                    {children}
-                  </ReactionProvider>
+                  <ReactionProvider>{children}</ReactionProvider>
                   <ApiStatusIndicator />
                   <Toaster />
                 </MoodProvider>

@@ -5,11 +5,11 @@ import { Loader2 } from "lucide-react"
 
 interface LoadMorePostsProps {
   onLoadMore: () => void
-  hasMore: boolean
+  hasMore?: boolean
   isLoading: boolean
 }
 
-export function LoadMorePosts({ onLoadMore, hasMore, isLoading }: LoadMorePostsProps) {
+export default function LoadMorePosts({ onLoadMore, hasMore = false, isLoading }: LoadMorePostsProps) {
   const observerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {

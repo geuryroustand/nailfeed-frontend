@@ -1,208 +1,242 @@
-"use server";
+"use server"
 
-import { cookies } from "next/headers";
-import { AuthService } from "@/lib/auth-service";
-import { v4 as uuidv4 } from "uuid";
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import {
-  TOKEN_COOKIE,
-  USER_COOKIE,
-  CSRF_COOKIE,
-  AuthResponse,
-  AuthError,
-} from "@/lib/config";
+import { z } from "zod"
+import { cookies } from "next/headers"
+import { AuthService, type AuthResponse } from "@/lib/auth-service"
+import { redirect } from "next/navigation"
 
-// Cookie names
-const COOKIE_EXPIRY = 30 * 24 * 60 * 60; // 30 days in seconds
+type FieldErrors = Record<string, string>
 
-export async function registerAction(
-  prevState: any,
-  formData: FormData
-): Promise<{ success: boolean; error?: string; redirectTo?: string }> {
-  try {
-    const username = formData.get("username") as string;
-    const email = formData.get("email") as string;
-    const password = formData.get("password") as string;
-
-    if (!username || !email || !password) {
-      return { success: false, error: "Missing required fields" };
-    }
-
-    const response = await AuthService.register(username, email, password);
-
-    if ("error" in response) {
-      return { success: false, error: response.error };
-    }
-
-    if ("jwt" in response) {
-      const cookieStore = await cookies();
-
-      // Set the JWT cookie
-      await cookieStore.set("jwt", response.jwt, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        maxAge: 30 * 24 * 60 * 60, // 30 days
-        path: "/",
-      });
-
-      // Set the user data cookie
-      await cookieStore.set(
-        "user_data",
-        JSON.stringify({
-          id: response.user.id,
-          username: response.user.username,
-          email: response.user.email,
-        }),
-        {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          maxAge: 30 * 24 * 60 * 60, // 30 days
-          path: "/",
-        }
-      );
-
-      // Revalidate the auth path to update the UI
-      revalidatePath("/auth");
-      revalidatePath("/");
-
-      return { success: true, redirectTo: "/" };
-    }
-
-    return { success: false, error: "Registration failed" };
-  } catch (error) {
-    console.error("Registration error:", error);
-    return { success: false, error: "An unexpected error occurred" };
-  }
+export type AuthActionState = {
+  status: "idle" | "success" | "error"
+  message?: string
+  fieldErrors?: FieldErrors
+  // values are returned on error to repopulate inputs without clearing them
+  values?: Partial<{
+    identifier: string
+    rememberMe: string
+    username: string
+    email: string
+  }>
 }
 
-export async function loginAction(prevState: any, formData: FormData) {
-  const email = formData.get("email") as string;
-  const password = formData.get("password") as string;
-  const rememberMe = formData.get("rememberMe") === "on";
+const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
 
-  try {
-    const response = await AuthService.login(email, password);
+const loginSchema = z.object({
+  identifier: z.string().min(1, { message: "Email or username is required" }),
+  password: z.string().min(1, { message: "Password is required" }),
+  rememberMe: z.boolean().default(false),
+})
 
-    if (response && "jwt" in response) {
-      // Set cookies with the JWT token and user data
-      const { jwt, user } = response;
-      const cookieStore = await cookies();
+const registerSchema = z
+  .object({
+    username: z
+      .string()
+      .min(3, { message: "Username must be at least 3 characters" })
+      .max(20, { message: "Username must be less than 20 characters" })
+      .regex(/^[a-zA-Z0-9_]+$/, {
+        message: "Username can only contain letters, numbers, and underscores",
+      }),
+    email: z.string().regex(emailRegex, { message: "Please enter a valid email address" }),
+    password: z
+      .string()
+      .min(8, { message: "Password must be at least 8 characters" })
+      .regex(/[A-Z]/, { message: "Password must contain at least one uppercase letter" })
+      .regex(/[a-z]/, { message: "Password must contain at least one lowercase letter" })
+      .regex(/[0-9]/, { message: "Password must contain at least one number" }),
+    confirmPassword: z.string().min(1, { message: "Please confirm your password" }),
+    agreeTerms: z.literal(true, { errorMap: () => ({ message: "You must agree to the terms and conditions" }) }),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  })
 
-      // Calculate expiration - 30 days if remember me is checked, session otherwise
-      const maxAge = rememberMe ? COOKIE_EXPIRY : undefined;
-
-      // Set the auth token cookie
-      cookieStore.set(TOKEN_COOKIE, jwt, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        maxAge,
-        path: "/",
-      });
-
-      // Set the user data cookie
-      cookieStore.set(
-        USER_COOKIE,
-        JSON.stringify({
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          displayName: user.displayName,
-        }),
-        {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          maxAge,
-          path: "/",
-        }
-      );
-
-      revalidatePath("/auth");
-      return {
-        success: true,
-        error: null,
-      };
-    } else if (response && "error" in response) {
-      // Login failed with specific error
-      return {
-        success: false,
-        error: response.error,
-      };
-    } else {
-      // Generic login failure
-      return {
-        success: false,
-        error: "Invalid email or password",
-      };
-    }
-  } catch (error) {
-    console.error("Login action error:", error);
-    return {
-      success: false,
-      error:
-        error instanceof Error ? error.message : "An unknown error occurred",
-    };
-  }
+const toBoolean = (value: FormDataEntryValue | null): boolean => {
+  if (!value) return false
+  const v = String(value).toLowerCase()
+  return v === "true" || v === "on" || v === "1" || v === "yes"
 }
 
-export async function logoutAction() {
-  // Clear the auth cookies
-  const cookieStore = await cookies();
-  cookieStore.delete(TOKEN_COOKIE);
-  cookieStore.delete(USER_COOKIE);
-
-  revalidatePath("/");
-  return { success: true };
+const setSessionCookie = (jwt: string, rememberMe: boolean) => {
+  const isProd = process.env.NODE_ENV === "production"
+  cookies().set("auth_token", jwt, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: isProd,
+    path: "/",
+    maxAge: rememberMe ? 60 * 60 * 24 * 30 : 60 * 60 * 4, // 30d or 4h
+  })
 }
 
-export async function getSocialAuthUrl(provider: string, redirectUri: string) {
+/**
+ * Server Action: Login via FormData
+ */
+export async function loginWithFormAction(_prevState: AuthActionState, formData: FormData): Promise<AuthActionState> {
   try {
-    const csrfToken = uuidv4();
-    const cookieStore = await cookies();
+    const identifier = (formData.get("identifier") as string) || ""
+    const password = (formData.get("password") as string) || ""
+    const rememberMeBool = toBoolean(formData.get("rememberMe"))
 
-    // Store the CSRF token in a cookie
-    cookieStore.set(CSRF_COOKIE, csrfToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 60 * 5, // 5 minutes
-      path: "/",
-    });
-
-    // Get the authorization URL from the social auth service
-    const authUrl = await AuthService.getAuthorizationUrl(
-      provider,
-      redirectUri
-    );
-    return { success: true, url: authUrl };
-  } catch (error) {
-    console.error("Social auth URL error:", error);
-    return { success: false, error: "Failed to get authorization URL" };
-  }
-}
-
-export async function initiateSocialAuthAction(provider: string) {
-  try {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/api/connect/${provider}`,
-      {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
+    const parsed = loginSchema.safeParse({ identifier, password, rememberMe: rememberMeBool })
+    if (!parsed.success) {
+      const fieldErrors: FieldErrors = {}
+      for (const issue of parsed.error.issues) {
+        const key = (issue.path?.[0] as string) || "form"
+        fieldErrors[key] = issue.message
       }
-    );
-
-    if (!response.ok) {
-      throw new Error("Failed to initiate social auth");
+      return {
+        status: "error",
+        message: "Please fix the errors and try again.",
+        fieldErrors,
+        values: { identifier, rememberMe: rememberMeBool ? "on" : "" },
+      }
     }
 
-    const data = await response.json();
-    return { success: true, url: data.url };
-  } catch (error) {
-    console.error("Social auth initiation error:", error);
+    const result: AuthResponse | { error: string } | null = await AuthService.login(
+      parsed.data.identifier,
+      parsed.data.password,
+    )
+
+    if (!result || "error" in result) {
+      return {
+        status: "error",
+        message: result?.error || "Invalid credentials",
+        values: { identifier: parsed.data.identifier, rememberMe: parsed.data.rememberMe ? "on" : "" },
+      }
+    }
+
+    setSessionCookie(result.jwt, parsed.data.rememberMe)
+    return { status: "success", message: "Login successful" }
+  } catch (err) {
+    console.error("Login server action error:", err)
     return {
-      success: false,
-      error: "Failed to initiate social authentication",
-    };
+      status: "error",
+      message: "An unexpected error occurred. Please try again.",
+    }
+  }
+}
+
+/**
+ * Server Action: Register via FormData
+ */
+export async function registerWithFormAction(
+  _prevState: AuthActionState,
+  formData: FormData,
+): Promise<AuthActionState> {
+  try {
+    const username = (formData.get("username") as string) || ""
+    const email = (formData.get("email") as string) || ""
+    const password = (formData.get("password") as string) || ""
+    const confirmPassword = (formData.get("confirmPassword") as string) || ""
+    const agreeTerms = toBoolean(formData.get("agreeTerms"))
+
+    const parsed = registerSchema.safeParse({ username, email, password, confirmPassword, agreeTerms })
+    if (!parsed.success) {
+      const fieldErrors: FieldErrors = {}
+      for (const issue of parsed.error.issues) {
+        const key = (issue.path?.[0] as string) || "form"
+        fieldErrors[key] = issue.message
+      }
+      return {
+        status: "error",
+        message: "Please fix the errors and try again.",
+        fieldErrors,
+        values: { username, email },
+      }
+    }
+
+    const result: AuthResponse | { error: string } | null = await AuthService.register(
+      parsed.data.username,
+      parsed.data.email,
+      parsed.data.password,
+    )
+
+    if (!result || "error" in result) {
+      return {
+        status: "error",
+        message: result?.error || "Registration failed",
+        values: { username: parsed.data.username, email: parsed.data.email },
+      }
+    }
+
+    // After registration, sign the user in
+    setSessionCookie(result.jwt, true)
+    return { status: "success", message: "Registration successful" }
+  } catch (err) {
+    console.error("Registration server action error:", err)
+    return {
+      status: "error",
+      message: "An unexpected error occurred. Please try again.",
+    }
+  }
+}
+
+/**
+ * Backwards-compatible object-based login action (if needed elsewhere)
+ */
+export const loginAction = async (data: {
+  identifier: string
+  password: string
+  rememberMe?: boolean
+}): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const parsed = loginSchema.safeParse({
+      identifier: data.identifier,
+      password: data.password,
+      rememberMe: Boolean(data.rememberMe),
+    })
+    if (!parsed.success) {
+      return { success: false, error: parsed.error.errors.map((e) => e.message).join(", ") }
+    }
+    const result: AuthResponse | { error: string } | null = await AuthService.login(
+      parsed.data.identifier,
+      parsed.data.password,
+    )
+    if (!result || "error" in result) {
+      return { success: false, error: result?.error || "Invalid credentials" }
+    }
+    setSessionCookie(result.jwt, parsed.data.rememberMe)
+    return { success: true }
+  } catch (e) {
+    console.error("loginAction error:", e)
+    return { success: false, error: "Unexpected error" }
+  }
+}
+
+/**
+ * Backwards-compatible object-based register action (if needed elsewhere)
+ */
+export const registerAction = async (
+  _prevState: any,
+  formData: FormData,
+): Promise<{ success: boolean; error?: string }> => {
+  const state = await registerWithFormAction({ status: "idle" }, formData)
+  return { success: state.status === "success", error: state.message }
+}
+
+/**
+ * Server Action: Initiate Social Authentication
+ */
+export async function initiateSocialAuthAction(prevState: unknown, formData: FormData) {
+  try {
+    const provider = String(formData.get("provider") || "")
+      .trim()
+      .toLowerCase()
+    if (!provider) {
+      redirect("/auth?error=invalid_provider")
+      return
+    }
+
+    // Allow-list providers you support; keep flexible to avoid breaking flows
+    const allowed = new Set(["google", "facebook", "instagram"])
+    if (!allowed.has(provider)) {
+      redirect("/auth?error=invalid_provider")
+      return
+    }
+
+    redirect(`/auth/social/${provider}`)
+  } catch {
+    redirect("/auth?error=unexpected_error")
   }
 }

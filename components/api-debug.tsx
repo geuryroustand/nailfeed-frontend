@@ -1,53 +1,76 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { API_CONFIG, constructApiUrl, getAuthHeaders } from "@/lib/config";
+import { useEffect, useState } from "react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+
+type EnvStatus = {
+  tokenExists: boolean
+  apiUrl: string
+}
 
 export default function ApiDebug() {
-  const [isVisible, setIsVisible] = useState(false);
-  const [apiResponse, setApiResponse] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isVisible, setIsVisible] = useState(false)
+  const [apiResponse, setApiResponse] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [envStatus, setEnvStatus] = useState<EnvStatus | null>(null)
+
+  useEffect(() => {
+    const loadEnv = async () => {
+      try {
+        const res = await fetch("/api/env/status", { cache: "no-store" })
+        const data = (await res.json()) as EnvStatus
+        setEnvStatus(data)
+      } catch {
+        setEnvStatus({ tokenExists: false, apiUrl: "" })
+      }
+    }
+    loadEnv()
+  }, [])
 
   const testApi = async () => {
-    setIsLoading(true);
-    setError(null);
+    setIsLoading(true)
+    setError(null)
+    setApiResponse(null)
 
     try {
-      console.log(
-        "Testing API with token:",
-        API_CONFIG.PUBLIC_API_TOKEN ? "exists" : "not found"
-      );
+      // Use server proxy so secrets are never exposed client-side
+      const response = await fetch("/api/auth-proxy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          endpoint: "/api/posts?populate=*",
+          method: "GET",
+        }),
+      })
 
-      const response = await fetch(constructApiUrl("/api/posts?populate=*"), {
-        headers: getAuthHeaders(),
-      });
-
+      const text = await response.text()
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`API error (${response.status}): ${errorText}`);
+        throw new Error(`API error (${response.status}): ${text}`)
       }
 
-      const data = await response.json();
-      setApiResponse(JSON.stringify(data, null, 2));
+      try {
+        const json = JSON.parse(text)
+        setApiResponse(JSON.stringify(json, null, 2))
+      } catch {
+        setApiResponse(text)
+      }
     } catch (err) {
-      console.error("API test failed:", err);
-      setError(err instanceof Error ? err.message : String(err));
+      setError(err instanceof Error ? err.message : String(err))
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   if (!isVisible) {
     return (
       <div className="fixed bottom-4 right-4 z-50">
-        <Button variant="outline" size="sm" onClick={() => setIsVisible(true)}>
+        <Button variant="outline" size="sm" onClick={() => setIsVisible(true)} aria-label="Open API Debug">
           Debug API
         </Button>
       </div>
-    );
+    )
   }
 
   return (
@@ -55,15 +78,15 @@ export default function ApiDebug() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">API Debug</CardTitle>
-          <Button variant="ghost" size="sm" onClick={() => setIsVisible(false)}>
+          <Button variant="ghost" size="sm" onClick={() => setIsVisible(false)} aria-label="Close API Debug">
             Close
           </Button>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             <div className="text-xs">
-              <p>API URL: {API_CONFIG.BASE_URL || "Not set"}</p>
-              <p>Token exists: {API_CONFIG.PUBLIC_API_TOKEN ? "Yes" : "No"}</p>
+              <p>API URL: {envStatus?.apiUrl || "Not set"}</p>
+              <p>Token exists: {envStatus?.tokenExists ? "Yes" : "No"}</p>
             </div>
 
             <Button
@@ -71,6 +94,7 @@ export default function ApiDebug() {
               disabled={isLoading}
               size="sm"
               className="w-full"
+              aria-label="Test API Connection"
             >
               {isLoading ? "Testing..." : "Test API Connection"}
             </Button>
@@ -90,5 +114,5 @@ export default function ApiDebug() {
         </CardContent>
       </Card>
     </div>
-  );
+  )
 }

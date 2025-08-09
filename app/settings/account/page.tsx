@@ -1,14 +1,15 @@
-import { Suspense } from "react";
-import { redirect } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft, Loader2 } from "lucide-react";
-import Sidebar from "@/components/sidebar";
-import BottomNav from "@/components/bottom-nav";
-import { getProfile } from "./get-profile";
-import { AccountTabs } from "./tabs";
+import { Suspense } from "react"
+import { redirect } from "next/navigation"
+import Link from "next/link"
+import { ArrowLeft, Loader2 } from "lucide-react"
+import Sidebar from "@/components/sidebar"
+import BottomNav from "@/components/bottom-nav"
+import { getProfile } from "./get-profile"
+import { AccountTabs } from "./tabs"
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 
-// Mark this page as dynamic
-export const dynamic = "force-dynamic";
+// Force dynamic rendering since we use cookies
+export const dynamic = "force-dynamic"
 
 // Loading component for Suspense
 function LoadingState() {
@@ -19,17 +20,17 @@ function LoadingState() {
         <p className="mt-2 text-gray-600">Loading your profile...</p>
       </div>
     </div>
-  );
+  )
 }
 
 export default async function AccountSettingsPage() {
   // Fetch profile data on the server
-  const { profile, user, isAuthenticated } = await getProfile();
+  const { profile, user, isAuthenticated } = await getProfile()
 
   // Handle authentication check
   if (!isAuthenticated) {
     // This redirect will be handled properly by Next.js
-    redirect("/auth");
+    redirect("/auth")
   }
 
   return (
@@ -50,6 +51,14 @@ export default async function AccountSettingsPage() {
               <h1 className="text-2xl font-bold">Account Settings</h1>
             </div>
 
+            {/* Add a notice about updates */}
+            <Alert className="mb-6">
+              <AlertTitle>Updates are processed immediately</AlertTitle>
+              <AlertDescription>
+                When you update your profile information, the changes will be applied right away.
+              </AlertDescription>
+            </Alert>
+
             <div className="bg-white rounded-xl shadow-sm overflow-hidden">
               <Suspense fallback={<LoadingState />}>
                 <AccountTabs profile={profile} user={user} />
@@ -64,5 +73,5 @@ export default async function AccountSettingsPage() {
         <BottomNav activeTab="profile" />
       </div>
     </main>
-  );
+  )
 }

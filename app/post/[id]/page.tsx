@@ -1,9 +1,14 @@
 import { Suspense } from "react"
 import { notFound } from "next/navigation"
-import { getPostById } from "@/lib/post-data"
-import PostDetailView from "@/components/post-detail-view"
+import type { Metadata, ResolvingMetadata } from "next"
+import { getPostWithRelated } from "@/lib/actions/post-detail-actions"
+import PostDetailServerWrapper from "@/components/post/post-detail-server-wrapper"
 import PostDetailSkeleton from "@/components/post-detail-skeleton"
-import { ReactionDetails } from "@/components/reaction-details"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { AlertCircle } from "lucide-react"
+
+// Force dynamic rendering to prevent build errors
+export const dynamic = "force-dynamic"
 
 interface PostPageProps {
   params: {
@@ -11,33 +16,105 @@ interface PostPageProps {
   }
 }
 
+// Generate dynamic metadata for SEO
+export async function generateMetadata({ params }: PostPageProps, parent: ResolvingMetadata): Promise<Metadata> {
+  try {
+    // Fetch post data for metadata
+    const { post } = await getPostWithRelated(params.id)
+
+    // If post not found, return basic metadata
+    if (!post) {
+      return {
+        title: "Post not found",
+        description: "The requested post could not be found.",
+      }
+    }
+
+    // Get parent metadata
+    const previousImages = (await parent).openGraph?.images || []
+
+    // Prepare post image for metadata
+    const postImage = post.image || (post.mediaItems && post.mediaItems.length > 0 ? post.mediaItems[0].url : null)
+
+    // Create description from post content
+    const description = post.description
+      ? post.description.length > 160
+        ? `${post.description.substring(0, 157)}...`
+        : post.description
+      : `Nail art post by ${post.username}`
+
+    return {
+      title: `${post.title || `${post.username}'s post`} | NailFeed`,
+      description,
+      openGraph: {
+        title: post.title || `${post.username}'s nail art post`,
+        description,
+        images: postImage ? [postImage, ...previousImages] : previousImages,
+        type: "article",
+        authors: [post.username],
+        publishedTime: post.timestamp,
+        tags: post.tags,
+      },
+      twitter: {
+        card: "summary_large_image",
+        title: post.title || `${post.username}'s nail art post`,
+        description,
+        images: postImage ? [postImage] : [],
+      },
+    }
+  } catch (error) {
+    console.error("Error generating metadata:", error)
+    return {
+      title: "Post | NailFeed",
+      description: "View this nail art post",
+    }
+  }
+}
+
+// Remove generateStaticParams to prevent static generation issues
+// Pages will be generated on-demand instead
+
+// Remove revalidate since we're using dynamic rendering
+// export const revalidate = 3600
+
 export default async function PostPage({ params }: PostPageProps) {
   try {
-    // The id param could be either a numeric ID or a documentId
     const idOrDocumentId = params.id
 
-    // Fetch the post data using either ID or documentId
-    const post = await getPostById(idOrDocumentId)
+    // Use the optimized server action to fetch both post and related posts
+    const { post, relatedPosts } = await getPostWithRelated(idOrDocumentId)
 
-    // If post not found, show 404
     if (!post) {
-      console.error(`Post not found with ID/documentId: ${idOrDocumentId}`)
       return notFound()
     }
 
     return (
-      <div className="container max-w-4xl mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-6 sm:py-8">
         <Suspense fallback={<PostDetailSkeleton />}>
-          <PostDetailView post={post} />
+          <PostDetailServerWrapper post={post} relatedPosts={relatedPosts} />
         </Suspense>
-        {/* Add this after the PostDetailView component */}
-        <div className="mt-4">
-          <ReactionDetails postId={post.id} />
-        </div>
       </div>
     )
   } catch (error) {
-    console.error("Error loading post:", error)
-    return notFound()
+    console.error("Error rendering post page:", error)
+
+    // Return an error UI instead of notFound()
+    return (
+      <div className="container mx-auto px-4 py-6 sm:py-8">
+        <Alert variant="destructive" className="mb-6">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>
+            We encountered an error loading this post. Please try again later or return to the home page.
+          </AlertDescription>
+        </Alert>
+
+        <div className="flex justify-center mt-8">
+          <a href="/" className="px-4 py-2 bg-pink-500 text-white rounded-md hover:bg-pink-600 transition-colors">
+            Return to Home
+          </a>
+        </div>
+      </div>
+    )
   }
 }

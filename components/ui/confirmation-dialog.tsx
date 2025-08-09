@@ -1,63 +1,60 @@
 "use client"
+
+import type React from "react"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
-  AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Button } from "@/components/ui/button"
 import { Loader2 } from "lucide-react"
 
 interface ConfirmationDialogProps {
-  title: string
-  description: string
   open: boolean
   onOpenChange: (open: boolean) => void
+  title: string
+  description: React.ReactNode
   onConfirm: () => void
   confirmText?: string
   cancelText?: string
   variant?: "default" | "destructive"
   isLoading?: boolean
+  disabled?: boolean
 }
 
 export function ConfirmationDialog({
-  title,
-  description,
   open,
   onOpenChange,
+  title,
+  description,
   onConfirm,
   confirmText = "Confirm",
   cancelText = "Cancel",
   variant = "default",
   isLoading = false,
+  disabled = false,
 }: ConfirmationDialogProps) {
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog open={open} onOpenChange={disabled ? undefined : onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
+          <div className="text-sm text-muted-foreground">{description}</div>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isLoading}>{cancelText}</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={(e) => {
-              e.preventDefault()
-              onConfirm()
-            }}
-            className={
-              variant === "destructive"
-                ? "bg-red-500 hover:bg-red-600 focus:ring-red-500"
-                : "bg-primary hover:bg-primary/90"
-            }
-            disabled={isLoading}
+          <AlertDialogCancel disabled={isLoading || disabled}>{cancelText}</AlertDialogCancel>
+          <Button
+            variant={variant}
+            onClick={onConfirm}
+            disabled={isLoading || disabled}
+            className="flex items-center gap-2"
           >
-            {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
             {confirmText}
-          </AlertDialogAction>
+          </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

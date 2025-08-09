@@ -1,56 +1,91 @@
 import { cookies } from "next/headers"
 import { type NextRequest, NextResponse } from "next/server"
 
-// Base URL for API requests
+// Server-only environment variables
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
+const SERVER_API_TOKEN = process.env.API_TOKEN || ""
 
-// This is a server-side route that can safely use the API token
+// Helper: normalize URL join
+function joinUrl(base: string, path: string) {
+  const b = base.endsWith("/") ? base.slice(0, -1) : base
+  const p = path.startsWith("/") ? path : `/${path}`
+  return `${b}${p}`
+}
+
+/**
+ * POST /api/auth-proxy
+ * Body: { endpoint: string, method?: string, data?: any, headers?: Record<string, string>, authorizationOverride?: string }
+ * Behavior:
+ * - Builds a request to the backend at API_BASE_URL + endpoint
+ * - Authorization priority: cookie JWT > authorizationOverride (from client) > SERVER_API_TOKEN
+ * - Never exposes secrets to the client; runs server-side
+ */
 export async function POST(request: NextRequest) {
   try {
-    const { endpoint, method, data } = await request.json()
+    const body = await request.json().catch(() => ({}))
+    const { endpoint, method = "GET", data, headers: incomingHeaders = {}, authorizationOverride } = body || {}
 
-    // Get the API token from server environment
-    const apiToken = process.env.API_TOKEN
+    if (!endpoint || typeof endpoint !== "string") {
+      return NextResponse.json(
+        { error: { code: "bad_request", message: "Missing or invalid 'endpoint'." } },
+        { status: 400 },
+      )
+    }
 
-    // Construct the full URL
-    const baseUrl = API_BASE_URL.endsWith("/") ? API_BASE_URL.slice(0, -1) : API_BASE_URL
-    const path = endpoint.startsWith("/") ? endpoint : `/${endpoint}`
-    const url = `${baseUrl}${path}`
+    const url = joinUrl(API_BASE_URL, endpoint)
 
-    // Set up headers with authentication
+    // Start with safe defaults. Whitelist a small set of headers from the client.
     const headers: HeadersInit = {
       "Content-Type": "application/json",
     }
 
-    // Add authorization header if token exists
-    if (apiToken) {
-      headers["Authorization"] = `Bearer ${apiToken}`
+    // Allow forwarding a few benign headers. Do not forward auth from client blindly.
+    const allowedHeaderNames = new Set(["content-type", "accept"])
+    for (const [k, v] of Object.entries(incomingHeaders || {})) {
+      if (typeof v === "string" && allowedHeaderNames.has(k.toLowerCase())) {
+        headers[k] = v
+      }
     }
 
-    // Get the JWT from cookies if it exists (server-side)
+    // Determine Authorization header
     const cookieStore = cookies()
-    const jwt = cookieStore.get("jwt")?.value
+    const jwt = cookieStore.get("jwt")?.value || cookieStore.get("authToken")?.value
+
     if (jwt) {
       headers["Authorization"] = `Bearer ${jwt}`
+    } else if (authorizationOverride && typeof authorizationOverride === "string") {
+      // Useful for diagnostics; still handled only server-side
+      headers["Authorization"] = authorizationOverride
+    } else if (SERVER_API_TOKEN) {
+      headers["Authorization"] = `Bearer ${SERVER_API_TOKEN}`
     }
 
-    // Make the request
-    const options: RequestInit = {
-      method: method || "GET",
+    const fetchOptions: RequestInit = {
+      method,
       headers,
       cache: "no-store",
     }
 
-    // Add body for non-GET requests
-    if (data && method !== "GET") {
-      options.body = JSON.stringify(data)
+    if (method.toUpperCase() !== "GET" && data !== undefined) {
+      fetchOptions.body = typeof data === "string" ? data : JSON.stringify(data)
     }
 
-    const response = await fetch(url, options)
+    const resp = await fetch(url, fetchOptions)
 
-    // Return the response data
-    const responseData = await response.json()
-    return NextResponse.json(responseData, { status: response.status })
+    // Proxy back response as-is (JSON or text)
+    const contentType = resp.headers.get("content-type") || ""
+    const status = resp.status
+
+    if (contentType.includes("application/json")) {
+      const json = await resp.json()
+      return NextResponse.json(json, { status })
+    }
+
+    const text = await resp.text()
+    return new NextResponse(text, {
+      status,
+      headers: { "content-type": contentType || "text/plain" },
+    })
   } catch (error) {
     console.error("API proxy error:", error)
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })

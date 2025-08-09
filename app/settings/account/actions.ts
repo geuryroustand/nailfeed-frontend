@@ -26,6 +26,8 @@ const profileSchema = z.object({
     .max(50, "Display name must be less than 50 characters")
     .optional(),
   bio: z.string().max(160, "Bio must be less than 160 characters").optional(),
+  location: z.string().max(100, "Location must be less than 100 characters").optional(),
+  website: z.string().max(100, "Website must be less than 100 characters").optional(),
 })
 
 // Get JWT token from cookies
@@ -50,13 +52,22 @@ export async function updateProfile(formData: FormData): Promise<ActionResponse>
       username: formData.get("username") as string,
       displayName: formData.get("displayName") as string,
       bio: formData.get("bio") as string,
+      location: formData.get("location") as string,
+      website: formData.get("website") as string,
     }
 
-    // Only include fields that have values
-    const updateData: UpdateProfileInput = {}
-    if (rawData.username) updateData.username = rawData.username
-    if (rawData.displayName) updateData.displayName = rawData.displayName
-    if (rawData.bio) updateData.bio = rawData.bio
+    // Create update data with all fields explicitly included
+    // Important: We need to explicitly include empty strings for optional fields
+    const updateData: UpdateProfileInput = {
+      username: rawData.username || undefined,
+      displayName: rawData.displayName || undefined,
+      bio: rawData.bio, // Include even if empty string
+      location: rawData.location, // Include even if empty string
+      website: rawData.website, // Include even if empty string
+    }
+
+    // Log the update data to verify all fields are included
+    console.log("Updating profile with data:", JSON.stringify(updateData, null, 2))
 
     // Validate the data
     const validationResult = profileSchema.safeParse(updateData)
@@ -67,8 +78,6 @@ export async function updateProfile(formData: FormData): Promise<ActionResponse>
         fieldErrors: validationResult.error.flatten().fieldErrors,
       }
     }
-
-    console.log("Updating profile with data:", updateData)
 
     // Call the actual API to update the profile
     const updatedProfile = await ProfileService.updateProfile(token, updateData)
@@ -81,6 +90,7 @@ export async function updateProfile(formData: FormData): Promise<ActionResponse>
     }
 
     // Revalidate the paths to refresh server data
+    // Use more specific path revalidation to avoid full page refreshes
     revalidatePath("/settings/account")
     revalidatePath("/profile")
 

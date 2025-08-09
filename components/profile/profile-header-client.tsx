@@ -1,36 +1,57 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { Edit, Share2, Settings } from "lucide-react"
+import { Edit, Share2, Settings, PlusCircle } from "lucide-react"
 import { motion } from "framer-motion"
 import EditProfileModal from "@/components/profile/edit-profile-modal"
 import Link from "next/link"
 import { toggleFollow } from "@/lib/user-actions"
 import { useToast } from "@/hooks/use-toast"
 import type { UserProfileResponse } from "@/lib/services/user-service"
+import CreatePostModal from "@/components/create-post-modal"
 
 interface ProfileHeaderClientProps {
   userData: UserProfileResponse & {
     profileImageUrl: string
     coverImageUrl: string
+    isFollowing?: boolean
+    followersCount: number
+    followingCount: number
   }
+  isOtherUser: boolean
 }
 
-export function ProfileHeaderClient({ userData }: ProfileHeaderClientProps) {
-  const [isFollowing, setIsFollowing] = useState(false) // This would come from API in a real app
-  const [followerCount, setFollowerCount] = useState(userData.followersCount)
+export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClientProps) {
+  const [isFollowing, setIsFollowing] = useState(userData.isFollowing || false)
+  const [followerCount, setFollowerCount] = useState(userData.followersCount || 0)
+  const [followingCount, setFollowingCount] = useState(userData.followingCount || 0)
   const [showEditModal, setShowEditModal] = useState(false)
+  const [showCreatePostModal, setShowCreatePostModal] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
 
+  // Update state if props change, ensuring we always have values
+  useEffect(() => {
+    setIsFollowing(userData.isFollowing || false)
+    // Only update if we have valid values
+    if (userData.followersCount !== undefined) {
+      setFollowerCount(userData.followersCount)
+    }
+    if (userData.followingCount !== undefined) {
+      setFollowingCount(userData.followingCount)
+    }
+  }, [userData.isFollowing, userData.followersCount, userData.followingCount])
+
   const handleFollowToggle = async () => {
+    if (!isOtherUser) return // Don't allow following yourself
+
     setIsLoading(true)
 
     // Optimistic update
     setIsFollowing((prev) => !prev)
-    setFollowerCount((prev) => (isFollowing ? prev - 1 : prev + 1))
+    setFollowerCount((prev) => (isFollowing ? Math.max(0, prev - 1) : prev + 1))
 
     try {
       const result = await toggleFollow(userData.username, isFollowing)
@@ -38,21 +59,31 @@ export function ProfileHeaderClient({ userData }: ProfileHeaderClientProps) {
       if (!result.success) {
         // Revert optimistic update if failed
         setIsFollowing(isFollowing)
-        setFollowerCount(userData.followersCount)
+        setFollowerCount(userData.followersCount || 0)
 
         toast({
           title: "Error",
           description: result.message || "Failed to update follow status",
           variant: "destructive",
         })
-      } else if (result.newFollowerCount) {
+      } else {
         // Update with actual count from server
-        setFollowerCount(result.newFollowerCount)
+        if (result.newFollowerCount !== undefined) {
+          setFollowerCount(result.newFollowerCount)
+        }
+
+        // Show success message
+        toast({
+          title: result.isFollowing ? "Following" : "Unfollowed",
+          description: result.isFollowing
+            ? `You are now following ${userData.displayName || userData.username}`
+            : `You unfollowed ${userData.displayName || userData.username}`,
+        })
       }
     } catch (error) {
       // Revert optimistic update if error
       setIsFollowing(isFollowing)
-      setFollowerCount(userData.followersCount)
+      setFollowerCount(userData.followersCount || 0)
 
       toast({
         title: "Error",
@@ -64,11 +95,53 @@ export function ProfileHeaderClient({ userData }: ProfileHeaderClientProps) {
     }
   }
 
+  const handlePostCreated = (newPost: any) => {
+    // Show success toast
+    toast({
+      title: "Post created!",
+      description: "Your post has been published successfully.",
+    })
+
+    // Refresh the page to show the new post
+    // A more sophisticated approach would update the state
+    setTimeout(() => {
+      window.location.reload()
+    }, 1000)
+  }
+
+  // Helper function to check if a field has real user content (not placeholder)
+  const hasRealContent = (field?: string): boolean => {
+    // Return false if field doesn't exist or is empty
+    if (!field || field.trim() === "") return false
+
+    // List of specific placeholder texts to filter out
+    const placeholderTexts = [
+      "Updated bio information",
+      "New Location",
+      "placeholder",
+      "example",
+      "sample",
+      "your bio",
+      "your location",
+      "add your",
+    ]
+
+    // Check if the field contains any of the placeholder texts
+    return !placeholderTexts.some((text) => field.toLowerCase().includes(text.toLowerCase()))
+  }
+
+  // Debug userData when it changes
+  useEffect(() => {
+    console.log("ProfileHeaderClient - userData:", userData)
+    console.log("ProfileHeaderClient - coverImageUrl:", userData.coverImageUrl)
+  }, [userData])
+
   return (
     <>
       <div className="relative">
         {/* Cover Image */}
         <div className="h-40 md:h-60 bg-gradient-to-r from-pink-300 via-purple-300 to-indigo-300 relative overflow-hidden">
+          {console.log("Cover Image URL:", userData.coverImageUrl)}
           {userData.coverImageUrl ? (
             <motion.div
               className="absolute inset-0"
@@ -110,21 +183,34 @@ export function ProfileHeaderClient({ userData }: ProfileHeaderClientProps) {
 
           {/* Action buttons */}
           <div className="absolute top-4 right-4 flex space-x-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              className="bg-white/80 backdrop-blur-sm"
-              onClick={() => setShowEditModal(true)}
-            >
-              <Edit className="h-4 w-4 mr-1" />
-              Edit
-            </Button>
-            <Link href="/settings/account">
-              <Button variant="secondary" size="sm" className="bg-white/80 backdrop-blur-sm">
-                <Settings className="h-4 w-4 mr-1" />
-                Settings
-              </Button>
-            </Link>
+            {!isOtherUser && (
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="bg-white/80 backdrop-blur-sm"
+                  onClick={() => setShowCreatePostModal(true)}
+                >
+                  <PlusCircle className="h-4 w-4 mr-1" />
+                  Post
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="bg-white/80 backdrop-blur-sm"
+                  onClick={() => setShowEditModal(true)}
+                >
+                  <Edit className="h-4 w-4 mr-1" />
+                  Edit
+                </Button>
+                <Link href="/settings/account">
+                  <Button variant="secondary" size="sm" className="bg-white/80 backdrop-blur-sm">
+                    <Settings className="h-4 w-4 mr-1" />
+                    Settings
+                  </Button>
+                </Link>
+              </>
+            )}
             <Button variant="secondary" size="icon" className="h-8 w-8 bg-white/80 backdrop-blur-sm">
               <Share2 className="h-4 w-4" />
             </Button>
@@ -142,7 +228,7 @@ export function ProfileHeaderClient({ userData }: ProfileHeaderClientProps) {
             <div className="rounded-full p-1 bg-white shadow-lg">
               <Avatar className="h-32 w-32 md:h-40 md:w-40 border-4 border-white">
                 <AvatarImage
-                  src={userData.profileImageUrl || "/placeholder.svg"}
+                  src={userData.profileImageUrl || ""}
                   alt={userData.username}
                   className="object-cover" // Ensure proper image scaling
                 />
@@ -168,41 +254,75 @@ export function ProfileHeaderClient({ userData }: ProfileHeaderClientProps) {
         <h1 className="text-2xl font-bold">{userData.displayName || userData.username}</h1>
         <p className="text-gray-500 text-sm">@{userData.username}</p>
 
+        {/* Follower and Following Counts - Always visible to all users */}
+        <div className="flex justify-center gap-6 mt-3">
+          <div className="text-center">
+            <p className="font-semibold">
+              {followerCount !== undefined
+                ? followerCount.toLocaleString()
+                : (userData.followersCount || 0).toLocaleString()}
+            </p>
+            <p className="text-xs text-gray-500">Followers</p>
+          </div>
+          <div className="text-center">
+            <p className="font-semibold">
+              {followingCount !== undefined
+                ? followingCount.toLocaleString()
+                : (userData.followingCount || 0).toLocaleString()}
+            </p>
+            <p className="text-xs text-gray-500">Following</p>
+          </div>
+          <div className="text-center">
+            <p className="font-semibold">{userData.postsCount?.toLocaleString() || "0"}</p>
+            <p className="text-xs text-gray-500">Posts</p>
+          </div>
+        </div>
+
         <div className="mt-4 max-w-md mx-auto">
-          <p className="text-sm whitespace-pre-wrap">{userData.bio}</p>
-          {userData.website && (
+          {/* Display bio if it has real content (not placeholder) */}
+          {hasRealContent(userData.bio) && <p className="text-sm whitespace-pre-wrap">{userData.bio}</p>}
+
+          {/* Only display website if it has content */}
+          {hasRealContent(userData.website) && (
             <a
-              href={`https://${userData.website}`}
+              href={userData.website.startsWith("http") ? userData.website : `https://${userData.website}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-sm text-pink-500 font-medium mt-1 inline-block"
             >
-              {userData.website}
+              {userData.website.replace(/^https?:\/\//, "")}
             </a>
           )}
-          {userData.location && (
+
+          {/* Only display location if it has real content (not placeholder) */}
+          {hasRealContent(userData.location) && (
             <p className="text-sm text-gray-500 mt-1">
               <span>📍 {userData.location}</span>
             </p>
           )}
         </div>
 
-        <div className="mt-6 flex justify-center gap-2">
-          <Button
-            variant={isFollowing ? "outline" : "default"}
-            className={isFollowing ? "rounded-full px-6" : "rounded-full px-6 bg-pink-500 hover:bg-pink-600"}
-            onClick={handleFollowToggle}
-            disabled={isLoading}
-          >
-            {isFollowing ? "Following" : "Follow"}
-          </Button>
-          <Button variant="outline" className="rounded-full px-6">
-            Message
-          </Button>
-        </div>
+        {isOtherUser && (
+          <div className="mt-6 flex justify-center gap-2">
+            <Button
+              variant={isFollowing ? "outline" : "default"}
+              className={isFollowing ? "rounded-full px-6" : "rounded-full px-6 bg-pink-500 hover:bg-pink-600"}
+              onClick={handleFollowToggle}
+              disabled={isLoading}
+            >
+              {isLoading ? "Processing..." : isFollowing ? "Following" : "Follow"}
+            </Button>
+            <Button variant="outline" className="rounded-full px-6">
+              Message
+            </Button>
+          </div>
+        )}
       </div>
 
       {showEditModal && <EditProfileModal user={userData} onClose={() => setShowEditModal(false)} />}
+      {showCreatePostModal && (
+        <CreatePostModal onClose={() => setShowCreatePostModal(false)} onPostCreated={handlePostCreated} />
+      )}
     </>
   )
 }

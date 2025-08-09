@@ -1,20 +1,45 @@
 "use client"
 
 import type React from "react"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { ImageIcon, Video, Smile, XCircle, MapPin, UserPlus, Palette, LayoutGrid } from "lucide-react"
+import { ImageIcon, Video, Smile, XCircle, MapPin, UserPlus, Palette, LayoutGrid, Hash } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import PostBackgroundSelector, { type BackgroundType } from "./post-background-selector"
 import MediaGallery from "./media-gallery"
 import type { MediaItem } from "@/types/media"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { createPost } from "@/app/actions/post-actions"
 import { useAuth } from "@/context/auth-context"
 import { useRouter } from "next/navigation"
 import type { ContentType, GalleryLayout } from "@/lib/services/post-service"
+import dynamic from "next/dynamic"
+// Update the import at the top of the file
+import { containsProfanity, validateContent as validateContentText } from "@/lib/content-moderation"
+
+// Dynamically import EmojiPicker to avoid SSR issues
+const EmojiPicker = dynamic(() => import("emoji-picker-react"), {
+  ssr: false,
+  loading: () => <div className="p-4 text-center">Loading emoji picker...</div>,
+})
+
+// Add this function after the imports
+async function fetchCompletePostData(postId: number) {
+  try {
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
+    const response = await fetch(`${API_URL}/api/posts/${postId}?populate=*`)
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch complete post data: ${response.status}`)
+    }
+
+    const data = await response.json()
+    return data.data
+  } catch (error) {
+    return null
+  }
+}
 
 interface CreatePostModalProps {
   onClose: () => void
@@ -26,27 +51,53 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([])
   const [background, setBackground] = useState<BackgroundType | null>(null)
   const [showBackgroundSelector, setShowBackgroundSelector] = useState(false)
-  // Updated to match the Strapi enum values
-  const [galleryLayout, setGalleryLayout] = useState<GalleryLayout>("grid,")
+  const [galleryLayout, setGalleryLayout] = useState<GalleryLayout>("grid")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const emojiPickerRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const MAX_MEDIA_ITEMS = 10
-  const { user, isAuthenticated, token } = useAuth()
+  const { user, isAuthenticated, jwt } = useAuth()
   const router = useRouter()
-  const [tags, setTags] = useState<string[]>([])
-  const [currentTag, setCurrentTag] = useState("")
+  const [showTrendingTags, setShowTrendingTags] = useState(false)
+  const [cursorPosition, setCursorPosition] = useState(0)
+  const [isFocused, setIsFocused] = useState(false)
+  const mounted = useRef(true)
+  const [title, setTitle] = useState("")
+  const [showTitleInput, setShowTitleInput] = useState(false)
 
-  // Log user information for debugging
-  useEffect(() => {
-    if (user) {
-      console.log("Current user:", user)
-      console.log("User ID:", user.id)
-      console.log("User documentId:", user.documentId)
-    }
-  }, [user])
+  // Trending tags suggestion (mock data - could be fetched from API)
+  const trendingTags = [
+    "summernails",
+    "frenchnails",
+    "gelnails",
+    "acrylicnails",
+    "nailart",
+    "naildesign",
+    "nailinspiration",
+    "nailsofinstagram",
+    "glitternails",
+    "mattenails",
+    "ombrenails",
+    "coffinnails",
+  ]
+
+  // Extract hashtags from content
+  const extractedTags = useMemo(() => {
+    const hashtagRegex = /#(\w+)/g
+    const matches = [...content.matchAll(hashtagRegex)]
+    return matches.map((match) => match[1].toLowerCase()).filter((tag, index, self) => self.indexOf(tag) === index) // Remove duplicates
+  }, [content])
+
+  // const [formData, setFormData] = useState({
+  //   description: "",
+  //   contentType: "image" as ContentType,
+  //   background: null as BackgroundType | null,
+  //   galleryLayout: "grid" as GalleryLayout,
+  // })
 
   // Check if user is authenticated, if not, redirect to login
   useEffect(() => {
@@ -58,22 +109,15 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
       })
       onClose()
       router.push("/auth")
-    } else {
-      // Ensure the JWT token is stored in localStorage for the API client to use
-      if (token) {
-        console.log("Storing JWT token in localStorage")
-        localStorage.setItem("jwt", token)
-      } else {
-        console.warn("No token available in auth context")
-      }
     }
-  }, [isAuthenticated, onClose, router, toast, token])
+  }, [isAuthenticated, onClose, router, toast])
 
   // Auto-resize textarea as content changes
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto"
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
+      updateCursorPosition()
     }
   }, [content])
 
@@ -138,8 +182,27 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
     })
   }
 
-  const handleEmojiSelect = (emoji: any) => {
-    setContent((prev) => prev + emoji.native)
+  const handleEmojiSelect = (emojiData: any) => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    const emoji = emojiData.emoji
+    const cursorPos = textarea.selectionStart
+
+    const textBefore = content.substring(0, cursorPos)
+    const textAfter = content.substring(cursorPos)
+
+    setContent(textBefore + emoji + textAfter)
+
+    // Focus back on textarea and set cursor position after inserted emoji
+    setTimeout(() => {
+      textarea.focus()
+      const newCursorPos = cursorPos + emoji.length
+      textarea.setSelectionRange(newCursorPos, newCursorPos)
+      updateCursorPosition()
+    }, 0)
+
+    // Close emoji picker after selection
     setShowEmojiPicker(false)
   }
 
@@ -158,23 +221,61 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
     }
   }
 
-  const handleAddTag = () => {
-    if (currentTag.trim() && !tags.includes(currentTag.trim())) {
-      setTags([...tags, currentTag.trim()])
-      setCurrentTag("")
-    }
+  const insertHashtag = (tag: string) => {
+    // Insert the hashtag at the current cursor position or at the end
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    const tagText = ` #${tag} `
+    const cursorPos = textarea.selectionStart
+
+    const textBefore = content.substring(0, cursorPos)
+    const textAfter = content.substring(cursorPos)
+
+    setContent(textBefore + tagText + textAfter)
+
+    // Focus back on textarea and set cursor position after inserted tag
+    setTimeout(() => {
+      textarea.focus()
+      const newCursorPos = cursorPos + tagText.length
+      textarea.setSelectionRange(newCursorPos, newCursorPos)
+      updateCursorPosition()
+    }, 0)
+
+    setShowTrendingTags(false)
   }
 
-  const handleRemoveTag = (tagToRemove: string) => {
-    setTags(tags.filter((tag) => tag !== tagToRemove))
+  // Format content to highlight hashtags
+  const formatContentWithHashtags = () => {
+    if (!content) return null
+
+    const parts = content.split(/(#\w+)/g)
+    return parts.map((part, index) => {
+      if (part.startsWith("#")) {
+        return (
+          <span key={index} className="text-pink-500 font-medium">
+            {part}
+          </span>
+        )
+      }
+      return part
+    })
   }
 
   useEffect(() => {
-    // Handle click outside for emoji picker
+    // Handle click outside for emoji picker and trending tags
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement
-      if (showEmojiPicker && !target.closest(".emoji-picker-container")) {
+      if (
+        showEmojiPicker &&
+        emojiPickerRef.current &&
+        !emojiPickerRef.current.contains(target) &&
+        !target.closest(".emoji-button")
+      ) {
         setShowEmojiPicker(false)
+      }
+      if (showTrendingTags && !target.closest(".trending-tags-container") && !target.closest(".hashtag-button")) {
+        setShowTrendingTags(false)
       }
     }
 
@@ -183,18 +284,65 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
     // Clean up function
     return () => {
       document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [showEmojiPicker, showTrendingTags])
 
-      // Revoke all object URLs to prevent memory leaks
+  // Separate useEffect for cleaning up blob URLs to avoid unnecessary revocations
+  useEffect(() => {
+    return () => {
+      // Revoke all object URLs to prevent memory leaks when component unmounts
       mediaItems.forEach((item) => {
         if (item.url.startsWith("blob:")) {
           URL.revokeObjectURL(item.url)
         }
       })
     }
-  }, [showEmojiPicker, mediaItems])
+  }, [])
 
-  // Update the handleSubmit function to better handle media uploads
+  // Track component mounting state
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+
+  // Update the validateContent function to use the imported function:
+  const validateContent = (): { isValid: boolean; errorMessage?: string } => {
+    // Check title for profanity if it exists
+    if (title && containsProfanity(title)) {
+      return {
+        isValid: false,
+        errorMessage: "Your title contains inappropriate language. Please revise it.",
+      }
+    }
+
+    // Check description for profanity
+    if (content) {
+      return validateContentText(content)
+    }
+
+    return { isValid: true }
+  }
+
+  // Modify the handleSubmit function to include content validation
+  // Find the handleSubmit function and add this code at the beginning:
   const handleSubmit = async () => {
+    // Reset previous errors
+    setSubmitError(null)
+
+    // Validate content for profanity
+    const contentValidation = validateContent()
+    if (!contentValidation.isValid) {
+      setSubmitError(contentValidation.errorMessage || "Your post contains inappropriate content.")
+      toast({
+        title: "Content moderation",
+        description: contentValidation.errorMessage,
+        variant: "destructive",
+      })
+      return
+    }
+
     // Check if user is authenticated
     if (!isAuthenticated) {
       toast({
@@ -205,12 +353,6 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
       onClose()
       router.push("/auth")
       return
-    }
-
-    // Double-check that the JWT token is stored
-    if (!localStorage.getItem("jwt") && token) {
-      console.log("Storing JWT token in localStorage before submission")
-      localStorage.setItem("jwt", token)
     }
 
     if (!content.trim() && mediaItems.length === 0) {
@@ -225,18 +367,18 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
     setIsSubmitting(true)
 
     try {
-      console.log("Starting post creation process")
-      console.log("Authentication status:", isAuthenticated ? "Authenticated" : "Not authenticated")
-      console.log("User:", user ? `${user.username} (ID: ${user.id}, documentId: ${user.documentId})` : "No user data")
-      console.log("Token available:", token ? "Yes" : "No")
-      console.log("Token in localStorage:", localStorage.getItem("jwt") ? "Yes" : "No")
-
-      // Create a FormData object to send to the server
-      const formData = new FormData()
-
-      // Add basic post data
-      formData.append("title", "Untitled Post") // You can add a title field if needed
-      formData.append("description", content)
+      // Get authentication token
+      const token = jwt
+      if (!token) {
+        setSubmitError("Authentication token not found. Please try logging in again.")
+        toast({
+          title: "Authentication error",
+          description: "Your login session may have expired. Please log in again.",
+          variant: "destructive",
+        })
+        setIsSubmitting(false)
+        return
+      }
 
       // Determine the content type based on what's being posted
       let contentType: ContentType
@@ -246,119 +388,92 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
         contentType = background ? "text-background" : "text"
       }
 
+      // Prepare FormData for the server action
+      const formData = new FormData()
+
+      // Add basic post data
+      formData.append("title", title.trim())
+      formData.append("description", content)
       formData.append("contentType", contentType)
       formData.append("galleryLayout", galleryLayout)
+      formData.append("jwt", token)
+      formData.append("userDocumentId", user?.documentId || "")
+      formData.append("userObject", JSON.stringify(user))
 
-      // Add JWT token to ensure it's available on the server
-      if (token) {
-        formData.append("jwt", token)
-      }
-
-      // Add user documentId to ensure it's available on the server
-      if (user?.documentId) {
-        formData.append("userDocumentId", user.documentId)
-      } else if (user?.id) {
-        // Fallback to regular ID if documentId is not available
-        formData.append("userId", user.id.toString())
-      }
-
-      // Add the full user object for debugging
-      if (user) {
-        formData.append("userObject", JSON.stringify(user))
-      }
-
-      // Add tags if any
-      if (tags.length > 0) {
-        formData.append("tags", JSON.stringify(tags))
-      }
-
-      // Add background if present
+      // Add background if exists
       if (background) {
         formData.append("background", JSON.stringify(background))
       }
 
-      // Add media items if present
-      if (mediaItems.length > 0) {
-        // Add metadata about media items
-        const mediaItemsMetadata = mediaItems.map((item) => ({
-          id: item.id,
-          type: item.type,
-          name: item.file?.name || `file-${item.id}`,
-          size: item.file?.size || 0,
-          mimeType: item.file?.type || (item.type === "image" ? "image/jpeg" : "video/mp4"),
-        }))
-        formData.append("mediaItems", JSON.stringify(mediaItemsMetadata))
+      // Add extracted hashtags
+      formData.append("tags", JSON.stringify(extractedTags))
 
-        // Add the actual files
-        mediaItems.forEach((item, index) => {
+      // Add media files if they exist
+      if (mediaItems.length > 0) {
+        mediaItems.forEach((item) => {
           if (item.file) {
-            // Use a more descriptive name for the file to help with debugging
-            formData.append(`mediaFiles`, item.file, `${index}-${item.file.name}`)
+            formData.append("mediaFiles", item.file)
           }
         })
       }
 
-      console.log("Submitting form data to server action")
+      // Call the server action with the new flow
+      const result = await fetch("/api/posts/create", {
+        method: "POST",
+        body: formData,
+      })
 
-      // Submit the form using the server action
-      const result = await createPost(formData)
-
-      console.log("Server action result:", result)
-
-      if (result.success) {
-        // Create a new post object for the UI
-        const newPost = {
-          id: result.post.id,
-          username: user?.username || "you",
-          userImage: user?.profileImage?.url || "/diverse-avatars.png",
-          description: content,
-          likes: 0,
-          comments: [],
-          timestamp: "Just now",
-          contentType,
-          mediaItems: result.post.mediaItems || mediaItems,
-          galleryLayout,
-          background: background || undefined,
-          tags: tags || [],
-        }
-
-        onPostCreated(newPost)
-        onClose()
-
-        toast({
-          title: "Post created successfully!",
-          description: "Your content has been shared with the community.",
-          duration: 3000,
-        })
-      } else {
-        console.error("Error from server:", result.error)
-
-        // If the error is related to authentication, redirect to login
-        if (result.error?.includes("Authentication required") || result.error?.includes("log in")) {
-          toast({
-            title: "Authentication required",
-            description: "Please log in to create posts",
-            variant: "destructive",
-          })
-          onClose()
-          router.push("/auth")
-        } else {
-          toast({
-            title: "Error creating post",
-            description: result.error || "An error occurred while creating your post.",
-            variant: "destructive",
-          })
-        }
+      if (!result.ok) {
+        const errorData = await result.json()
+        throw new Error(errorData.error || "Failed to create post")
       }
+
+      const responseData = await result.json()
+
+      if (!responseData.success) {
+        throw new Error(responseData.error || "Failed to create post")
+      }
+
+      // Create a new post object for the UI
+      const newPost = {
+        id: responseData.post.id,
+        username: user?.username || "you",
+        userImage: user?.profileImage?.url || "/diverse-avatars.png",
+        title: title.trim(),
+        description: content,
+        likes: 0,
+        comments: [],
+        timestamp: "Just now",
+        contentType,
+        mediaItems: responseData.post.mediaItems || [],
+        galleryLayout,
+        background: background || undefined,
+        tags: extractedTags || [],
+      }
+
+      // Notify about successful post creation
+      toast({
+        title: "Post created successfully!",
+        description: "Your content has been shared with the community.",
+        duration: 3000,
+      })
+
+      // Pass the new post to the parent component and close the modal
+      onPostCreated(newPost)
+      onClose()
     } catch (error) {
-      console.error("Error creating post:", error)
+      const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred. Please try again."
+      setSubmitError(errorMessage)
       toast({
         title: "Error creating post",
-        description: "An unexpected error occurred. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       })
-    } finally {
       setIsSubmitting(false)
+    } finally {
+      if (mounted.current) {
+        setIsSubmitting(false)
+      }
     }
   }
 
@@ -367,6 +482,37 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
   // If not authenticated, don't render the modal
   if (!isAuthenticated) {
     return null
+  }
+
+  const getCursorPosition = () => {
+    if (!textareaRef.current) return 0
+
+    // Create a temporary span to measure text width
+    const tempSpan = document.createElement("span")
+    tempSpan.style.font = window.getComputedStyle(textareaRef.current).font
+    tempSpan.style.position = "absolute"
+    tempSpan.style.visibility = "hidden"
+    tempSpan.style.whiteSpace = "pre"
+    document.body.appendChild(tempSpan)
+
+    // Get text before cursor
+    const cursorPos = textareaRef.current.selectionStart
+    const textBeforeCursor = content.substring(0, cursorPos)
+
+    // Measure width
+    tempSpan.textContent = textBeforeCursor
+    const width = tempSpan.getBoundingClientRect().width
+
+    // Clean up
+    document.body.removeChild(tempSpan)
+
+    return width
+  }
+
+  const updateCursorPosition = () => {
+    if (textareaRef.current) {
+      setCursorPosition(textareaRef.current.selectionStart)
+    }
   }
 
   return (
@@ -390,20 +536,47 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
 
         <div className="overflow-y-auto px-4 flex-grow">
           <div className="space-y-4">
+            {title && (
+              <div className="mb-2">
+                <h3 className="text-lg font-bold text-gray-900">{title}</h3>
+              </div>
+            )}
             {background ? (
               <div
                 className={`rounded-lg p-4 ${background.value} ${background.animation || ""} relative min-h-[200px] flex items-center justify-center`}
               >
-                <textarea
-                  ref={textareaRef}
-                  placeholder="What's on your mind?"
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  className={`w-full text-xl font-semibold resize-none border-none focus:outline-none focus:ring-0 p-0 bg-transparent text-center ${
+                <div
+                  className={`w-full text-xl font-semibold border-none focus:outline-none focus:ring-0 p-0 bg-transparent text-center relative ${
                     background.type === "color" || background.type === "gradient" ? "text-white" : "text-black"
                   }`}
-                  style={{ minHeight: "100px" }}
-                />
+                >
+                  <div className="relative">
+                    {formatContentWithHashtags()}
+                    {/* Blinking cursor indicator */}
+                    <div
+                      className="absolute inline-block w-0.5 h-5 bg-current animate-blink"
+                      style={{
+                        left: `${getCursorPosition()}px`,
+                        top: "0.25rem",
+                        display: isFocused ? "block" : "none",
+                      }}
+                    />
+                  </div>
+                  <textarea
+                    ref={textareaRef}
+                    placeholder="What's on your mind?"
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    onKeyUp={updateCursorPosition}
+                    onMouseUp={updateCursorPosition}
+                    onFocus={() => setIsFocused(true)}
+                    onBlur={() => setIsFocused(false)}
+                    className={`w-full text-xl font-semibold resize-none border-none focus:outline-none focus:ring-0 p-0 bg-transparent text-center absolute top-0 left-0 opacity-0 z-10 ${
+                      background.type === "color" || background.type === "gradient" ? "text-white" : "text-black"
+                    }`}
+                    style={{ minHeight: "100px" }}
+                  />
+                </div>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -414,14 +587,34 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
                 </Button>
               </div>
             ) : (
-              <textarea
-                ref={textareaRef}
-                placeholder="What's on your mind?"
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                className="w-full text-base resize-none border-none focus:outline-none focus:ring-0 p-0 overflow-hidden"
-                style={{ minHeight: "100px" }}
-              />
+              <div className="relative">
+                <div className="w-full text-base resize-none border-none focus:outline-none focus:ring-0 p-0 overflow-hidden min-h-[100px] relative">
+                  <div className="relative">
+                    {formatContentWithHashtags()}
+                    {/* Blinking cursor indicator */}
+                    <div
+                      className="absolute inline-block w-0.5 h-5 bg-gray-800 animate-blink"
+                      style={{
+                        left: `${getCursorPosition()}px`,
+                        top: "0.25rem",
+                        display: isFocused ? "block" : "none",
+                      }}
+                    />
+                  </div>
+                </div>
+                <textarea
+                  ref={textareaRef}
+                  placeholder="What's on your mind? Use #hashtags to tag your post!"
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  onKeyUp={updateCursorPosition}
+                  onMouseUp={updateCursorPosition}
+                  onFocus={() => setIsFocused(true)}
+                  onBlur={() => setIsFocused(false)}
+                  className="w-full text-base resize-none border-none focus:outline-none focus:ring-0 p-0 overflow-hidden absolute top-0 left-0 opacity-0 z-10"
+                  style={{ minHeight: "100px" }}
+                />
+              </div>
             )}
 
             {showBackgroundSelector && mediaItems.length === 0 && (
@@ -442,13 +635,13 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => setGalleryLayout("grid,")}>Grid</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setGalleryLayout("carousel,")}>Carousel</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setGalleryLayout("grid")}>Grid</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setGalleryLayout("carousel")}>Carousel</DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setGalleryLayout("featured")}>Featured</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
-                <div className="w-full">
+                <div className="w-full border border-gray-200 rounded-lg p-2">
                   <MediaGallery
                     items={mediaItems}
                     layout={galleryLayout}
@@ -460,41 +653,51 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
               </div>
             )}
 
-            {/* Tags section */}
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Tags</p>
-              <div className="flex flex-wrap gap-2">
-                {tags.map((tag) => (
-                  <div key={tag} className="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded-full flex items-center">
-                    #{tag}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveTag(tag)}
-                      className="ml-1 text-gray-500 hover:text-gray-700"
+            {/* Hashtags section */}
+            {extractedTags.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Hashtags in your post</p>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {extractedTags.map((tag) => (
+                    <div
+                      key={tag}
+                      className="bg-pink-50 text-pink-600 text-xs px-2 py-1 rounded-full flex items-center"
                     >
-                      <XCircle className="h-3 w-3" />
-                    </button>
-                  </div>
-                ))}
-                <input
-                  type="text"
-                  placeholder="Add a tag..."
-                  value={currentTag}
-                  onChange={(e) => setCurrentTag(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && currentTag.trim()) {
-                      e.preventDefault()
-                      handleAddTag()
-                    }
-                  }}
-                  className="text-xs px-2 py-1 border border-gray-300 rounded-full focus:outline-none focus:ring-1 focus:ring-pink-500"
-                />
+                      #{tag}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* Error message display */}
+            {submitError && (
+              <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-md text-red-600 text-sm">
+                <p className="font-medium">Error creating post:</p>
+                <p>{submitError}</p>
+              </div>
+            )}
           </div>
         </div>
 
         <div className="p-4 border-t flex-shrink-0">
+          {showTitleInput && (
+            <div className="mb-4 p-3 border rounded-lg">
+              <label htmlFor="post-title" className="block text-sm font-medium mb-2">
+                Post Title:
+              </label>
+              <input
+                id="post-title"
+                type="text"
+                placeholder="Enter a catchy title for your post..."
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent text-base font-medium"
+                maxLength={100}
+              />
+              <p className="text-xs text-gray-500 mt-1">{title.length}/100 characters</p>
+            </div>
+          )}
           <div className="rounded-lg border p-3 mb-4">
             <p className="text-sm font-medium mb-2">Add to your post</p>
             <div className="flex flex-wrap gap-2">
@@ -517,7 +720,9 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
               <Button
                 variant="ghost"
                 size="icon"
-                className={`h-9 w-9 rounded-full ${showBackgroundSelector ? "bg-gray-200 text-pink-500" : "text-pink-500"}`}
+                className={`h-9 w-9 rounded-full ${
+                  showBackgroundSelector ? "bg-gray-200 text-pink-500" : "text-pink-500"
+                }`}
                 onClick={() => setShowBackgroundSelector(!showBackgroundSelector)}
                 disabled={mediaItems.length > 0}
               >
@@ -526,10 +731,28 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 rounded-full text-yellow-500"
-                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                className={`h-9 w-9 rounded-full ${
+                  showEmojiPicker ? "bg-gray-200 text-yellow-500" : "text-yellow-500"
+                } emoji-button`}
+                onClick={() => {
+                  setShowEmojiPicker(!showEmojiPicker)
+                  setShowTrendingTags(false)
+                }}
               >
                 <Smile className="h-5 w-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`h-9 w-9 rounded-full ${
+                  showTrendingTags ? "bg-gray-200 text-purple-500" : "text-purple-500"
+                } hashtag-button`}
+                onClick={() => {
+                  setShowTrendingTags(!showTrendingTags)
+                  setShowEmojiPicker(false)
+                }}
+              >
+                <Hash className="h-5 w-5" />
               </Button>
               <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full text-red-500">
                 <MapPin className="h-5 w-5" />
@@ -537,12 +760,69 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
               <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full text-purple-500">
                 <UserPlus className="h-5 w-5" />
               </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`h-9 w-9 rounded-full ${showTitleInput ? "bg-gray-200 text-teal-500" : "text-teal-500"}`}
+                onClick={() => setShowTitleInput(!showTitleInput)}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-5 w-5"
+                >
+                  <path d="M4 7V4h16v3" />
+                  <path d="M9 20h6" />
+                  <path d="M12 4v16" />
+                </svg>
+              </Button>
             </div>
           </div>
 
           {showEmojiPicker && (
-            <div className="emoji-picker-container absolute z-10 bottom-[120px] left-1/2 transform -translate-x-1/2">
-              {/* Emoji picker would be rendered here */}
+            <div
+              ref={emojiPickerRef}
+              className="emoji-picker-container absolute z-20 bottom-[120px] left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-xl"
+            >
+              <EmojiPicker
+                onEmojiClick={handleEmojiSelect}
+                searchPlaceholder="Search emojis..."
+                width={320}
+                height={400}
+                previewConfig={{
+                  showPreview: true,
+                  defaultCaption: "Pick your emoji...",
+                }}
+                skinTonesDisabled
+                theme="light"
+                lazyLoadEmojis
+              />
+            </div>
+          )}
+
+          {showTrendingTags && (
+            <div className="trending-tags-container absolute z-10 bottom-[120px] left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-lg p-3 w-[90%] max-w-[400px]">
+              <p className="text-sm font-medium mb-2">Trending Hashtags</p>
+              <div className="flex flex-wrap gap-2">
+                {trendingTags.map((tag) => (
+                  <Button
+                    key={tag}
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs rounded-full bg-gray-50 hover:bg-pink-50 hover:text-pink-600 hover:border-pink-200"
+                    onClick={() => insertHashtag(tag)}
+                  >
+                    #{tag}
+                  </Button>
+                ))}
+              </div>
             </div>
           )}
 

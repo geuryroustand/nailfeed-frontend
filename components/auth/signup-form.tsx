@@ -1,53 +1,54 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { z } from "zod";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { useToast } from "@/hooks/use-toast";
-import { Progress } from "@/components/ui/progress";
-import { registerAction } from "@/app/auth/actions";
-import { useAuth } from "@/context/auth-context";
-import { AuthService } from "@/lib/auth-service";
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { z } from "zod"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { Eye, EyeOff, Loader2 } from 'lucide-react'
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { useToast } from "@/hooks/use-toast"
+import { Progress } from "@/components/ui/progress"
 
+// Esquema de validación de Zod con mensajes en español
 const signupSchema = z
   .object({
-    username: z.string().min(3, "Username must be at least 3 characters"),
-    email: z.string().email("Please enter a valid email address"),
-    password: z.string().min(8, "Password must be at least 8 characters"),
+    username: z
+      .string()
+      .min(3, { message: "El nombre de usuario debe tener al menos 3 caracteres." })
+      .regex(/^[a-zA-Z0-9_]+$/, {
+        message: "El nombre de usuario solo puede contener letras, números y guiones bajos.",
+      }),
+    email: z.string().email({ message: "Por favor, introduce una dirección de correo electrónico válida." }),
+    password: z
+      .string()
+      .min(8, { message: "La contraseña debe tener al menos 8 caracteres." })
+      .regex(/[A-Z]/, { message: "La contraseña debe contener al menos una letra mayúscula." })
+      .regex(/[a-z]/, { message: "La contraseña debe contener al menos una letra minúscula." })
+      .regex(/[0-9]/, { message: "La contraseña debe contener al menos un número." }),
     confirmPassword: z.string(),
     agreeTerms: z.boolean().refine((val) => val === true, {
-      message: "You must agree to the terms and conditions",
+      message: "Debes aceptar los términos y condiciones.",
     }),
   })
   .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords do not match",
+    message: "Las contraseñas no coinciden.",
     path: ["confirmPassword"],
-  });
+  })
 
-type SignupFormValues = z.infer<typeof signupSchema>;
+type SignupFormValues = z.infer<typeof signupSchema>
 
 export default function SignupForm() {
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [passwordStrength, setPasswordStrength] = useState(0);
-  const router = useRouter();
-  const { toast } = useToast();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const { handleAuthSuccess } = useAuth();
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [passwordStrength, setPasswordStrength] = useState(0)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [serverError, setServerError] = useState<string | null>(null)
+  const router = useRouter()
+  const { toast } = useToast()
 
   const form = useForm<SignupFormValues>({
     resolver: zodResolver(signupSchema),
@@ -58,87 +59,77 @@ export default function SignupForm() {
       confirmPassword: "",
       agreeTerms: false,
     },
+    // Habilita la validación en tiempo real al cambiar el contenido del campo
     mode: "onChange",
-  });
+  })
 
   const calculatePasswordStrength = (password: string) => {
-    if (!password) return 0;
+    if (!password) return 0
+    let strength = 0
+    if (password.length >= 8) strength += 20
+    if (/[A-Z]/.test(password)) strength += 20
+    if (/[a-z]/.test(password)) strength += 20
+    if (/[0-9]/.test(password)) strength += 20
+    if (/[^A-Za-z0-9]/.test(password)) strength += 20
+    return strength
+  }
 
-    let strength = 0;
-    // Length check
-    if (password.length >= 8) strength += 20;
-    // Uppercase check
-    if (/[A-Z]/.test(password)) strength += 20;
-    // Lowercase check
-    if (/[a-z]/.test(password)) strength += 20;
-    // Number check
-    if (/[0-9]/.test(password)) strength += 20;
-    // Special character check
-    if (/[^A-Za-z0-9]/.test(password)) strength += 20;
+  const getPasswordStrengthText = (strength: number) => {
+    if (strength < 40) return "Contraseña débil"
+    if (strength < 80) return "Contraseña moderada"
+    return "Contraseña fuerte"
+  }
 
-    return strength;
-  };
-
-  const getPasswordStrengthColor = (strength: number) => {
-    if (strength < 40) return "bg-red-500";
-    if (strength < 80) return "bg-yellow-500";
-    return "bg-green-500";
-  };
-
+  // `form.handleSubmit` ya previene el envío si la validación del cliente falla.
+  // Este `onSubmit` solo se ejecutará con datos válidos.
   const onSubmit = async (data: SignupFormValues) => {
-    setIsSubmitting(true);
-
-    const formData = new FormData();
-    formData.append("username", data.username);
-    formData.append("email", data.email);
-    formData.append("password", data.password);
+    setIsSubmitting(true)
+    setServerError(null)
 
     try {
-      const result = await registerAction(null, formData);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/local/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: data.username,
+          email: data.email,
+          password: data.password,
+        }),
+      })
 
-      if (result.success) {
-        // Get the JWT from cookies
-        const cookieStore = document.cookie
-          .split("; ")
-          .find((row) => row.startsWith("jwt="))
-          ?.split("=")[1];
+      const result = await response.json()
 
-        if (cookieStore) {
-          // Get user data using AuthService
-          const userData = await AuthService.getCurrentUser(cookieStore);
-          if (userData) {
-            handleAuthSuccess({
-              jwt: cookieStore,
-              user: userData,
-            });
-          }
-        }
-
-        toast({
-          title: "Account created!",
-          description: "Welcome to NailFeed!",
-        });
-
-        // Redirect to the specified path or home page
-        router.push(result.redirectTo || "/");
-        router.refresh(); // Refresh the page to update the UI
-      } else if (result.error) {
-        toast({
-          title: "Registration failed",
-          description: result.error,
-          variant: "destructive",
-        });
+      if (!response.ok) {
+        // Lanza un error para ser capturado por el bloque catch
+        throw new Error(result.error?.message || "El registro falló. Por favor, inténtalo de nuevo.")
       }
-    } catch (error) {
+
       toast({
-        title: "Registration failed",
-        description: "An unexpected error occurred",
+        title: "¡Registro exitoso!",
+        description: "Tu cuenta ha sido creada. Ahora puedes iniciar sesión.",
+      })
+
+      if (result.jwt) {
+        localStorage.setItem("authToken", result.jwt)
+      }
+      
+      router.push("/auth")
+
+    } catch (error) {
+      console.error("Error de registro:", error)
+      const errorMessage = error instanceof Error ? error.message : "Ocurrió un error inesperado."
+      setServerError(errorMessage)
+      toast({
+        title: "Error de Registro",
+        description: errorMessage,
         variant: "destructive",
-      });
+      })
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
-  };
+  }
 
   return (
     <Form {...form}>
@@ -148,9 +139,9 @@ export default function SignupForm() {
           name="username"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Username</FormLabel>
+              <FormLabel>Nombre de usuario</FormLabel>
               <FormControl>
-                <Input placeholder="your_username" {...field} />
+                <Input placeholder="tu_usuario" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -162,9 +153,9 @@ export default function SignupForm() {
           name="email"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Email</FormLabel>
+              <FormLabel>Correo electrónico</FormLabel>
               <FormControl>
-                <Input placeholder="your.email@example.com" {...field} />
+                <Input type="email" placeholder="tu.correo@ejemplo.com" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -176,7 +167,7 @@ export default function SignupForm() {
           name="password"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Password</FormLabel>
+              <FormLabel>Contraseña</FormLabel>
               <FormControl>
                 <div className="relative">
                   <Input
@@ -184,10 +175,8 @@ export default function SignupForm() {
                     placeholder="••••••••"
                     {...field}
                     onChange={(e) => {
-                      field.onChange(e);
-                      setPasswordStrength(
-                        calculatePasswordStrength(e.target.value)
-                      );
+                      field.onChange(e)
+                      setPasswordStrength(calculatePasswordStrength(e.target.value))
                     }}
                   />
                   <Button
@@ -197,39 +186,29 @@ export default function SignupForm() {
                     className="absolute right-0 top-0 h-full px-3 py-2 text-gray-400 hover:text-gray-600"
                     onClick={() => setShowPassword(!showPassword)}
                   >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
                 </div>
               </FormControl>
+              {field.value && (
+                <div className="mt-2 space-y-1">
+                  <Progress value={passwordStrength} />
+                  <p className="text-xs text-gray-500">
+                    {getPasswordStrengthText(passwordStrength)}
+                  </p>
+                </div>
+              )}
               <FormMessage />
             </FormItem>
           )}
         />
-
-        {passwordStrength > 0 && (
-          <div className="space-y-2">
-            <Progress value={passwordStrength} className="h-2" />
-            <p className="text-xs text-gray-500">
-              Password strength:{" "}
-              {passwordStrength < 40
-                ? "Weak"
-                : passwordStrength < 80
-                ? "Medium"
-                : "Strong"}
-            </p>
-          </div>
-        )}
 
         <FormField
           control={form.control}
           name="confirmPassword"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Confirm Password</FormLabel>
+              <FormLabel>Confirmar Contraseña</FormLabel>
               <FormControl>
                 <div className="relative">
                   <Input
@@ -244,11 +223,7 @@ export default function SignupForm() {
                     className="absolute right-0 top-0 h-full px-3 py-2 text-gray-400 hover:text-gray-600"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   >
-                    {showConfirmPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
+                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
                 </div>
               </FormControl>
@@ -263,20 +238,17 @@ export default function SignupForm() {
           render={({ field }) => (
             <FormItem className="flex items-start space-x-2 space-y-0">
               <FormControl>
-                <Checkbox
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                />
+                <Checkbox checked={field.value} onCheckedChange={field.onChange} />
               </FormControl>
               <div className="space-y-1 leading-none">
                 <FormLabel className="text-sm font-normal cursor-pointer">
-                  I agree to the{" "}
-                  <a href="#" className="text-pink-500 hover:underline">
-                    Terms of Service
+                  Acepto los{" "}
+                  <a href="/terms" className="text-pink-500 hover:underline">
+                    Términos de Servicio
                   </a>{" "}
-                  and{" "}
-                  <a href="#" className="text-pink-500 hover:underline">
-                    Privacy Policy
+                  y la{" "}
+                  <a href="/privacy" className="text-pink-500 hover:underline">
+                    Política de Privacidad
                   </a>
                 </FormLabel>
                 <FormMessage />
@@ -285,6 +257,12 @@ export default function SignupForm() {
           )}
         />
 
+        {serverError && (
+          <div className="p-3 rounded-md bg-red-50 text-red-500 text-sm">
+            <p>{serverError}</p>
+          </div>
+        )}
+
         <Button
           type="submit"
           className="w-full bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600"
@@ -292,14 +270,14 @@ export default function SignupForm() {
         >
           {isSubmitting ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating
-              account...
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Creando cuenta...
             </>
           ) : (
-            "Create account"
+            "Crear cuenta"
           )}
         </Button>
       </form>
     </Form>
-  );
+  )
 }

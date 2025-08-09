@@ -1,5 +1,9 @@
+import config from "@/lib/config"
+import qs from "qs"
+
 export type UserProfileResponse = {
   id: number
+  documentId?: string
   username: string
   email: string
   displayName?: string
@@ -35,6 +39,31 @@ export type UserProfileResponse = {
     comments: number
     saves: number
   }
+  confirmed?: boolean
+  posts?: Array<{
+    id: number
+    documentId: string
+    description: string
+    contentType: string
+    galleryLayout: string
+    publishedAt: string
+    likesCount: number
+    commentsCount: number
+    mediaItems: Array<{
+      id: number | string
+      type: string
+      order: number
+      file: {
+        url: string
+        formats?: {
+          thumbnail?: { url: string }
+          small?: { url: string }
+          medium?: { url: string }
+          large?: { url: string }
+        }
+      }
+    }>
+  }>
 }
 
 export type UserUpdateInput = {
@@ -53,13 +82,15 @@ export type UserServiceError = {
 
 // Get the API URL with fallback
 const getApiUrl = () => {
-  return "https://nailfeed-backend-production.up.railway.app"
+  return process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
 }
 
 // Helper function to safely make API requests with proper error handling
 async function safeApiRequest(url: string, options: RequestInit) {
   try {
     console.log(`Making API request to: ${url}`)
+    console.log(`Request headers:`, JSON.stringify(options.headers, null, 2))
+
     const response = await fetch(url, options)
 
     if (!response.ok) {
@@ -75,301 +106,563 @@ async function safeApiRequest(url: string, options: RequestInit) {
   }
 }
 
-export const UserService = {
+export class UserService {
   /**
-   * Get the current user's profile
+   * Get the current user's profile with all necessary data
    */
-  async getCurrentUser(token: string): Promise<UserProfileResponse | null> {
+  static async getCurrentUser(token: string): Promise<UserProfileResponse | null> {
     try {
-      const apiUrl = getApiUrl()
-      console.log(`Fetching user profile from: ${apiUrl}/api/users/me`)
+      console.log(`Fetching user profile with token: ${token.substring(0, 10)}...`)
 
-      // Use populate=* to get all related data including images
-      const response = await safeApiRequest(`${apiUrl}/api/users/me?populate=*`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        next: { tags: ["user-profile"] },
-      })
-
-      const data = await response.json()
-      return data
-    } catch (error) {
-      console.error("Error fetching current user:", error)
-      return null
-    }
-  },
-
-  /**
-   * Get a user's profile by username
-   */
-  async getUserByUsername(username: string, token?: string): Promise<UserProfileResponse | null> {
-    try {
-      const apiUrl = getApiUrl()
-
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
-      }
-
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`
-      }
-
-      const response = await safeApiRequest(
-        `${apiUrl}/api/users?filters[username][$eq]=${username}&populate[0]=profileImage&populate[1]=coverImage`,
+      // Build a comprehensive query using qs
+      const query = qs.stringify(
         {
-          method: "GET",
-          headers,
-          next: { tags: [`user-${username}`] },
+          fields: [
+            "id",
+            "documentId",
+            "username",
+            "email",
+            "displayName",
+            "bio",
+            "location",
+            "website",
+            "followersCount",
+            "followingCount",
+            "postsCount",
+            "engagement",
+            "isVerified",
+            "confirmed",
+          ],
+          populate: {
+            profileImage: {
+              fields: ["url", "formats"],
+            },
+            coverImage: {
+              fields: ["url", "formats"],
+            },
+            posts: {
+              sort: ["publishedAt:desc"],
+              populate: {
+                mediaItems: {
+                  populate: {
+                    file: {
+                      fields: ["url", "formats"],
+                    },
+                  },
+                  fields: ["id", "type", "order"],
+                },
+              },
+              fields: [
+                "id",
+                "documentId",
+                "description",
+                "contentType",
+                "galleryLayout",
+                "publishedAt",
+                "likesCount",
+                "commentsCount",
+              ],
+            },
+          },
+        },
+        {
+          encodeValuesOnly: true,
         },
       )
 
-      const data = await response.json()
-      return data.results?.[0] || null
-    } catch (error) {
-      console.error(`Error fetching user ${username}:`, error)
-      return null
-    }
-  },
-
-  /**
-   * Update the current user's profile
-   */
-  async updateProfile(token: string, userData: UserUpdateInput): Promise<UserProfileResponse | null> {
-    try {
       const apiUrl = getApiUrl()
+      console.log(`Making request to: ${apiUrl}/api/users/me?${query}`)
 
-      // First, get the current user to ensure we have the ID
-      const currentUser = await this.getCurrentUser(token)
-      if (!currentUser) {
-        throw new Error("Failed to get current user")
-      }
-
-      console.log(`Updating user profile for ID: ${currentUser.id}`)
-
-      // Use the standard users endpoint with the user ID
-      const response = await safeApiRequest(`${apiUrl}/api/users/${currentUser.id}`, {
-        method: "PUT",
+      // Use cache: 'no-store' to ensure we get fresh data
+      const response = await fetch(`${apiUrl}/api/users/me?${query}`, {
+        method: "GET",
         headers: {
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(userData),
-      })
-
-      return await response.json()
-    } catch (error) {
-      console.error("Error updating profile:", error)
-      return null
-    }
-  },
-
-  /**
-   * Upload a file to Strapi using direct API token
-   */
-  async uploadFile(token: string, file: File): Promise<any> {
-    try {
-      const apiUrl = getApiUrl()
-      console.log(`Uploading file to: ${apiUrl}/api/upload`)
-
-      // Create a new FormData instance
-      const formData = new FormData()
-
-      // Append the file with the key 'files'
-      formData.append("files", file)
-
-      console.log(`File details: name=${file.name}, size=${file.size}, type=${file.type}`)
-
-      // Try with JWT token
-      console.log("Attempting upload with JWT token")
-      const response = await fetch(`${apiUrl}/api/upload`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-        // Add these options to help with fetch issues
-        mode: "cors",
-        credentials: "same-origin",
-      })
-
-      // Log the response status
-      console.log(`Upload response status with JWT token: ${response.status}`)
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error(`API error with JWT token (${response.status}): ${errorText}`)
-        throw new Error(`Failed to upload file: ${response.status} - ${errorText}`)
-      }
-
-      const data = await response.json()
-      console.log(`Upload successful with JWT token, received data:`, data)
-      return data
-    } catch (error) {
-      console.error("Error uploading file:", error)
-      throw error
-    }
-  },
-
-  /**
-   * Update user profile with image IDs
-   * This is a simplified approach that updates both profile info and image IDs in one request
-   */
-  async updateUserWithImages(
-    token: string,
-    userId: number,
-    userData: UserUpdateInput,
-    profileImageId?: number,
-    coverImageId?: number,
-  ): Promise<boolean> {
-    try {
-      const apiUrl = getApiUrl()
-      console.log(`Updating user ${userId} with image IDs - Profile: ${profileImageId}, Cover: ${coverImageId}`)
-
-      // Create the update payload
-      const updateData = {
-        ...userData,
-      }
-
-      // Add image IDs if provided
-      if (profileImageId) {
-        updateData.profileImage = profileImageId
-      }
-
-      if (coverImageId) {
-        updateData.coverImage = coverImageId
-      }
-
-      console.log("Update payload:", JSON.stringify(updateData))
-
-      // Make the request
-      const response = await fetch(`${apiUrl}/api/users/${userId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(updateData),
+        cache: "no-store",
       })
 
       if (!response.ok) {
         const errorText = await response.text()
         console.error(`API error (${response.status}): ${errorText}`)
-
-        // Try with a different format for Strapi v4
-        console.log("Trying with Strapi v4 format")
-
-        const dataFormatV4 = {
-          data: { ...updateData },
-        }
-
-        const responseV4 = await fetch(`${apiUrl}/api/users/${userId}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(dataFormatV4),
-        })
-
-        if (!responseV4.ok) {
-          const errorTextV4 = await responseV4.text()
-          console.error(`API error with v4 format (${responseV4.status}): ${errorTextV4}`)
-          return false
-        }
+        throw new Error(`API error (${response.status}): ${errorText}`)
       }
 
-      console.log("User updated successfully with images")
-      return true
+      const responseData = await response.json()
+      console.log("Response data structure:", Object.keys(responseData))
+
+      // Handle Strapi v5 response structure
+      const userData = responseData.data || responseData
+
+      // Process the data to ensure all URLs are absolute
+      return UserService.processUserData(userData, apiUrl)
     } catch (error) {
-      console.error("Error updating user with images:", error)
-      return false
+      console.error("Error fetching current user:", error)
+      return null
     }
-  },
+  }
 
   /**
-   * Upload a profile image and associate it with the user
+   * Get a user's profile by username with all necessary data
    */
-  async uploadProfileImage(token: string, userId: number, file: File): Promise<boolean> {
+  static async getUserByUsername(username: string, token?: string): Promise<UserProfileResponse | null> {
     try {
-      console.log(`Starting profile image upload for user ${userId}`)
-
-      // Step 1: Upload the file
-      const uploadResponse = await this.uploadFile(token, file)
-
-      // Check if we got a valid response with at least one file
-      if (!uploadResponse || !Array.isArray(uploadResponse) || uploadResponse.length === 0) {
-        console.error("Invalid upload response:", uploadResponse)
-        throw new Error("Failed to upload image: Invalid response from server")
-      }
-
-      const fileId = uploadResponse[0].id
-      console.log(`File uploaded successfully with ID: ${fileId}`)
-
-      // Step 2: Update the user with the new profile image ID
-      return await this.updateUserWithImages(token, userId, {}, fileId, undefined)
-    } catch (error) {
-      console.error("Error in uploadProfileImage:", error)
-      return false
-    }
-  },
-
-  /**
-   * Upload a cover image and associate it with the user
-   */
-  async uploadCoverImage(token: string, userId: number, file: File): Promise<boolean> {
-    try {
-      console.log(`Starting cover image upload for user ${userId}`)
-
-      // Step 1: Upload the file
-      const uploadResponse = await this.uploadFile(token, file)
-
-      // Check if we got a valid response with at least one file
-      if (!uploadResponse || !Array.isArray(uploadResponse) || uploadResponse.length === 0) {
-        console.error("Invalid upload response:", uploadResponse)
-        throw new Error("Failed to upload image: Invalid response from server")
-      }
-
-      const fileId = uploadResponse[0].id
-      console.log(`File uploaded successfully with ID: ${fileId}`)
-
-      // Step 2: Update the user with the new cover image ID
-      return await this.updateUserWithImages(token, userId, {}, undefined, fileId)
-    } catch (error) {
-      console.error("Error in uploadCoverImage:", error)
-      return false
-    }
-  },
-
-  /**
-   * Get user engagement metrics
-   */
-  async getUserEngagement(
-    username: string,
-    token?: string,
-  ): Promise<{ likes: number; comments: number; saves: number } | null> {
-    try {
-      const apiUrl = getApiUrl()
+      console.log(`Fetching user ${username} from API`)
 
       const headers: HeadersInit = {
         "Content-Type": "application/json",
       }
 
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`
+      // If no token provided, use the API token from config
+      const authToken = token || config.api.getApiToken()
+
+      if (authToken) {
+        headers["Authorization"] = `Bearer ${authToken}`
+        console.log(`Using token for API request: ${authToken.substring(0, 10)}...`)
+      } else {
+        console.log("No token available for API request")
       }
 
-      const response = await safeApiRequest(`${apiUrl}/api/users/engagement/${username}`, {
+      // Build a comprehensive query using qs
+      const query = qs.stringify(
+        {
+          filters: {
+            username: {
+              $eq: username,
+            },
+          },
+          fields: [
+            "id",
+            "documentId",
+            "username",
+            "email",
+            "displayName",
+            "bio",
+            "location",
+            "website",
+            "followersCount",
+            "followingCount",
+            "postsCount",
+            "engagement",
+            "isVerified",
+            "confirmed",
+          ],
+          populate: {
+            profileImage: {
+              fields: ["url", "formats"],
+            },
+            coverImage: {
+              fields: ["url", "formats"],
+            },
+            posts: {
+              sort: ["publishedAt:desc"],
+              populate: {
+                mediaItems: {
+                  populate: {
+                    file: {
+                      fields: ["url", "formats"],
+                    },
+                  },
+                  fields: ["id", "type", "order"],
+                },
+              },
+              fields: [
+                "id",
+                "documentId",
+                "description",
+                "contentType",
+                "galleryLayout",
+                "publishedAt",
+                "likesCount",
+                "commentsCount",
+              ],
+            },
+          },
+        },
+        {
+          encodeValuesOnly: true,
+        },
+      )
+
+      const apiUrl = getApiUrl()
+      console.log(`Making request to: ${apiUrl}/api/users?${query}`)
+
+      // Use cache: 'no-store' to ensure we get fresh data
+      const response = await fetch(`${apiUrl}/api/users?${query}`, {
         method: "GET",
         headers,
-        next: { tags: [`user-engagement-${username}`] },
+        cache: "no-store",
       })
 
-      return await response.json()
+      console.log(`Response status for ${username}: ${response.status}`)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error(`API error (${response.status}): ${errorText}`)
+        throw new Error(`API error (${response.status}): ${errorText}`)
+      }
+
+      const responseData = await response.json()
+      console.log("Response data structure:", Object.keys(responseData))
+
+      // Handle Strapi v5 response structure
+      let userData = null
+
+      if (responseData.data && Array.isArray(responseData.data) && responseData.data.length > 0) {
+        userData = responseData.data[0]
+      } else if (responseData.results && Array.isArray(responseData.results) && responseData.results.length > 0) {
+        userData = responseData.results[0]
+      } else if (Array.isArray(responseData) && responseData.length > 0) {
+        userData = responseData[0]
+      }
+
+      if (!userData) {
+        console.log(`No user found with username: ${username}`)
+        return null
+      }
+
+      // Process the data to ensure all URLs are absolute
+      return UserService.processUserData(userData, apiUrl)
     } catch (error) {
-      console.error(`Error fetching engagement for ${username}:`, error)
+      console.error(`Error fetching user ${username}:`, error)
       return null
     }
-  },
+  }
+
+  /**
+   * Update a user's profile
+   * @param token JWT token for authentication
+   * @param userId User ID to update
+   * @param userData User data to update
+   */
+  static async updateProfile(
+    token: string,
+    userId: number,
+    userData: UserUpdateInput,
+  ): Promise<UserProfileResponse | null> {
+    try {
+      console.log(`Updating user profile for user ID ${userId} with data:`, JSON.stringify(userData, null, 2))
+      console.log("Using token:", token.substring(0, 10) + "...")
+
+      const apiUrl = getApiUrl()
+
+      // Use the correct endpoint structure with the user ID
+      const url = `${apiUrl}/api/users/${userId}`
+      console.log(`Making PUT request to: ${url}`)
+
+      // Create headers with the token
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      }
+
+      console.log("Request headers:", JSON.stringify(headers, null, 2))
+      console.log("Request body:", JSON.stringify(userData, null, 2))
+
+      // Make the request with no caching
+      const response = await fetch(url, {
+        method: "PUT",
+        headers: headers,
+        body: JSON.stringify(userData),
+        cache: "no-store",
+        next: { revalidate: 0 },
+      })
+
+      // Check for errors
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error(`API error (${response.status}): ${errorText}`)
+        throw new Error(`API error (${response.status}): ${errorText}`)
+      }
+
+      // Parse the response
+      const responseData = await response.json()
+      console.log("Profile update response:", JSON.stringify(responseData, null, 2))
+
+      // Handle Strapi v5 response structure
+      const updatedUserData = responseData.data || responseData
+
+      // Process the data to ensure all URLs are absolute
+      return UserService.processUserData(updatedUserData, apiUrl)
+    } catch (error) {
+      console.error("Error updating user profile:", error)
+      throw error
+    }
+  }
+
+  /**
+   * Upload a profile image
+   */
+  static async uploadProfileImage(token: string, userId: number, file: File): Promise<boolean> {
+    try {
+      console.log(`Uploading profile image for user ${userId}`)
+      console.log("Using token:", token.substring(0, 10) + "...")
+
+      const apiUrl = getApiUrl()
+      const formData = new FormData()
+      formData.append("files", file)
+
+      // First, upload the file to get the file ID
+      const uploadResponse = await fetch(`${apiUrl}/api/upload`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+        cache: "no-store",
+      })
+
+      if (!uploadResponse.ok) {
+        const errorText = await uploadResponse.text()
+        console.error(`API error (${uploadResponse.status}): ${errorText}`)
+        throw new Error(`API error (${uploadResponse.status}): ${errorText}`)
+      }
+
+      const uploadData = await uploadResponse.json()
+      console.log("File upload response:", JSON.stringify(uploadData, null, 2))
+
+      if (!uploadData || !Array.isArray(uploadData) || uploadData.length === 0) {
+        throw new Error("Failed to upload file: Invalid response")
+      }
+
+      const fileId = uploadData[0].id
+
+      // Now update the user profile with the new profile image ID using the correct endpoint
+      const updateResponse = await fetch(`${apiUrl}/api/users/${userId}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          profileImage: fileId,
+        }),
+        cache: "no-store",
+      })
+
+      if (!updateResponse.ok) {
+        const errorText = await updateResponse.text()
+        console.error(`API error (${updateResponse.status}): ${errorText}`)
+        throw new Error(`API error (${updateResponse.status}): ${errorText}`)
+      }
+
+      return true
+    } catch (error) {
+      console.error("Error uploading profile image:", error)
+      throw error
+    }
+  }
+
+  /**
+   * Upload a cover image
+   */
+  static async uploadCoverImage(token: string, userId: number, file: File): Promise<boolean> {
+    try {
+      console.log(`Uploading cover image for user ${userId}`)
+      console.log("Using token:", token.substring(0, 10) + "...")
+
+      const apiUrl = getApiUrl()
+      const formData = new FormData()
+      formData.append("files", file)
+
+      // First, upload the file to get the file ID
+      const uploadResponse = await fetch(`${apiUrl}/api/upload`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+        cache: "no-store",
+      })
+
+      if (!uploadResponse.ok) {
+        const errorText = await uploadResponse.text()
+        console.error(`API error (${uploadResponse.status}): ${errorText}`)
+        throw new Error(`API error (${uploadResponse.status}): ${errorText}`)
+      }
+
+      const uploadData = await uploadResponse.json()
+      console.log("File upload response:", JSON.stringify(uploadData, null, 2))
+
+      if (!uploadData || !Array.isArray(uploadData) || uploadData.length === 0) {
+        throw new Error("Failed to upload file: Invalid response")
+      }
+
+      const fileId = uploadData[0].id
+
+      // Now update the user profile with the new cover image ID using the correct endpoint
+      const updateResponse = await fetch(`${apiUrl}/api/users/${userId}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          coverImage: fileId,
+        }),
+        cache: "no-store",
+      })
+
+      if (!updateResponse.ok) {
+        const errorText = await updateResponse.text()
+        console.error(`API error (${updateResponse.status}): ${errorText}`)
+        throw new Error(`API error (${updateResponse.status}): ${errorText}`)
+      }
+
+      return true
+    } catch (error) {
+      console.error("Error uploading cover image:", error)
+      throw error
+    }
+  }
+
+  /**
+   * Process user data to ensure all URLs are absolute
+   */
+  static processUserData(userData: any, apiUrl: string): UserProfileResponse {
+    if (!userData) return userData
+
+    // Process profile image URL
+    if (userData.profileImage && userData.profileImage.url) {
+      userData.profileImage.url = UserService.ensureAbsoluteUrl(userData.profileImage.url, apiUrl)
+
+      // Process formats
+      if (userData.profileImage.formats) {
+        Object.keys(userData.profileImage.formats).forEach((format) => {
+          if (userData.profileImage.formats[format] && userData.profileImage.formats[format].url) {
+            userData.profileImage.formats[format].url = UserService.ensureAbsoluteUrl(
+              userData.profileImage.formats[format].url,
+              apiUrl,
+            )
+          }
+        })
+      }
+    }
+
+    // Process cover image URL
+    if (userData.coverImage && userData.coverImage.url) {
+      userData.coverImage.url = UserService.ensureAbsoluteUrl(userData.coverImage.url, apiUrl)
+
+      // Process formats
+      if (userData.coverImage.formats) {
+        Object.keys(userData.coverImage.formats).forEach((format) => {
+          if (userData.coverImage.formats[format] && userData.coverImage.formats[format].url) {
+            userData.coverImage.formats[format].url = UserService.ensureAbsoluteUrl(
+              userData.coverImage.formats[format].url,
+              apiUrl,
+            )
+          }
+        })
+      }
+    }
+
+    // Process posts and their media items
+    if (userData.posts && Array.isArray(userData.posts)) {
+      userData.posts = userData.posts.map((post) => {
+        // Process media items
+        if (post.mediaItems && Array.isArray(post.mediaItems)) {
+          post.mediaItems = post.mediaItems.map((item) => {
+            if (item.file && item.file.url) {
+              item.file.url = UserService.ensureAbsoluteUrl(item.file.url, apiUrl)
+
+              // Process formats
+              if (item.file.formats) {
+                Object.keys(item.file.formats).forEach((format) => {
+                  if (item.file.formats[format] && item.file.formats[format].url) {
+                    item.file.formats[format].url = UserService.ensureAbsoluteUrl(item.file.formats[format].url, apiUrl)
+                  }
+                })
+              }
+            }
+            return item
+          })
+        }
+        return post
+      })
+    }
+
+    return userData
+  }
+
+  /**
+   * Ensure a URL is absolute
+   */
+  static ensureAbsoluteUrl(url: string, baseUrl: string): string {
+    if (!url) return url
+
+    // If it's already an absolute URL, return it as is
+    if (url.startsWith("http://") || url.startsWith("https://")) {
+      return url
+    }
+
+    // If it starts with a slash, append it to the base URL
+    if (url.startsWith("/")) {
+      // Remove trailing slash from base URL to prevent double slashes
+      const cleanBaseUrl = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl
+      return `${cleanBaseUrl}${url}`
+    }
+
+    // If it doesn't start with a slash, add one
+    return `${baseUrl}/${url}`
+  }
+
+  /**
+   * Get user engagement metrics - with improved error handling
+   */
+  static async getUserEngagement(
+    username: string,
+    token?: string,
+  ): Promise<{ likes: number; comments: number; saves: number } | null> {
+    try {
+      const apiUrl = getApiUrl()
+      console.log(`Fetching engagement for ${username} from ${apiUrl}`)
+
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      }
+
+      // If no token provided, use the environment variable
+      const authToken = token || process.env.NEXT_PUBLIC_API_TOKEN || ""
+
+      if (authToken) {
+        headers["Authorization"] = `Bearer ${authToken}`
+      }
+
+      // Use cache: 'no-store' to ensure we get fresh data
+      const response = await fetch(`${apiUrl}/api/users/engagement/${username}`, {
+        method: "GET",
+        headers,
+        cache: "no-store",
+      })
+
+      // If we get a 404, the endpoint might not exist or the user might not have engagement data
+      // Return default values instead of throwing an error
+      if (response.status === 404) {
+        console.log(`No engagement data found for ${username}, using default values`)
+        return {
+          likes: 0,
+          comments: 0,
+          saves: 0,
+        }
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error(`API error (${response.status}): ${errorText}`)
+        throw new Error(`API error (${response.status}): ${errorText}`)
+      }
+
+      const data = await response.json()
+      return data
+    } catch (error) {
+      console.error(`Error fetching engagement for ${username}:`, error)
+      // Return default values instead of null to prevent UI errors
+      return {
+        likes: 0,
+        comments: 0,
+        saves: 0,
+      }
+    }
+  }
 }

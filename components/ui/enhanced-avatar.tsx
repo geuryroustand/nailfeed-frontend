@@ -1,8 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useState } from "react"
+import { Avatar as BaseAvatar, AvatarFallback as BaseFallback, AvatarImage as BaseImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
+
+// Re-export the components from @/components/ui/avatar
+export const Avatar = BaseAvatar
+export const AvatarFallback = BaseFallback
+export const AvatarImage = BaseImage
 
 interface EnhancedAvatarProps {
   src?: string
@@ -14,34 +19,38 @@ interface EnhancedAvatarProps {
 
 export function EnhancedAvatar({ src, alt = "Avatar", fallback, className, fallbackClassName }: EnhancedAvatarProps) {
   const [imageError, setImageError] = useState(false)
-  const [imageDebugInfo, setImageDebugInfo] = useState<{ url: string; status?: number; error?: string } | null>(null)
 
-  // Generate fallback text from alt text if no fallback provided
-  const getFallbackText = () => {
+  // Generate initials from the alt text (username or display name)
+  const getInitials = () => {
     if (fallback) return fallback
 
     if (alt && alt !== "Avatar") {
-      return alt
-        .split(" ")
-        .map((word) => word[0])
-        .slice(0, 2)
-        .join("")
-        .toUpperCase()
+      // If the name contains a space, use first letter of first and last name
+      if (alt.includes(" ")) {
+        const nameParts = alt.split(" ")
+        return `${nameParts[0].charAt(0)}${nameParts[nameParts.length - 1].charAt(0)}`.toUpperCase()
+      }
+
+      // If it's a single name or username, use up to 2 characters
+      return alt.substring(0, 2).toUpperCase()
     }
 
-    return "U"
+    return "U" // Default fallback if no name is available
   }
 
   // Normalize image URL
   const getImageSrc = () => {
     if (!src) return ""
 
+    // Don't use placeholder images
+    if (src.includes("placeholder.svg")) {
+      return "" // Return empty to trigger fallback
+    }
+
     // Handle relative URLs from API
     if (src.startsWith("/uploads/")) {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
-      // Remove trailing slash from API URL to prevent double slashes
-      const baseUrl = apiUrl.endsWith("/") ? apiUrl.slice(0, -1) : apiUrl
-      return `${baseUrl}${src}`
+      return `${apiUrl}${src}`
     }
 
     // Handle full URLs that might be missing protocol
@@ -52,48 +61,12 @@ export function EnhancedAvatar({ src, alt = "Avatar", fallback, className, fallb
     return src
   }
 
-  // Add this after the getImageSrc function
-  useEffect(() => {
-    if (src) {
-      console.log("Avatar image source:", src)
-      console.log("Normalized image URL:", getImageSrc())
-    }
-  }, [src])
-
-  // Fetch image info for debugging
-  useEffect(() => {
-    if (src) {
-      const imageUrl = getImageSrc()
-      setImageDebugInfo({ url: imageUrl })
-
-      // Only fetch if it's a real URL
-      if (imageUrl && !imageUrl.includes("placeholder")) {
-        fetch(imageUrl, { method: "HEAD" })
-          .then((response) => {
-            setImageDebugInfo((prev) => ({
-              ...prev,
-              status: response.status,
-              error: response.ok ? undefined : `Error: ${response.status} ${response.statusText}`,
-            }))
-          })
-          .catch((error) => {
-            setImageDebugInfo((prev) => ({
-              ...prev,
-              error: `Fetch error: ${error.message}`,
-            }))
-          })
-      }
-    }
-  }, [src])
-
   return (
     <Avatar className={className}>
       {src && !imageError ? (
         <AvatarImage src={getImageSrc() || "/placeholder.svg"} alt={alt} onError={() => setImageError(true)} />
       ) : null}
-      <AvatarFallback className={cn("bg-pink-100 text-pink-800", fallbackClassName)}>
-        {getFallbackText()}
-      </AvatarFallback>
+      <AvatarFallback className={cn("bg-pink-100 text-pink-800", fallbackClassName)}>{getInitials()}</AvatarFallback>
     </Avatar>
   )
 }

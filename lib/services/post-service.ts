@@ -1,281 +1,500 @@
-"use client";
+import qs from "qs"
+import { fetchWithRetry, safeJsonParse } from "../fetch-with-retry"
+import { API_URL, REQUEST_CONFIG, getServerApiToken } from "../config"
 
-import { apiClient } from "@/lib/api-client";
-import { API_CONFIG, constructApiUrl, getAuthHeaders } from "@/lib/config";
+// Runtime helpers
+const isServer = typeof window === "undefined"
+const serverToken = getServerApiToken()
+const useProxy = !isServer || !serverToken // Use proxy on client or if no server token is available
 
-export type ContentType =
-  | "image"
-  | "video"
-  | "text"
-  | "text-background"
-  | "media-gallery";
-export type GalleryLayout = "grid," | "carousel," | "featured";
+// Join base and path
+const joinUrl = (base: string, path: string) => {
+  const b = base.endsWith("/") ? base.slice(0, -1) : base
+  const p = path.startsWith("/") ? path : `/${path}`
+  return `${b}${p}`
+}
+
+// Call our server proxy for JSON requests
+const proxyJson = async (endpoint: string, method = "GET", data?: any) => {
+  const res = await fetch("/api/auth-proxy", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+    body: JSON.stringify({ endpoint, method, data }),
+  })
+  return res
+}
+
+// Call Strapi directly on server
+const directJson = async (fullUrl: string, method = "GET", headers: HeadersInit = {}, body?: any) => {
+  return fetchWithRetry(
+    fullUrl,
+    {
+      method,
+      headers,
+      body: body !== undefined ? (typeof body === "string" ? body : JSON.stringify(body)) : undefined,
+    },
+    2,
+  )
+}
+
+export type ContentType = "image" | "video" | "text" | "text-background" | "media-gallery"
+export type GalleryLayout = "grid" | "carousel" | "featured"
 
 export class PostService {
   // Helper function to construct full URLs for media items
   private static getFullUrl(relativePath: string): string {
-    if (!relativePath) return "";
-    if (relativePath.startsWith("http")) return relativePath;
-
-    return constructApiUrl(relativePath);
+    if (!relativePath) return ""
+    if (relativePath.startsWith("http")) return relativePath
+    return `${API_URL}${relativePath.startsWith("/") ? "" : "/"}${relativePath}`
   }
 
   // Get posts with pagination
-  static async getPosts(page = 1, pageSize = 10) {
+  static async getPosts(page = 1, pageSize = 10, cacheBuster?: number) {
+    // Client-side throttling
+    const now = Date.now()
+    PostService.requestTracker.lastRequestTime ??= 0
+    const timeSinceLast = now - PostService.requestTracker.lastRequestTime
+    if (timeSinceLast < PostService.requestTracker.minRequestInterval) {
+      await new Promise((r) => setTimeout(r, PostService.requestTracker.minRequestInterval - timeSinceLast))
+    }
+    PostService.requestTracker.lastRequestTime = Date.now()
+
     try {
-      console.log(
-        `PostService: Fetching posts page ${page} with pageSize ${pageSize}`
-      );
-
-      // Construct the endpoint with specific populate parameters
-      const endpoint = `posts?pagination[page]=${page}&populate[mediaItems][populate][file][fields][0]=formats&populate[user][fields][0]=username&populate[user][fields][1]=displayName&populate[user][populate][profileImage][fields][0]=formats&pagination[pageSize]=${pageSize}`;
-
-      // Log the full URL that will be used
-      const fullUrl = constructApiUrl(endpoint);
-      console.log(`PostService: Full URL: ${fullUrl}`);
-
-      // Make the request using the API client
-      const response = await apiClient.get(endpoint);
-
-      // Validate response structure
-      if (!response || !response.data) {
-        console.error("PostService: Invalid response structure:", response);
-        throw new Error("Invalid API response structure");
+      const query = {
+        fields: [
+          "id",
+          "documentId",
+          "description",
+          "contentType",
+          "galleryLayout",
+          "publishedAt",
+          "likesCount",
+          "commentsCount",
+          "title",
+        ],
+        populate: {
+          user: {
+            fields: ["id", "username", "displayName", "documentId"],
+            populate: { profileImage: { fields: ["url", "formats"] } },
+          },
+          mediaItems: {
+            fields: ["id", "type", "order", "documentId"],
+            populate: { file: { fields: ["url", "formats"] } },
+          },
+          tags: { fields: ["id", "name", "documentId"] },
+        },
+        pagination: { page, pageSize },
+        sort: ["publishedAt:desc"],
       }
 
-      // Add a debug log to inspect the media items structure
-      if (
-        response.data &&
-        response.data.length > 0 &&
-        response.data[0].mediaItems
-      ) {
-        console.log(
-          "PostService: First post media items structure:",
-          JSON.stringify(response.data[0].mediaItems[0], null, 2)
-        );
+      const queryString = qs.stringify(query, { encodeValuesOnly: true })
+      const cacheParam = cacheBuster ? `&_cb=${cacheBuster}` : ""
+      const endpoint = `/api/posts?${queryString}${cacheParam}`
+
+      // Perform request (proxy on client, direct on server)
+      let resp: Response
+      if (useProxy) {
+        resp = await proxyJson(endpoint, "GET")
+      } else {
+        const fullUrl = joinUrl(API_URL, endpoint)
+        const headers: HeadersInit = { "Content-Type": "application/json" }
+        if (serverToken) headers["Authorization"] = `Bearer ${serverToken}`
+        resp = await directJson(fullUrl, "GET", headers)
       }
 
-      console.log(
-        `PostService: Successfully fetched ${
-          Array.isArray(response.data) ? response.data.length : 0
-        } posts`
-      );
-      return response;
+      if (resp.status === 429) {
+        return { error: { code: "429", message: "Too Many Requests" } }
+      }
+      if (!resp.ok) {
+        return { error: { code: String(resp.status), message: resp.statusText || "HTTP error" } }
+      }
+
+      const data = await safeJsonParse(resp)
+      if (data.error) return data
+      return data
     } catch (error) {
-      console.error("PostService: Error fetching posts:", error);
-      throw error;
+      return {
+        error: { code: "UNKNOWN_ERROR", message: error instanceof Error ? error.message : "Unknown error" },
+      }
     }
   }
 
-  // Get a single post by ID
-  static async getPost(id: number | string) {
+  // Get posts by username
+  static async getPostsByUsername(username: string, token?: string): Promise<any[]> {
     try {
-      console.log(`PostService: Fetching post ${id}`);
-      // Update the single post endpoint to use the same populate structure
-      const endpoint = `posts/${id}?populate[mediaItems][populate][file][fields][0]=formats&populate[user][fields][0]=username&populate[user][fields][1]=displayName&populate[user][populate][profileImage][fields][0]=formats`;
-      const response = await apiClient.get(endpoint);
-      return response;
-    } catch (error) {
-      console.error(`PostService: Error fetching post ${id}:`, error);
-      throw error;
+      const query = {
+        filters: { user: { username: { $eq: username } } },
+        fields: [
+          "id",
+          "documentId",
+          "description",
+          "contentType",
+          "galleryLayout",
+          "publishedAt",
+          "likesCount",
+          "commentsCount",
+          "title",
+        ],
+        populate: {
+          user: {
+            fields: ["id", "username", "displayName", "documentId"],
+            populate: { profileImage: { fields: ["url", "formats"] } },
+          },
+          mediaItems: {
+            fields: ["id", "type", "order", "documentId"],
+            populate: { file: { fields: ["url", "formats"] } },
+          },
+          tags: { fields: ["id", "name", "documentId"] },
+        },
+        sort: ["publishedAt:desc"],
+        pagination: { pageSize: 50 },
+      }
+
+      const queryString = qs.stringify(query, { encodeValuesOnly: true })
+      const endpoint = `/api/posts?${queryString}`
+
+      let res: Response
+      if (useProxy) {
+        res = await proxyJson(endpoint, "GET")
+      } else {
+        const fullUrl = joinUrl(API_URL, endpoint)
+        const headers: HeadersInit = { "Content-Type": "application/json" }
+        const auth = token || serverToken
+        if (auth) headers["Authorization"] = `Bearer ${auth}`
+        res = await fetch(fullUrl, { method: "GET", headers, cache: "no-store" })
+      }
+
+      if (!res.ok) return []
+      const responseData = await res.json()
+
+      let posts: any[] = []
+      if (responseData.data && Array.isArray(responseData.data)) posts = responseData.data
+      else if (responseData.results && Array.isArray(responseData.results)) posts = responseData.results
+      else if (Array.isArray(responseData)) posts = responseData
+
+      return posts
+    } catch {
+      return []
     }
   }
 
-  // Create a new post with proper Strapi 5 format
+  // Get a single post by ID or documentId
+  static async getPost(idOrDocumentId: string | number) {
+    try {
+      const isNumericId = !isNaN(Number(idOrDocumentId))
+      const query = {
+        fields: [
+          "id",
+          "documentId",
+          "description",
+          "contentType",
+          "galleryLayout",
+          "publishedAt",
+          "likesCount",
+          "commentsCount",
+          "title",
+        ],
+        populate: {
+          user: {
+            fields: ["id", "username", "displayName", "documentId"],
+            populate: { profileImage: { fields: ["url", "formats"] } },
+          },
+          mediaItems: {
+            fields: ["id", "type", "order", "documentId"],
+            populate: { file: { fields: ["url", "formats"] } },
+          },
+          tags: { fields: ["id", "name", "documentId"] },
+        },
+        ...(!isNumericId ? { filters: { documentId: { $eq: idOrDocumentId } } } : {}),
+      }
+
+      const queryString = qs.stringify(query, { encodeValuesOnly: true })
+      const endpoint = isNumericId ? `/api/posts/${idOrDocumentId}?${queryString}` : `/api/posts?${queryString}`
+
+      let resp: Response
+      if (useProxy) {
+        resp = await proxyJson(endpoint, "GET")
+      } else {
+        const fullUrl = joinUrl(API_URL, endpoint)
+        const headers: HeadersInit = { "Content-Type": "application/json" }
+        if (serverToken) headers["Authorization"] = `Bearer ${serverToken}`
+        resp = await fetchWithRetry(fullUrl, { method: "GET", headers })
+      }
+
+      if (!resp.ok) {
+        const errorData = await safeJsonParse(resp)
+        return {
+          error: {
+            code: String(resp.status),
+            message: errorData?.error?.message || resp.statusText || "Unknown error",
+          },
+        }
+      }
+
+      const data = await safeJsonParse(resp)
+
+      if (!isNumericId && data.data && Array.isArray(data.data) && data.data.length > 0) {
+        return { data: data.data[0], meta: data.meta }
+      }
+
+      return data
+    } catch (error) {
+      return {
+        error: { code: "UNKNOWN_ERROR", message: error instanceof Error ? error.message : "Unknown error" },
+      }
+    }
+  }
+
+  // Create a new post (supports client via proxy upload)
   static async createPost(postData: {
-    title: string;
-    description: string;
-    contentType?: ContentType;
-    background?: any;
-    featured?: boolean;
-    galleryLayout?: GalleryLayout;
-    userId?: string; // This should be the documentId, not the numeric ID
+    title: string
+    description: string
+    contentType?: ContentType
+    background?: any
+    featured?: boolean
+    galleryLayout?: GalleryLayout
+    userId?: string // Strapi 5 relation (documentId)
+    tags?: string[]
+    mediaFiles?: File[]
   }) {
-    console.log(
-      "PostService: Creating post with data:",
-      JSON.stringify(postData, null, 2)
-    );
-
     try {
-      // Extract userId from postData
-      const { userId, ...postFields } = postData;
+      const { userId, tags = [], mediaFiles = [], ...postFields } = postData
+      const apiUrl = API_URL
 
-      // Create the post data object with proper Strapi 5 format
+      // STEP 1: Upload media files
+      let uploadedMediaItems: any[] = []
+      if (mediaFiles.length > 0) {
+        if (useProxy) {
+          // Upload through proxy to keep token server-side
+          const uploadFormData = new FormData()
+          mediaFiles.forEach((file, idx) => uploadFormData.append("files", file, `${idx}-${file.name}`))
+          const uploadRes = await fetch(`/api/auth-proxy/upload?endpoint=${encodeURIComponent("/api/upload")}`, {
+            method: "POST",
+            body: uploadFormData,
+          })
+          if (!uploadRes.ok) {
+            const errorText = await uploadRes.text()
+            throw new Error(`File upload failed with status ${uploadRes.status}: ${errorText}`)
+          }
+          const uploadedFiles = await uploadRes.json()
+          uploadedMediaItems = uploadedFiles.map((file: any, index: number) => ({
+            file: file.id,
+            type: file.mime?.startsWith("image/") ? "image" : "video",
+            order: index + 1,
+          }))
+        } else {
+          // Server direct upload
+          const token = serverToken || ""
+          const headers: HeadersInit = { Authorization: `Bearer ${token}` }
+          const uploadFormData = new FormData()
+          mediaFiles.forEach((file, idx) => uploadFormData.append("files", file, `${idx}-${file.name}`))
+          const uploadUrl = joinUrl(apiUrl, "/api/upload")
+          const uploadResponse = await fetch(uploadUrl, { method: "POST", headers, body: uploadFormData })
+          if (!uploadResponse.ok) {
+            const errorText = await uploadResponse.text()
+            throw new Error(`File upload failed with status ${uploadResponse.status}: ${errorText}`)
+          }
+          const uploadedFiles = await uploadResponse.json()
+          uploadedMediaItems = uploadedFiles.map((file: any, index: number) => ({
+            file: file.id,
+            type: file.mime?.startsWith("image/") ? "image" : "video",
+            order: index + 1,
+          }))
+        }
+      }
+
+      // STEP 2: Create post
       const data = {
         data: {
           ...postFields,
-          // Only include user if userId is provided
-          ...(userId
-            ? {
-                user: {
-                  connect: [userId], // Strapi 5 relation format
-                },
-              }
-            : {}),
-          // Ensure the post is published immediately
-          publishedAt: new Date().toISOString(),
+          ...(userId ? { user: { connect: [userId] } } : {}),
+          tags,
+          mediaItems: uploadedMediaItems,
         },
-      };
+      }
 
-      console.log(
-        "PostService: Sending post creation request with data:",
-        JSON.stringify(data, null, 2)
-      );
+      let createRes: Response
+      if (useProxy) {
+        createRes = await proxyJson("/api/posts", "POST", data)
+      } else {
+        const token = serverToken || ""
+        const headers: HeadersInit = { "Content-Type": "application/json", Authorization: `Bearer ${token}` }
+        const fullUrl = joinUrl(apiUrl, "/api/posts")
+        createRes = await fetch(fullUrl, { method: "POST", headers, body: JSON.stringify(data) })
+      }
 
-      // Use the API client for consistent authentication handling
-      const response = await apiClient.post("posts", data);
-      console.log("PostService: Post creation response:", response);
-      return response;
+      if (!createRes.ok) {
+        const errorText = await createRes.text()
+        throw new Error(`API error (${createRes.status}): ${errorText}`)
+      }
+
+      let response = await createRes.json()
+
+      // STEP 3: Fetch complete post data
+      try {
+        if (response.data?.id) {
+          const query = qs.stringify(
+            {
+              populate: {
+                user: {
+                  fields: ["id", "username", "displayName", "documentId"],
+                  populate: { profileImage: { fields: ["url", "formats"] } },
+                },
+                mediaItems: {
+                  fields: ["id", "type", "order", "file"],
+                  populate: { file: { fields: ["url", "formats"] } },
+                },
+                tags: { fields: ["id", "name", "documentId"] },
+              },
+            },
+            { encodeValuesOnly: true },
+          )
+          const completeEndpoint = `/api/posts/${response.data.id}?${query}`
+          let completeRes: Response
+          if (useProxy) {
+            completeRes = await proxyJson(completeEndpoint, "GET")
+          } else {
+            const token = serverToken || ""
+            const headers: HeadersInit = { Authorization: `Bearer ${token}` }
+            const fullUrl = joinUrl(apiUrl, completeEndpoint)
+            completeRes = await fetch(fullUrl, { method: "GET", headers })
+          }
+          if (completeRes.ok) {
+            const completeData = await completeRes.json()
+            response = { ...response, completeData }
+          }
+        }
+      } catch (err) {
+        console.error("PostService: Failed to fetch complete post data:", err)
+      }
+
+      return response
     } catch (error) {
-      console.error("PostService: Error creating post:", error);
-      throw error;
+      throw error
     }
   }
 
-  // Update an existing post
   static async updatePost(id: number | string, postData: any) {
     try {
-      console.log(
-        `PostService: Updating post ${id} with data:`,
-        JSON.stringify(postData, null, 2)
-      );
+      const data = { data: postData }
 
-      // For Strapi 5, we need to wrap the data in a data object
-      const wrappedData = { data: postData };
+      let res: Response
+      if (useProxy) {
+        res = await proxyJson(`/api/posts/${id}`, "PUT", data)
+      } else {
+        const token = serverToken || ""
+        const headers: HeadersInit = { "Content-Type": "application/json", Authorization: `Bearer ${token}` }
+        const fullUrl = joinUrl(API_URL, `/api/posts/${id}`)
+        res = await fetch(fullUrl, { method: "PUT", headers, body: JSON.stringify(data) })
+      }
 
-      // Use the API client for consistent authentication handling
-      const response = await apiClient.put(`posts/${id}`, wrappedData);
-      console.log("PostService: Post update response:", response);
-      return response;
+      if (!res.ok) {
+        const errorText = await res.text()
+        throw new Error(`API error (${res.status}): ${errorText}`)
+      }
+      return await res.json()
     } catch (error) {
-      console.error(`PostService: Error updating post ${id}:`, error);
-      throw error;
+      throw error
     }
   }
 
-  // Delete a post
   static async deletePost(id: number | string) {
     try {
-      console.log(`PostService: Deleting post ${id}`);
-      const response = await apiClient.delete(`posts/${id}`);
-      return response;
+      let res: Response
+      if (useProxy) {
+        res = await proxyJson(`/api/posts/${id}`, "DELETE")
+      } else {
+        const token = serverToken || ""
+        const headers: HeadersInit = { "Content-Type": "application/json", Authorization: `Bearer ${token}` }
+        const fullUrl = joinUrl(API_URL, `/api/posts/${id}`)
+        res = await fetch(fullUrl, { method: "DELETE", headers })
+      }
+
+      if (!res.ok) {
+        const errorText = await res.text()
+        throw new Error(`API error (${res.status}): ${errorText}`)
+      }
+      return await res.json()
     } catch (error) {
-      console.error(`PostService: Error deleting post ${id}:`, error);
-      throw error;
+      throw error
     }
   }
 
   // Like a post
   static async likePost(postId: number | string, userId: number | string) {
     try {
-      console.log(`PostService: Liking post ${postId} for user ${userId}`);
-      const response = await apiClient.post(`posts/${postId}/like`, {
-        userId,
-      });
-      return response;
+      const data = {
+        data: {
+          post: { connect: [typeof postId === "string" ? postId : postId.toString()] },
+          user: { connect: [typeof userId === "string" ? userId : userId.toString()] },
+        },
+      }
+
+      let res: Response
+      if (useProxy) {
+        res = await proxyJson("/api/likes", "POST", data)
+      } else {
+        const token = serverToken || ""
+        const headers: HeadersInit = { "Content-Type": "application/json", Authorization: `Bearer ${token}` }
+        const fullUrl = joinUrl(API_URL, "/api/likes")
+        res = await fetch(fullUrl, { method: "POST", headers, body: JSON.stringify(data) })
+      }
+
+      if (!res.ok) {
+        const errorText = await res.text()
+        throw new Error(`API error (${res.status}): ${errorText}`)
+      }
+
+      return await res.json()
     } catch (error) {
-      console.error(`PostService: Error liking post ${postId}:`, error);
-      throw error;
+      throw error
     }
   }
 
   // Unlike a post
   static async unlikePost(likeId: number | string) {
     try {
-      console.log(`PostService: Unliking post ${likeId}`);
-      const response = await apiClient.delete(`likes/${likeId}`);
-      return response;
+      let res: Response
+      if (useProxy) {
+        res = await proxyJson(`/api/likes/${likeId}`, "DELETE")
+      } else {
+        const token = serverToken || ""
+        const headers: HeadersInit = { "Content-Type": "application/json", Authorization: `Bearer ${token}` }
+        const fullUrl = joinUrl(API_URL, `/api/likes/${likeId}`)
+        res = await fetch(fullUrl, { method: "DELETE", headers })
+      }
+
+      if (!res.ok) {
+        const errorText = await res.text()
+        throw new Error(`API error (${res.status}): ${errorText}`)
+      }
+
+      return await res.json()
     } catch (error) {
-      console.error(`PostService: Error unliking post ${likeId}:`, error);
-      throw error;
+      throw error
     }
   }
 
   // Add tags to a post
-  static async addTagsToPost(
-    postId: number | string,
-    tags: string[],
-    token?: string
-  ) {
+  static async addTagsToPost(postId: number | string, tags: string[]) {
     try {
-      console.log(`PostService: Adding tags to post ${postId}:`, tags);
-      const response = await apiClient.post(
-        `posts/${postId}/tags`,
-        { tags },
-        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
-      );
-      return response;
+      const postResponse = await this.getPost(postId)
+      const postData = (postResponse as any)?.data || {}
+
+      const existingTags = postData.tags || []
+      const newTags = [...existingTags, ...tags.map((name) => ({ name }))]
+
+      const updateData = { tags: newTags }
+      return await this.updatePost(postId, updateData)
     } catch (error) {
-      console.error(`PostService: Error adding tags to post ${postId}:`, error);
-      throw error;
+      throw error
     }
   }
 
-  // Upload media files
-  static async uploadMedia(
-    files: File[],
-    postId: number | string,
-    token?: string
-  ) {
-    try {
-      console.log(`PostService: Uploading media for post ${postId}`);
-      const formData = new FormData();
-      files.forEach((file) => {
-        formData.append("files", file);
-      });
-
-      const response = await apiClient.post(`upload`, formData, {
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          "Content-Type": "multipart/form-data",
-        },
-      });
-      return response;
-    } catch (error) {
-      console.error(
-        `PostService: Error uploading media for post ${postId}:`,
-        error
-      );
-      throw error;
-    }
-  }
-
-  // Get media document IDs
-  static async getMediaDocumentIds(
-    mediaIds: number[],
-    token?: string
-  ): Promise<string[]> {
-    try {
-      console.log(`PostService: Getting media document IDs for:`, mediaIds);
-      const response = await apiClient.get(
-        `upload/files?filters[id][$in]=${mediaIds.join(",")}`,
-        {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        }
-      );
-      return response.data.map((file: any) => file.documentId);
-    } catch (error) {
-      console.error("PostService: Error getting media document IDs:", error);
-      throw error;
-    }
-  }
-
-  // Create a media item
-  static async createMediaItem(mediaData: {
-    post: number | string;
-    media: number | string;
-    type: string;
-    order?: number;
-  }) {
-    try {
-      console.log("PostService: Creating media item:", mediaData);
-      const response = await apiClient.post("media-items", {
-        data: mediaData,
-      });
-      return response;
-    } catch (error) {
-      console.error("PostService: Error creating media item:", error);
-      throw error;
-    }
+  // internal request throttling
+  private static requestTracker = {
+    lastRequestTime: 0,
+    minRequestInterval: REQUEST_CONFIG.minRequestInterval,
   }
 }

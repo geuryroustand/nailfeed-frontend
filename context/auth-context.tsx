@@ -1,389 +1,207 @@
-"use client";
+"use client"
 
-import {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback,
-  type ReactNode,
-  Suspense,
-} from "react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { AuthService, type User, type AuthResponse } from "@/lib/auth-service";
-import {
-  refreshAuthToken,
-  fetchWithTokenRefresh,
-  subscribeToTokenRefresh,
-} from "@/lib/token-refresh";
-import { useToast } from "@/hooks/use-toast";
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react"
+import { useRouter } from "next/navigation"
+import { getCurrentUser } from "@/app/actions/auth-actions"
 
-interface AuthContextType {
-  user: User | null;
-  token: string | null;
-  isLoading: boolean;
-  isAuthenticated: boolean;
-  login: (
-    identifier: string,
-    password: string
-  ) => Promise<{ success: boolean; error?: string }>;
-  register: (
-    username: string,
-    email: string,
-    password: string
-  ) => Promise<boolean>;
-  logout: () => void;
-  forgotPassword: (email: string) => Promise<boolean>;
-  resetPassword: (
-    code: string,
-    password: string,
-    passwordConfirmation: string
-  ) => Promise<boolean>;
-  updateProfile: (userData: Partial<User>) => Promise<User | null>;
-  uploadProfileImage: (file: File) => Promise<boolean>;
-  refreshToken: () => Promise<boolean>;
-  authenticatedFetch: (url: string, options?: RequestInit) => Promise<Response>;
-  handleSocialAuth: (
-    response: AuthResponse | { error: string }
-  ) => Promise<boolean>;
+type User = {
+  id: number
+  username: string
+  email: string
+  displayName?: string
+  profileImage?: any
+  [key: string]: any
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// Token refresh interval (every 10 minutes)
-const TOKEN_REFRESH_INTERVAL = 10 * 60 * 1000;
-
-function SearchParamsProvider({ children }: { children: ReactNode }) {
-  const searchParams = useSearchParams();
-  const callbackUrl = searchParams?.get("callbackUrl");
-
-  // Store the callback URL in a ref or state if needed
-  useEffect(() => {
-    if (callbackUrl) {
-      // You can store this in a ref or state if needed
-      console.log("Callback URL:", callbackUrl);
-    }
-  }, [callbackUrl]);
-
-  return <>{children}</>;
+type AuthContextType = {
+  user: User | null
+  jwt: string | null
+  isLoading: boolean
+  isAuthenticated: boolean
+  checkAuthStatus: () => Promise<void>
+  logout: () => Promise<void>
+  setUserData: (userData: User, token?: string) => void
+  refreshUser: () => Promise<void>
 }
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const router = useRouter();
-  const pathname = usePathname();
-  const { toast } = useToast();
+  const [user, setUser] = useState<User | null>(null)
+  const [jwt, setJwt] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const router = useRouter()
+  const isCheckingAuth = useRef(false)
 
-  // Fetch with token refresh
-  const authenticatedFetch = useCallback(
-    (url: string, options: RequestInit = {}) => {
-      return fetchWithTokenRefresh(url, options);
-    },
-    []
-  );
+  // Function to get cookie value by name
+  const getCookie = (name: string): string | null => {
+    if (typeof document === "undefined") return null
 
-  // Refresh token function
-  const refreshToken = useCallback(async (): Promise<boolean> => {
+    const value = `; ${document.cookie}`
+    const parts = value.split(`; ${name}=`)
+    if (parts.length === 2) return parts.pop()?.split(";").shift() || null
+    return null
+  }
+
+  // Function to set a cookie
+  const setCookie = (name: string, value: string, days = 7) => {
+    if (typeof document === "undefined") return
+
+    const maxAge = days * 24 * 60 * 60
+    document.cookie = `${name}=${value}; path=/; max-age=${maxAge}; SameSite=Lax;`
+  }
+
+  const checkAuthStatus = useCallback(async () => {
+    // Prevent concurrent auth checks
+    if (isCheckingAuth.current) return
+
+    isCheckingAuth.current = true
+    setIsLoading(true)
+
     try {
-      console.log("Attempting to refresh token...");
-      const newToken = await refreshAuthToken();
-      if (newToken) {
-        console.log("Token refreshed successfully");
-        setToken(newToken);
+      console.log("Checking auth status...")
 
-        // Fetch user data with new token
-        const userData = await AuthService.getCurrentUser(newToken);
+      // Try to get token from cookie - check both possible formats
+      const token = getCookie("authToken") || getCookie("jwt")
+
+      if (token) {
+        console.log("Found token in cookie:", token.substring(0, 10) + "...")
+        setJwt(token)
+
+        // Verify token with server
+        const userData = await getCurrentUser()
+
         if (userData) {
-          setUser(userData);
-        }
+          console.log("User authenticated:", userData)
+          setUser(userData)
+          setIsAuthenticated(true)
 
-        return true;
-      }
-      console.log("Token refresh failed - no new token returned");
-      return false;
-    } catch (error) {
-      console.error("Token refresh error:", error);
-      return false;
-    }
-  }, []);
+          // Ensure the token is available in both cookie formats for compatibility
+          if (!getCookie("jwt")) {
+            setCookie("jwt", token, 7)
+          }
+          if (!getCookie("authToken")) {
+            setCookie("authToken", token, 7)
+          }
 
-  // Handle token change
-  const handleTokenChange = useCallback(async (newToken: string | null) => {
-    if (newToken) {
-      setToken(newToken);
-      // Fetch user data with new token
-      const userData = await AuthService.getCurrentUser(newToken);
-      if (userData) {
-        setUser(userData);
-      } else {
-        // If user data fetch fails, clear everything
-        setUser(null);
-        setToken(null);
-        AuthService.clearTokens();
-      }
-    } else {
-      // If token is null, clear user and token
-      setUser(null);
-      setToken(null);
-    }
-  }, []);
-
-  // Subscribe to token refresh
-  useEffect(() => {
-    subscribeToTokenRefresh(handleTokenChange);
-  }, [handleTokenChange]);
-
-  // Set up token refresh interval
-  useEffect(() => {
-    if (!token) return;
-
-    // Check token on interval
-    const intervalId = setInterval(async () => {
-      const { accessToken } = AuthService.getStoredTokens();
-      if (accessToken && AuthService.isTokenExpiringSoon(accessToken)) {
-        await refreshToken();
-      }
-    }, TOKEN_REFRESH_INTERVAL);
-
-    return () => clearInterval(intervalId);
-  }, [token, refreshToken]);
-
-  // Check for existing token on mount
-  useEffect(() => {
-    const checkAuth = async () => {
-      const { accessToken, expiresAt } = AuthService.getStoredTokens();
-
-      if (accessToken) {
-        // If token is expired or about to expire, refresh it
-        if (expiresAt && Date.now() >= expiresAt - 5 * 60 * 1000) {
-          const success = await refreshToken();
-          if (!success) {
-            setIsLoading(false);
-            return;
+          // Also store user ID in cookie for easier access
+          if (userData.id) {
+            setCookie("userId", userData.id.toString(), 7)
           }
         } else {
-          // Use existing token
-          setToken(accessToken);
+          console.log("No authenticated user found")
+          setUser(null)
+          setJwt(null)
+          setIsAuthenticated(false)
 
-          // Fetch user data
-          const userData = await AuthService.getCurrentUser(accessToken);
-          if (userData) {
-            setUser(userData);
-          } else {
-            // If user data fetch fails, try to refresh token
-            const success = await refreshToken();
-            if (!success) {
-              AuthService.clearTokens();
-            }
-          }
+          // Clear the cookies if the token is invalid
+          document.cookie = "authToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
+          document.cookie = "jwt=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
+          document.cookie = "userId=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
         }
+      } else {
+        console.log("No token found in cookies")
+        setUser(null)
+        setJwt(null)
+        setIsAuthenticated(false)
       }
-
-      setIsLoading(false);
-    };
-
-    checkAuth();
-  }, [refreshToken]);
-
-  // Login function
-  const login = async (
-    identifier: string,
-    password: string
-  ): Promise<{ success: boolean; error?: string }> => {
-    setIsLoading(true);
-    try {
-      const response = await AuthService.login(identifier, password);
-
-      if (response && "error" in response) {
-        // Return the specific error message
-        return { success: false, error: response.error };
-      }
-
-      if (response && "jwt" in response) {
-        handleAuthSuccess(response);
-        return { success: true };
-      }
-
-      return { success: false, error: "Login failed" };
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Register function
-  const register = async (
-    username: string,
-    email: string,
-    password: string
-  ): Promise<boolean> => {
-    setIsLoading(true);
-    try {
-      const response = await AuthService.register(username, email, password);
-      if (response && "jwt" in response) {
-        handleAuthSuccess(response);
-        return true;
-      }
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Logout function
-  const logout = () => {
-    setUser(null);
-    setToken(null);
-    AuthService.clearTokens();
-    router.push("/auth");
-    toast({
-      title: "Logged out",
-      description: "You have been successfully logged out",
-    });
-  };
-
-  // Forgot password
-  const forgotPassword = async (email: string): Promise<boolean> => {
-    setIsLoading(true);
-    try {
-      return await AuthService.forgotPassword(email);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Reset password
-  const resetPassword = async (
-    code: string,
-    password: string,
-    passwordConfirmation: string
-  ): Promise<boolean> => {
-    setIsLoading(true);
-    try {
-      const response = await AuthService.resetPassword(
-        code,
-        password,
-        passwordConfirmation
-      );
-      if (response) {
-        handleAuthSuccess(response);
-        return true;
-      }
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Update profile
-  const updateProfile = async (
-    userData: Partial<User>
-  ): Promise<User | null> => {
-    if (!token) return null;
-    setIsLoading(true);
-    try {
-      const updatedUser = await AuthService.updateProfile(token, userData);
-      if (updatedUser) {
-        setUser(updatedUser);
-        toast({
-          title: "Profile updated",
-          description: "Your profile has been successfully updated",
-        });
-        return updatedUser;
-      }
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Upload profile image
-  const uploadProfileImage = async (file: File): Promise<boolean> => {
-    if (!token || !user) return false;
-    setIsLoading(true);
-    try {
-      const success = await AuthService.uploadProfileImage(
-        token,
-        user.id,
-        file
-      );
-      if (success) {
-        // Refresh user data to get updated image
-        const updatedUser = await AuthService.getCurrentUser(token);
-        if (updatedUser) {
-          setUser(updatedUser);
-        }
-        toast({
-          title: "Image uploaded",
-          description: "Your profile image has been updated",
-        });
-        return true;
-      }
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Helper function to handle successful authentication
-  const handleAuthSuccess = (response: AuthResponse) => {
-    setToken(response.jwt);
-    setUser(response.user);
-    setIsLoading(false);
-  };
-
-  const handleSocialAuth = async (
-    response: AuthResponse | { error: string }
-  ): Promise<boolean> => {
-    try {
-      if ("error" in response) {
-        toast({
-          title: "Authentication Error",
-          description: response.error,
-          variant: "destructive",
-        });
-        return false;
-      }
-
-      handleAuthSuccess(response);
-      return true;
     } catch (error) {
-      console.error("Social auth error:", error);
-      return false;
+      console.error("Auth check error:", error)
+      setUser(null)
+      setJwt(null)
+      setIsAuthenticated(false)
+    } finally {
+      setIsLoading(false)
+      isCheckingAuth.current = false
     }
-  };
+  }, [])
+
+  // Simplified logout function
+  const logout = async () => {
+    try {
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+      })
+
+      if (!response.ok) {
+        throw new Error("Logout failed")
+      }
+
+      // Update client state
+      setUser(null)
+      setJwt(null)
+      setIsAuthenticated(false)
+
+      // Clear cookies on client side
+      document.cookie = "authToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
+      document.cookie = "jwt=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
+      document.cookie = "userId=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
+
+      // Redirect to auth page
+      router.push("/auth")
+      router.refresh()
+    } catch (error) {
+      console.error("Logout error:", error)
+      setUser(null)
+      setJwt(null)
+      setIsAuthenticated(false)
+      router.push("/auth")
+    }
+  }
+
+  // Function to set user data on the client side
+  const setUserData = (userData: User, token?: string) => {
+    console.log("Setting user data in context:", userData)
+
+    if (userData) {
+      setUser(userData)
+      setIsAuthenticated(true)
+
+      if (token) {
+        console.log("Setting JWT in context:", token.substring(0, 10) + "...")
+        setJwt(token)
+
+        // Set the token in both cookie formats for compatibility
+        setCookie("authToken", token, 7)
+        setCookie("jwt", token, 7)
+
+        // Also store user ID in cookie for easier access
+        if (userData.id) {
+          setCookie("userId", userData.id.toString(), 7)
+        }
+      }
+    }
+  }
+
+  // Function to refresh user data
+  const refreshUser = async () => {
+    return checkAuthStatus()
+  }
+
+  // Check auth status when the component mounts
+  useEffect(() => {
+    checkAuthStatus()
+  }, [checkAuthStatus])
 
   const value = {
     user,
-    token,
+    jwt,
     isLoading,
-    isAuthenticated: !!token,
-    login,
-    register,
+    isAuthenticated,
+    checkAuthStatus,
     logout,
-    forgotPassword,
-    resetPassword,
-    updateProfile,
-    uploadProfileImage,
-    refreshToken,
-    authenticatedFetch,
-    handleSocialAuth,
-  };
+    setUserData,
+    refreshUser,
+  }
 
-  return (
-    <AuthContext.Provider value={value}>
-      <Suspense fallback={<div>Loading...</div>}>
-        <SearchParamsProvider>{children}</SearchParamsProvider>
-      </Suspense>
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
-export const useAuth = (): AuthContextType => {
-  const context = useContext(AuthContext);
+export function useAuth() {
+  const context = useContext(AuthContext)
   if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
+    throw new Error("useAuth must be used within an AuthProvider")
   }
-  return context;
-};
+  return context
+}
