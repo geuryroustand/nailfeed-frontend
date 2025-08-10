@@ -1,6 +1,7 @@
 "use server"
 
 import { cookies } from "next/headers"
+import { getApiBaseUrl } from "@/lib/get-api-base-url"
 
 type RegistrationData = {
   username: string
@@ -10,7 +11,7 @@ type RegistrationData = {
 
 export const registerUser = async (data: RegistrationData) => {
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
+    const apiUrl = getApiBaseUrl()
 
     const response = await fetch(`${apiUrl}/api/auth/local/register`, {
       method: "POST",
@@ -31,24 +32,24 @@ export const registerUser = async (data: RegistrationData) => {
     if (result?.jwt) {
       const cookieStore = await cookies()
 
-      // Store JWT for client-access (matches existing behavior)
+      // Client-accessible auth token for compatibility with existing code
       cookieStore.set({
         name: "authToken",
         value: result.jwt,
         httpOnly: process.env.NODE_ENV === "production",
         secure: process.env.NODE_ENV === "production",
-        maxAge: 60 * 60 * 24 * 7, // 7 days
+        maxAge: 60 * 60 * 24 * 7,
         path: "/",
         sameSite: "lax",
       })
 
-      // Persist pending email (client-readable for verify flow)
+      // Store email for verification flow
       cookieStore.set({
         name: "pendingVerificationEmail",
         value: data.email,
         httpOnly: false,
         secure: process.env.NODE_ENV === "production",
-        maxAge: 60 * 60 * 24, // 1 day
+        maxAge: 60 * 60 * 24,
         path: "/",
         sameSite: "lax",
       })
@@ -71,7 +72,7 @@ export const loginUser = async (data: {
   rememberMe?: boolean
 }) => {
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
+    const apiUrl = getApiBaseUrl()
 
     const response = await fetch(`${apiUrl}/api/auth/local`, {
       method: "POST",
@@ -93,10 +94,7 @@ export const loginUser = async (data: {
     }
 
     if (result?.jwt) {
-      const maxAge = data.rememberMe
-        ? 60 * 60 * 24 * 30 // 30 days
-        : 60 * 60 * 24 * 7 // 7 days
-
+      const maxAge = data.rememberMe ? 60 * 60 * 24 * 30 : 60 * 60 * 24 * 7
       const cookieStore = await cookies()
 
       cookieStore.set({
@@ -126,6 +124,9 @@ export const logoutUser = async () => {
     const cookieStore = await cookies()
     cookieStore.delete("authToken")
     cookieStore.delete("pendingVerificationEmail")
+    cookieStore.delete("jwt")
+    cookieStore.delete("auth_token")
+    cookieStore.delete("userId")
     return { success: true }
   } catch (error) {
     console.error("Logout error:", error)
@@ -134,10 +135,10 @@ export const logoutUser = async () => {
 }
 
 export const getCurrentUser = async () => {
-  // Await the dynamic cookies API (Next.js 15+)
+  // Await the dynamic cookies API per Next.js 15 best practices [^2][^3]
   const cookieStore = await cookies()
 
-  // Priority: client-readable authToken > jwt > server-only auth_token
+  // Priority: client-readable tokens first, then httpOnly fallback
   const authToken =
     cookieStore.get("authToken")?.value ?? cookieStore.get("jwt")?.value ?? cookieStore.get("auth_token")?.value
 
@@ -147,7 +148,7 @@ export const getCurrentUser = async () => {
   }
 
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
+    const apiUrl = getApiBaseUrl()
 
     const response = await fetch(`${apiUrl}/api/users/me?populate=profileImage`, {
       headers: { Authorization: `Bearer ${authToken}` },
