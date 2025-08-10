@@ -8,16 +8,13 @@ type RegistrationData = {
   password: string
 }
 
-export async function registerUser(data: RegistrationData) {
+export const registerUser = async (data: RegistrationData) => {
   try {
-    // Use NEXT_PUBLIC_API_URL or fallback to the backend URL
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
 
     const response = await fetch(`${apiUrl}/api/auth/local/register`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
       cache: "no-store",
     })
@@ -27,27 +24,29 @@ export async function registerUser(data: RegistrationData) {
     if (!response.ok) {
       return {
         success: false,
-        error: result.error?.message || "Registration failed",
+        error: result?.error?.message || "Registration failed",
       }
     }
 
-    // Store JWT in a cookie - only HTTP-only in production
-    if (result.jwt) {
-      cookies().set({
+    if (result?.jwt) {
+      const cookieStore = await cookies()
+
+      // Store JWT for client-access (matches existing behavior)
+      cookieStore.set({
         name: "authToken",
         value: result.jwt,
-        httpOnly: process.env.NODE_ENV === "production", // Only HTTP-only in production
+        httpOnly: process.env.NODE_ENV === "production",
         secure: process.env.NODE_ENV === "production",
-        maxAge: 60 * 60 * 24 * 7, // 1 week
+        maxAge: 60 * 60 * 24 * 7, // 7 days
         path: "/",
         sameSite: "lax",
       })
 
-      // Store email for verification in a cookie
-      cookies().set({
+      // Persist pending email (client-readable for verify flow)
+      cookieStore.set({
         name: "pendingVerificationEmail",
         value: data.email,
-        httpOnly: false, // Allow JavaScript access
+        httpOnly: false,
         secure: process.env.NODE_ENV === "production",
         maxAge: 60 * 60 * 24, // 1 day
         path: "/",
@@ -58,31 +57,25 @@ export async function registerUser(data: RegistrationData) {
     return {
       success: true,
       user: result.user,
-      jwt: result.jwt, // Return the JWT token to the client
+      jwt: result.jwt,
     }
   } catch (error) {
     console.error("Registration error:", error)
-    return {
-      success: false,
-      error: "An unexpected error occurred",
-    }
+    return { success: false, error: "An unexpected error occurred" }
   }
 }
 
-export async function loginUser(data: {
+export const loginUser = async (data: {
   identifier: string
   password: string
   rememberMe?: boolean
-}) {
+}) => {
   try {
-    // Use NEXT_PUBLIC_API_URL or fallback to the backend URL
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
 
     const response = await fetch(`${apiUrl}/api/auth/local`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         identifier: data.identifier,
         password: data.password,
@@ -95,23 +88,23 @@ export async function loginUser(data: {
     if (!response.ok) {
       return {
         success: false,
-        error: result.error?.message || "Login failed",
+        error: result?.error?.message || "Login failed",
       }
     }
 
-    // Store JWT in a cookie - only HTTP-only in production
-    if (result.jwt) {
-      // Set cookie expiration based on "remember me" option
+    if (result?.jwt) {
       const maxAge = data.rememberMe
-        ? 60 * 60 * 24 * 30 // 30 days if "remember me" is checked
-        : 60 * 60 * 24 * 7 // 1 week default
+        ? 60 * 60 * 24 * 30 // 30 days
+        : 60 * 60 * 24 * 7 // 7 days
 
-      cookies().set({
+      const cookieStore = await cookies()
+
+      cookieStore.set({
         name: "authToken",
         value: result.jwt,
-        httpOnly: process.env.NODE_ENV === "production", // Only HTTP-only in production
+        httpOnly: process.env.NODE_ENV === "production",
         secure: process.env.NODE_ENV === "production",
-        maxAge: maxAge,
+        maxAge,
         path: "/",
         sameSite: "lax",
       })
@@ -120,26 +113,19 @@ export async function loginUser(data: {
     return {
       success: true,
       user: result.user,
-      jwt: result.jwt, // Return the JWT token to the client
+      jwt: result.jwt,
     }
   } catch (error) {
     console.error("Login error:", error)
-    return {
-      success: false,
-      error: "An unexpected error occurred",
-    }
+    return { success: false, error: "An unexpected error occurred" }
   }
 }
 
-export async function logoutUser() {
+export const logoutUser = async () => {
   try {
-    // Clear the auth cookie
-    cookies().delete("authToken")
-
-    // Clear any other cookies we might have set
-    cookies().delete("pendingVerificationEmail")
-
-    // Return success
+    const cookieStore = await cookies()
+    cookieStore.delete("authToken")
+    cookieStore.delete("pendingVerificationEmail")
     return { success: true }
   } catch (error) {
     console.error("Logout error:", error)
@@ -147,8 +133,13 @@ export async function logoutUser() {
   }
 }
 
-export async function getCurrentUser() {
-  const authToken = cookies().get("authToken")?.value || cookies().get("jwt")?.value
+export const getCurrentUser = async () => {
+  // Await the dynamic cookies API (Next.js 15+)
+  const cookieStore = await cookies()
+
+  // Priority: client-readable authToken > jwt > server-only auth_token
+  const authToken =
+    cookieStore.get("authToken")?.value ?? cookieStore.get("jwt")?.value ?? cookieStore.get("auth_token")?.value
 
   if (!authToken) {
     console.log("No authentication token found for getCurrentUser")
@@ -156,13 +147,10 @@ export async function getCurrentUser() {
   }
 
   try {
-    // Use NEXT_PUBLIC_API_URL or fallback to the backend URL
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
 
     const response = await fetch(`${apiUrl}/api/users/me?populate=profileImage`, {
-      headers: {
-        Authorization: `Bearer ${authToken}`,
-      },
+      headers: { Authorization: `Bearer ${authToken}` },
       cache: "no-store",
     })
 
