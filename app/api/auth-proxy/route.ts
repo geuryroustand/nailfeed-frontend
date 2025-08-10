@@ -1,12 +1,12 @@
 import { cookies } from "next/headers"
 import { type NextRequest, NextResponse } from "next/server"
-import { getApiBaseUrl } from "@/lib/get-api-base-url"
 
-const API_BASE_URL = getApiBaseUrl()
+// Server-only environment variables
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
 const SERVER_API_TOKEN = process.env.API_TOKEN || ""
 
 // Helper: normalize URL join
-const joinUrl = (base: string, path: string) => {
+function joinUrl(base: string, path: string) {
   const b = base.endsWith("/") ? base.slice(0, -1) : base
   const p = path.startsWith("/") ? path : `/${path}`
   return `${b}${p}`
@@ -15,6 +15,10 @@ const joinUrl = (base: string, path: string) => {
 /**
  * POST /api/auth-proxy
  * Body: { endpoint: string, method?: string, data?: any, headers?: Record<string, string>, authorizationOverride?: string }
+ * Behavior:
+ * - Builds a request to the backend at API_BASE_URL + endpoint
+ * - Authorization priority: cookie JWT > authorizationOverride (from client) > SERVER_API_TOKEN
+ * - Never exposes secrets to the client; runs server-side
  */
 export async function POST(request: NextRequest) {
   try {
@@ -23,17 +27,24 @@ export async function POST(request: NextRequest) {
 
     if (!endpoint || typeof endpoint !== "string") {
       return NextResponse.json(
-        { error: { code: "bad_request", message: "Missing or invalid 'endpoint'." } },
+        {
+          error: {
+            code: "bad_request",
+            message: "Missing or invalid 'endpoint'.",
+          },
+        },
         { status: 400 },
       )
     }
 
     const url = joinUrl(API_BASE_URL, endpoint)
 
+    // Start with safe defaults. Whitelist a small set of headers from the client.
     const headers: HeadersInit = {
       "Content-Type": "application/json",
     }
 
+    // Allow forwarding a few benign headers. Do not forward auth from client blindly.
     const allowedHeaderNames = new Set(["content-type", "accept"])
     for (const [k, v] of Object.entries(incomingHeaders || {})) {
       if (typeof v === "string" && allowedHeaderNames.has(k.toLowerCase())) {
@@ -41,10 +52,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Await cookies per Next.js 15 dynamic API [^2][^3]
+    // Determine Authorization header
     const cookieStore = await cookies()
-    const jwt =
-      cookieStore.get("jwt")?.value ?? cookieStore.get("authToken")?.value ?? cookieStore.get("auth_token")?.value
+    const jwt = cookieStore.get("jwt")?.value ?? cookieStore.get("authToken")?.value
 
     if (jwt) {
       headers["Authorization"] = `Bearer ${jwt}`
@@ -66,6 +76,7 @@ export async function POST(request: NextRequest) {
 
     const resp = await fetch(url, fetchOptions)
 
+    // Proxy back response as-is (JSON or text)
     const contentType = resp.headers.get("content-type") || ""
     const status = resp.status
 

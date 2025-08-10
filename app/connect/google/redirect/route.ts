@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getApiBaseUrl } from "@/lib/get-api-base-url"
+import { cookies } from "next/headers"
 
 export async function GET(request: NextRequest) {
   try {
@@ -24,90 +24,109 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL("/auth?error=no_token", request.url))
     }
 
-    // Use unified Strapi URL
-    const strapiUrl = getApiBaseUrl()
+    // Use local Strapi URL in development, production URL otherwise
+    const strapiUrl =
+      process.env.NODE_ENV === "development"
+        ? "http://127.0.0.1:1337"
+        : process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
+
     console.log("Using Strapi URL:", strapiUrl)
 
-    // Build the callback URL for Strapi
-    let callbackUrl = `${strapiUrl}/api/auth/google/callback`
-    if (access_token) {
-      callbackUrl += `?access_token=${encodeURIComponent(access_token)}`
-    } else if (id_token) {
-      callbackUrl += `?id_token=${encodeURIComponent(id_token)}`
-    }
-
-    console.log("Calling Strapi callback:", callbackUrl.replace(/(token=)[^&]+/, "$1***"))
-
-    const response = await fetch(callbackUrl, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
+    // Add more detailed logging to debug the environment detection
+    console.log("Environment details:", {
+      NODE_ENV: process.env.NODE_ENV,
+      isDevelopment: process.env.NODE_ENV === "development",
+      API_URL: process.env.API_URL,
+      NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+      resolvedStrapiUrl: strapiUrl,
     })
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error("Strapi callback failed:", response.status, errorText)
+    try {
+      // Build the callback URL for Strapi
+      let callbackUrl = `${strapiUrl}/api/auth/google/callback`
 
-      if (response.status === 400) {
-        return NextResponse.redirect(new URL("/auth?error=provider_disabled", request.url))
+      if (access_token) {
+        callbackUrl += `?access_token=${encodeURIComponent(access_token)}`
+      } else if (id_token) {
+        callbackUrl += `?id_token=${encodeURIComponent(id_token)}`
       }
-      if (response.status === 401) {
-        return NextResponse.redirect(new URL("/auth?error=invalid_token", request.url))
-      }
-      return NextResponse.redirect(new URL("/auth?error=strapi_auth_failed", request.url))
-    }
 
-    const data = await response.json()
-    console.log("Strapi authentication successful:", {
-      hasJwt: !!data.jwt,
-      hasUser: !!data.user,
-    })
+      console.log("Calling Strapi callback:", callbackUrl.replace(/(token=)[^&]+/, "$1***"))
 
-    if (!data.jwt) {
-      console.error("No JWT received from Strapi")
-      return NextResponse.redirect(new URL("/auth?error=no_jwt", request.url))
-    }
-
-    // Prepare redirect response and SET COOKIES ON THE RESPONSE OBJECT
-    const res = NextResponse.redirect(new URL("/", request.url))
-
-    // Shared cookie options
-    const baseCookie = {
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax" as const,
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-      path: "/",
-    }
-
-    // httpOnly auth token for security
-    res.cookies.set("auth_token", data.jwt, {
-      ...baseCookie,
-      httpOnly: true,
-    })
-
-    // Client-accessible copies for existing client code paths
-    res.cookies.set("jwt", data.jwt, {
-      ...baseCookie,
-      httpOnly: false,
-    })
-    res.cookies.set("authToken", data.jwt, {
-      ...baseCookie,
-      httpOnly: false,
-    })
-
-    if (data.user?.id) {
-      res.cookies.set("userId", String(data.user.id), {
-        ...baseCookie,
-        httpOnly: false,
+      const response = await fetch(callbackUrl, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
       })
-    }
 
-    console.log("Cookies set, redirecting to home")
-    return res
-  } catch (err) {
-    console.error("Google redirect handler error:", err)
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error("Strapi callback failed:", response.status, errorText)
+
+        // More specific error messages
+        if (response.status === 400) {
+          return NextResponse.redirect(new URL("/auth?error=provider_disabled", request.url))
+        } else if (response.status === 401) {
+          return NextResponse.redirect(new URL("/auth?error=invalid_token", request.url))
+        } else {
+          return NextResponse.redirect(new URL("/auth?error=strapi_auth_failed", request.url))
+        }
+      }
+
+      const data = await response.json()
+      console.log("Strapi authentication successful:", {
+        hasJwt: !!data.jwt,
+        hasUser: !!data.user,
+      })
+
+      if (!data.jwt) {
+        console.error("No JWT received from Strapi")
+        return NextResponse.redirect(new URL("/auth?error=no_jwt", request.url))
+      }
+
+      // Set cookies for authentication
+      const cookieOptions = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax" as const,
+        maxAge: 60 * 60 * 24 * 7, // 7 days
+        path: "/",
+      }
+
+      const cookieStore = await cookies()
+
+      // Set the main auth token (httpOnly for security)
+      cookieStore.set("auth_token", data.jwt, cookieOptions)
+
+      // Set client-accessible tokens for compatibility
+      cookieStore.set("jwt", data.jwt, {
+        ...cookieOptions,
+        httpOnly: false, // Allow client access
+      })
+
+      cookieStore.set("authToken", data.jwt, {
+        ...cookieOptions,
+        httpOnly: false, // Allow client access
+      })
+
+      // Store user ID if available
+      if (data.user?.id) {
+        cookieStore.set("userId", String(data.user.id), {
+          ...cookieOptions,
+          httpOnly: false, // Allow client access
+        })
+      }
+
+      console.log("Cookies set, redirecting to home")
+      return NextResponse.redirect(new URL("/", request.url))
+    } catch (fetchError) {
+      console.error("Error calling Strapi:", fetchError)
+      return NextResponse.redirect(new URL("/auth?error=network_error", request.url))
+    }
+  } catch (error) {
+    console.error("Google redirect handler error:", error)
     return NextResponse.redirect(new URL("/auth?error=handler_error", request.url))
   }
 }
