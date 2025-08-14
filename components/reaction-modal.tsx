@@ -31,8 +31,10 @@ interface ReactionModalProps {
 export function ReactionModal({ open, onOpenChange, reactions, totalCount, postId }: ReactionModalProps) {
   const [activeTab, setActiveTab] = useState("all")
 
+  const availableReactions = reactions.filter((reaction) => reaction.count > 0)
+
   // Sort reactions by count (highest first)
-  const sortedReactions = [...reactions].sort((a, b) => b.count - a.count)
+  const sortedReactions = [...availableReactions].sort((a, b) => b.count - a.count)
 
   // Get all users across all reaction types
   const allUsers = reactions.flatMap((reaction) =>
@@ -61,6 +63,12 @@ export function ReactionModal({ open, onOpenChange, reactions, totalCount, postI
       setActiveTab("all")
     }
   }, [open, reactions])
+
+  useEffect(() => {
+    if (open && totalCount === 0 && sortedReactions.length > 0) {
+      setActiveTab(sortedReactions[0].emoji)
+    }
+  }, [open, totalCount, sortedReactions])
 
   // Get background color based on reaction type
   const getReactionColor = (label = "default"): string => {
@@ -107,12 +115,14 @@ export function ReactionModal({ open, onOpenChange, reactions, totalCount, postI
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="border-b overflow-x-auto">
             <TabsList className="h-auto p-1 w-full bg-gray-50 flex">
-              <TabsTrigger
-                value="all"
-                className="data-[state=active]:bg-white rounded-md px-3 py-1.5 flex items-center gap-1"
-              >
-                All <span className="text-xs text-gray-500 ml-1">({totalCount})</span>
-              </TabsTrigger>
+              {totalCount > 0 && (
+                <TabsTrigger
+                  value="all"
+                  className="data-[state=active]:bg-white rounded-md px-3 py-1.5 flex items-center gap-1"
+                >
+                  All <span className="text-xs text-gray-500 ml-1">({totalCount})</span>
+                </TabsTrigger>
+              )}
 
               {sortedReactions.map((reaction) => (
                 <TabsTrigger
