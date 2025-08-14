@@ -49,17 +49,23 @@ export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClie
 
     setIsLoading(true)
 
+    // Store current state for potential revert
+    const previousFollowState = isFollowing
+    const previousFollowerCount = followerCount
+
     // Optimistic update
-    setIsFollowing((prev) => !prev)
-    setFollowerCount((prev) => (isFollowing ? Math.max(0, prev - 1) : prev + 1))
+    const newFollowState = !isFollowing
+    setIsFollowing(newFollowState)
+    setFollowerCount((prev) => (newFollowState ? prev + 1 : Math.max(0, prev - 1)))
 
     try {
-      const result = await toggleFollow(userData.username, isFollowing)
+      // Call server action - it will determine the correct action based on database state
+      const result = await toggleFollow(userData.username)
 
       if (!result.success) {
         // Revert optimistic update if failed
-        setIsFollowing(isFollowing)
-        setFollowerCount(userData.followersCount || 0)
+        setIsFollowing(previousFollowState)
+        setFollowerCount(previousFollowerCount)
 
         toast({
           title: "Error",
@@ -67,7 +73,8 @@ export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClie
           variant: "destructive",
         })
       } else {
-        // Update with actual count from server
+        // Update with actual state from server (in case of race conditions)
+        setIsFollowing(result.isFollowing)
         if (result.newFollowerCount !== undefined) {
           setFollowerCount(result.newFollowerCount)
         }
@@ -82,8 +89,8 @@ export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClie
       }
     } catch (error) {
       // Revert optimistic update if error
-      setIsFollowing(isFollowing)
-      setFollowerCount(userData.followersCount || 0)
+      setIsFollowing(previousFollowState)
+      setFollowerCount(previousFollowerCount)
 
       toast({
         title: "Error",
@@ -312,7 +319,7 @@ export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClie
             >
               {isLoading ? "Processing..." : isFollowing ? "Following" : "Follow"}
             </Button>
-            <Button variant="outline" className="rounded-full px-6">
+            <Button variant="outline" className="rounded-full px-6 bg-transparent">
               Message
             </Button>
           </div>

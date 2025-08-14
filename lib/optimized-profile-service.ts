@@ -13,10 +13,12 @@ export async function fetchUserProfile(username: string) {
   try {
     console.log(`Fetching optimized profile data for username: ${username}`)
 
-    // Get authentication token from cookies or config
+    // Get authentication token from cookies or server config only
     const cookieToken = cookies().get("jwt")?.value || cookies().get("authToken")?.value
     const configToken = config.api.getApiToken()
-    const token = cookieToken || configToken
+    const serverToken = process.env.API_TOKEN // Only use server-side API_TOKEN
+
+    const token = cookieToken || configToken || serverToken
     const isAuthenticated = !!cookieToken
 
     if (!token) {
@@ -89,6 +91,7 @@ export async function fetchUserProfile(username: string) {
     const url = `${apiUrl}/api/users?${query}`
 
     console.log(`Fetching from optimized endpoint: ${url}`)
+    console.log(`Using token type: ${cookieToken ? "user JWT" : configToken ? "server config" : "fallback API token"}`)
 
     // Make the API request with proper error handling
     const response = await fetch(url, {
@@ -103,6 +106,12 @@ export async function fetchUserProfile(username: string) {
     if (!response.ok) {
       const errorText = await response.text().catch(() => "Failed to get error text")
       console.error(`Failed to fetch profile data: ${response.status} - ${errorText}`)
+
+      if (response.status === 401 || response.status === 403) {
+        console.log(`Authentication failed for profile ${username}, but continuing with limited access`)
+        // Don't return error immediately, let it fall through to handle as not found
+      }
+
       return { error: true, message: `API error: ${response.status}` }
     }
 

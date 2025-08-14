@@ -2,8 +2,7 @@
 
 import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { MessageCircle, MoreHorizontal, Smile, Trash2, AlertCircle } from "lucide-react"
-import { motion, AnimatePresence } from "framer-motion"
+import { MessageCircle, MoreHorizontal, Trash2, AlertCircle } from "lucide-react"
 import Link from "next/link"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import type { BackgroundType } from "./post-background-selector"
@@ -11,11 +10,9 @@ import type { MediaItem, MediaGalleryLayout } from "@/types/media"
 import { ShareMenu } from "./share-menu"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/context/auth-context"
-import { cn } from "@/lib/utils"
 import { EnhancedAvatar } from "@/components/ui/enhanced-avatar"
 import { SafePostImage } from "./safe-post-image"
 import MediaGallery from "./media-gallery"
-import { ReactionSummary } from "./reaction-summary"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import FeedCommentSection from "@/components/comments/feed-comment-section"
 
@@ -31,9 +28,13 @@ import { formatDate, formatBackendDate } from "@/lib/date-utils"
 // Import the ReactionButton component
 import { ReactionButton } from "./reaction-button"
 
+import { ReactionService } from "@/lib/services/reaction-service"
+
 // Add the import for TryOnButton and TryOnModal at the top of the file
 import { TryOnButton } from "@/components/try-on/try-on-button"
 import { TryOnModal } from "@/components/try-on/try-on-modal"
+
+import { ReactionModal } from "./reaction-modal"
 
 // Hardcoded API base URL for testing
 const API_BASE_URL = "https://nailfeed-backend-production.up.railway.app"
@@ -76,10 +77,23 @@ interface PostProps {
     }
     userDocumentId?: string
     comments_count?: number
+    likes?: Array<{
+      type: string
+      createdAt: string
+      user: {
+        username: string
+        email: string
+      }
+    }>
   }
   viewMode?: "cards" | "compact"
   onPostDeleted?: (postId: number) => void
   onPostUpdated?: (updatedPost: any) => void
+  onLike?: (postId: number, reactionType: string) => void
+  onComment?: (postId: number) => void
+  onSave?: (postId: number) => void
+  onShare?: (postId: number) => void
+  className?: string
 }
 
 type Reaction = "like" | "love" | "haha" | "wow" | "sad" | "angry" | null
@@ -94,7 +108,17 @@ const reactionData = [
   { type: "angry", emoji: "😡", label: "Angry", color: "text-orange-500" },
 ]
 
-export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUpdated }: PostProps) {
+export default function Post({
+  post,
+  viewMode = "cards",
+  onPostDeleted,
+  onPostUpdated,
+  onLike,
+  onComment,
+  onSave,
+  onShare,
+  className,
+}: PostProps) {
   const [modalOpen, setModalOpen] = useState(false)
   const [reaction, setReaction] = useState<Reaction>(null)
   const [showReactions, setShowReactions] = useState(false)
@@ -134,51 +158,175 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
     onPostDeleted,
   })
 
-  // Generate mock reactions if not provided
-  const [postReactions] = useState(() => {
-    if (post.reactions && post.reactions.length > 0) {
-      return post.reactions
+  const [postReactions, setPostReactions] = useState<
+    {
+      emoji: string
+      label: string
+      count: number
+      users?: {
+        id: string | number
+        username: string
+        displayName?: string
+        avatar?: string
+      }[]
+    }[]
+  >([])
+
+  useEffect(() => {
+    console.log("🔍 Post likes data:", post.likes)
+    console.log("🔍 Post object:", post)
+
+    if (post.likes && Array.isArray(post.likes)) {
+      console.log("✅ Processing likes array with", post.likes.length, "items")
+
+      // Group likes by type and count them
+      const reactionCounts = post.likes.reduce(
+        (acc, like) => {
+          console.log("🔍 Processing like:", like)
+          const type = like.type || "like"
+          if (!acc[type]) {
+            acc[type] = { count: 0, users: [] }
+          }
+          acc[type].count++
+
+          const user = like.user
+          const profileImageUrl = user.profileImage?.url
+            ? `${API_BASE_URL}${user.profileImage.url}`
+            : `/placeholder.svg?height=40&width=40&query=${user.username}`
+
+          console.log("🔍 User data:", user)
+          console.log("🔍 Profile image URL:", profileImageUrl)
+
+          acc[type].users.push({
+            id: user.username, // Use username as unique identifier
+            username: user.username,
+            displayName: user.username,
+            avatar: profileImageUrl,
+          })
+          return acc
+        },
+        {} as Record<string, { count: number; users: any[] }>,
+      )
+
+      console.log("🔍 Reaction counts:", reactionCounts)
+
+      // Transform to the expected format
+      const transformedReactions = [
+        {
+          emoji: "👍",
+          label: "like",
+          count: reactionCounts.like?.count || 0,
+          users: reactionCounts.like?.users || [],
+        },
+        {
+          emoji: "❤️",
+          label: "love",
+          count: reactionCounts.love?.count || 0,
+          users: reactionCounts.love?.users || [],
+        },
+        {
+          emoji: "😂",
+          label: "haha",
+          count: reactionCounts.haha?.count || 0,
+          users: reactionCounts.haha?.users || [],
+        },
+        {
+          emoji: "😮",
+          label: "wow",
+          count: reactionCounts.wow?.count || 0,
+          users: reactionCounts.wow?.users || [],
+        },
+        {
+          emoji: "😢",
+          label: "sad",
+          count: reactionCounts.sad?.count || 0,
+          users: reactionCounts.sad?.users || [],
+        },
+        {
+          emoji: "😡",
+          label: "angry",
+          count: reactionCounts.angry?.count || 0,
+          users: reactionCounts.angry?.users || [],
+        },
+      ]
+
+      console.log("🔍 Transformed reactions:", transformedReactions)
+      setPostReactions(transformedReactions)
+    } else {
+      console.log("❌ No likes data found, using empty reactions")
+      // Fallback to empty reactions with proper structure
+      setPostReactions([
+        { emoji: "👍", label: "like", count: 0, users: [] },
+        { emoji: "❤️", label: "love", count: 0, users: [] },
+        { emoji: "😂", label: "haha", count: 0, users: [] },
+        { emoji: "😮", label: "wow", count: 0, users: [] },
+        { emoji: "😢", label: "sad", count: 0, users: [] },
+        { emoji: "😡", label: "angry", count: 0, users: [] },
+      ])
     }
+  }, [post]) // Fixed dependency to use full post object instead of post.likes
 
-    // Generate mock reactions
-    const mockReactions = [
-      {
-        emoji: "👍",
-        label: "like",
-        count: Math.floor(Math.random() * 10) + 1,
-        users: Array.from({ length: Math.floor(Math.random() * 10) + 1 }, (_, i) => ({
-          id: `like-user-${i}`,
-          username: `user${i + 1}`,
-          displayName: `User ${i + 1}`,
-          avatar: `/placeholder.svg?height=40&width=40&query=user+${i + 1}`,
-        })),
-      },
-      {
-        emoji: "❤️",
-        label: "love",
-        count: Math.floor(Math.random() * 8) + 1,
-        users: Array.from({ length: Math.floor(Math.random() * 8) + 1 }, (_, i) => ({
-          id: `love-user-${i}`,
-          username: `loveuser${i + 1}`,
-          displayName: `Love User ${i + 1}`,
-          avatar: `/placeholder.svg?height=40&width=40&query=user+${i + 10}`,
-        })),
-      },
-      {
-        emoji: "😂",
-        label: "haha",
-        count: Math.floor(Math.random() * 6) + 1,
-        users: Array.from({ length: Math.floor(Math.random() * 6) + 1 }, (_, i) => ({
-          id: `haha-user-${i}`,
-          username: `hahauser${i + 1}`,
-          displayName: `Haha User ${i + 1}`,
-          avatar: `/placeholder.svg?height=40&width=40&query=user+${i + 20}`,
-        })),
-      },
-    ]
+  const handleReaction = async (reactionType: Reaction) => {
+    try {
+      // Get user data from localStorage or context
+      const userStr = localStorage.getItem("user")
+      if (!userStr) {
+        console.error("User not authenticated")
+        return
+      }
 
-    return mockReactions
-  })
+      const user = JSON.parse(userStr)
+
+      // Add the reaction using ReactionService
+      await ReactionService.addReaction(post.id, reactionType, post.documentId, user.id, user.documentId || user.id)
+
+      const reactionData = await ReactionService.getReactionCounts(post.id)
+
+      const transformedReactions = [
+        {
+          emoji: "👍",
+          label: "like",
+          count: reactionData.like?.count || 0,
+          users: reactionData.like?.users || [],
+        },
+        {
+          emoji: "❤️",
+          label: "love",
+          count: reactionData.love?.count || 0,
+          users: reactionData.love?.users || [],
+        },
+        {
+          emoji: "😂",
+          label: "haha",
+          count: reactionData.haha?.count || 0,
+          users: reactionData.haha?.users || [],
+        },
+        {
+          emoji: "😮",
+          label: "wow",
+          count: reactionData.wow?.count || 0,
+          users: reactionData.wow?.users || [],
+        },
+        {
+          emoji: "😢",
+          label: "sad",
+          count: reactionData.sad?.count || 0,
+          users: reactionData.sad?.users || [],
+        },
+        {
+          emoji: "😡",
+          label: "angry",
+          count: reactionData.angry?.count || 0,
+          users: reactionData.angry?.users || [],
+        },
+      ]
+
+      setPostReactions(transformedReactions)
+      setReaction(reactionType)
+    } catch (error) {
+      console.error("Error handling reaction:", error)
+    }
+  }
 
   // Calculate total reaction count
   const totalReactionCount = postReactions.reduce((total, reaction) => total + reaction.count, 0)
@@ -289,190 +437,6 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
     }
   }
 
-  const handleReaction = async (reactionType: Reaction) => {
-    try {
-      // Check if user is authenticated
-      if (!isAuthenticated || !user?.id) {
-        toast({
-          title: "Authentication required",
-          description: "Please sign in to react to posts",
-          variant: "destructive",
-        })
-        return
-      }
-
-      // Check if we have the necessary document IDs
-      if (!user.documentId || !post.documentId) {
-        toast({
-          title: "Error",
-          description: "Could not process reaction due to missing data",
-          variant: "destructive",
-        })
-        return
-      }
-
-      // Determine if we're adding or removing a reaction
-      const isRemovingReaction = reaction === reactionType
-      const newReaction = isRemovingReaction ? null : reactionType
-
-      // Update local state optimistically
-      setReaction(newReaction)
-
-      // Update like count optimistically
-      if (isRemovingReaction) {
-        setLikeCount(Math.max(0, likeCount - 1))
-      } else if (!reaction) {
-        setLikeCount(likeCount + 1)
-      } else {
-        // Switching from one reaction to another - count stays the same
-      }
-
-      // Get the API URL from environment variables
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
-
-      // Get token from localStorage or cookie
-      let token = null
-      if (typeof window !== "undefined") {
-        token = localStorage.getItem("jwt")
-        if (!token) {
-          const cookies = document.cookie.split(";")
-          const jwtCookie = cookies.find((cookie) => cookie.trim().startsWith("jwt="))
-          if (jwtCookie) {
-            token = jwtCookie.split("=")[1].trim()
-          }
-        }
-      }
-
-      // First, check if the user already has a reaction for this post
-      const checkResponse = await fetch(
-        `${API_URL}/api/likes?filters[post][id][$eq]=${post.id}&filters[user][id][$eq]=${user.id}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          credentials: "include",
-        },
-      )
-
-      if (!checkResponse.ok) {
-        throw new Error(`API error checking existing reactions: ${checkResponse.status} ${checkResponse.statusText}`)
-      }
-
-      const checkData = await checkResponse.json()
-
-      let response
-
-      // If user already has a reaction
-      if (checkData.data && checkData.data.length > 0) {
-        const existingReaction = checkData.data[0]
-        const existingReactionId = existingReaction.id
-
-        if (isRemovingReaction) {
-          // User is removing their reaction
-
-          response = await fetch(`${API_URL}/api/likes/${existingReactionId}`, {
-            method: "DELETE",
-            headers: {
-              "Content-Type": "application/json",
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-            credentials: "include",
-          })
-        } else if (existingReaction.attributes.type !== reactionType) {
-          // User is changing their reaction type
-
-          const updateData = {
-            data: {
-              type: reactionType,
-            },
-          }
-
-          response = await fetch(`${API_URL}/api/likes/${existingReactionId}`, {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-            body: JSON.stringify(updateData),
-            credentials: "include",
-          })
-        } else {
-          // User clicked the same reaction again (should be handled by isRemovingReaction)
-          return
-        }
-      } else if (!isRemovingReaction) {
-        // User is adding a new reaction
-
-        // Prepare the request data
-        const likeData = {
-          data: {
-            type: reactionType,
-            user: {
-              connect: [user.documentId],
-            },
-            post: {
-              connect: [post.documentId],
-            },
-          },
-        }
-
-        response = await fetch(`${API_URL}/api/likes`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify(likeData),
-          credentials: "include",
-        })
-      } else {
-        // User tried to remove a reaction they don't have
-        return
-      }
-
-      if (response) {
-        if (!response.ok) {
-          throw new Error(`API error: ${response.status} ${response.statusText}`)
-        }
-
-        if (response.status !== 204) {
-          // 204 is No Content (for DELETE)
-          await response.json()
-        }
-      }
-
-      // Show success toast
-      toast({
-        title: isRemovingReaction ? "Reaction removed" : "Reaction added",
-        description: isRemovingReaction
-          ? "Your reaction has been removed"
-          : `You reacted with ${reactionType} to this post`,
-      })
-    } catch (error) {
-      // Error processing reaction
-
-      // Revert optimistic updates on error
-      setReaction(reaction)
-
-      // Revert like count on error
-      if (reaction === null && reactionType !== null) {
-        // We were adding a reaction
-        setLikeCount(Math.max(0, likeCount - 1))
-      } else if (reaction !== null && reactionType === reaction) {
-        // We were removing a reaction
-        setLikeCount(likeCount + 1)
-      }
-
-      toast({
-        title: "Error",
-        description: "Failed to save your reaction. Please try again.",
-        variant: "destructive",
-      })
-    }
-  }
-
   const getReactionEmoji = (reactionType: Reaction) => {
     switch (reactionType) {
       case "like":
@@ -503,7 +467,7 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
       case "wow":
         return "text-yellow-500"
       case "sad":
-        return "text-yellow-500"
+        return "text-blue-400"
       case "angry":
         return "text-orange-500"
       default:
@@ -674,7 +638,7 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
         observer.disconnect()
       }
     }
-  }, [post.id, post.documentId, post, post.comments_count])
+  }, [post])
 
   // Fetch comment count when component mounts
   useEffect(() => {
@@ -745,7 +709,7 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
     } else {
       fetchCommentCount()
     }
-  }, [post.id, post.documentId, post.comments_count])
+  }, [post])
 
   // Debug log for comment count
   useEffect(() => {
@@ -757,7 +721,7 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
   }, [commentCount, post.id, post.comments_count, post.comments?.length])
 
   return (
-    <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-4">
+    <div className={`bg-white rounded-xl shadow-sm overflow-hidden mb-4 ${className}`}>
       {/* Add direct image test in development mode */}
 
       <div className="p-4">
@@ -789,7 +753,7 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem>Save post</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onSave?.(post.id)}>Save post</DropdownMenuItem>
               <DropdownMenuItem>Hide post</DropdownMenuItem>
               <DropdownMenuItem>Report</DropdownMenuItem>
               {isPostOwner() && (
@@ -871,66 +835,37 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
 
         {/* Enhanced Dedicated Reactions Section */}
         <div className="mt-3 mb-2">
-          {totalReactionCount > 0 ? (
-            <div
-              className="bg-gray-50 p-2 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
-              onClick={() => setModalOpen(true)}
-            >
-              <ReactionSummary reactions={postReactions} totalCount={totalReactionCount} postId={post.id} />
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 py-1">
-              <button
-                className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-50"
-                onClick={() => setShowReactions(true)}
-              >
-                <Smile className="h-4 w-4" />
-                <span>Add reaction</span>
-              </button>
-
-              {/* Reactions panel */}
-              <AnimatePresence>
-                {showReactions && (
-                  <motion.div
-                    ref={reactionsRef}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
-                    transition={{ duration: 0.2 }}
-                    className="absolute z-10 bg-white rounded-full shadow-lg p-1 flex"
-                    onMouseLeave={() => setShowReactions(false)}
-                  >
-                    {[
-                      { type: "like" as Reaction, emoji: "👍" },
-                      { type: "love" as Reaction, emoji: "❤️" },
-                      { type: "haha" as Reaction, emoji: "😂" },
-                      { type: "wow" as Reaction, emoji: "😮" },
-                      { type: "sad" as Reaction, emoji: "😢" },
-                      { type: "angry" as Reaction, emoji: "😡" },
-                    ].map((r) => (
-                      <motion.button
-                        key={r.type}
-                        whileHover={{ scale: 1.2 }}
-                        whileTap={{ scale: 0.9 }}
-                        className={cn(
-                          "p-1.5 mx-1 rounded-full hover:bg-gray-100 transition-colors",
-                          reaction === r.type && "bg-gray-100",
-                        )}
-                        onClick={() => {
-                          handleReaction(r.type as Reaction)
-                          setShowReactions(false)
-                        }}
-                      >
-                        <span className="text-lg" role="img" aria-label={r.label} title={r.label}>
-                          {r.emoji}
-                        </span>
-                      </motion.button>
-                    ))}
-                  </motion.div>
+          <div
+            className="bg-gray-50 p-2 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
+            onClick={() => {
+              console.log("🔍 Opening modal with reactions:", postReactions)
+              console.log("🔍 Total reaction count:", totalReactionCount)
+              setModalOpen(true)
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-1">
+                {/* Display emojis only for reactions that have counts > 0 */}
+                {postReactions
+                  .filter((reaction) => reaction.count > 0)
+                  .slice(0, 3) // Show max 3 different emoji types
+                  .map((reaction, index) => (
+                    <span key={reaction.label} className="text-sm">
+                      {reaction.emoji}
+                    </span>
+                  ))}
+                {/* Show +X more if there are more than 3 reaction types */}
+                {postReactions.filter((reaction) => reaction.count > 0).length > 3 && (
+                  <span className="text-xs text-gray-500 ml-1">
+                    +{postReactions.filter((reaction) => reaction.count > 0).length - 3} more
+                  </span>
                 )}
-              </AnimatePresence>
+              </div>
+              <div className="text-sm text-gray-600">
+                {totalReactionCount > 0 ? `${totalReactionCount} reactions` : "0 reactions"}
+              </div>
             </div>
-          )}
+          </div>
         </div>
 
         {/* Likes and comments count */}
@@ -1039,6 +974,21 @@ export default function Post({ post, viewMode = "cards", onPostDeleted, onPostUp
         onOpenChange={setTryOnModalOpen}
         designImageUrl={postImageUrl}
         designTitle={post.title || `${post.username}'s design`}
+      />
+
+      {/* Reaction Modal */}
+      <ReactionModal
+        open={modalOpen}
+        onOpenChange={(open) => {
+          console.log("🔍 Modal open state changing to:", open)
+          if (open) {
+            console.log("🔍 Modal opening with reactions:", postReactions)
+          }
+          setModalOpen(open)
+        }}
+        reactions={postReactions}
+        totalCount={totalReactionCount}
+        postId={post.id}
       />
     </div>
   )

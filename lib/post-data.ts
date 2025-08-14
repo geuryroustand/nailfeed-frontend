@@ -25,7 +25,7 @@ export type Post = {
   image?: string
   title?: string
   description: string
-  likes: number
+  likes: any[] // Updated type to array
   comments: PostComment[]
   timestamp: string
   tags: string[]
@@ -69,6 +69,8 @@ function transformStrapiPost(post: any): Post {
 
     // Extract tags
     const tags = post.tags ? post.tags.map((tag: any) => tag.name) : []
+
+    const likes = post.likes || []
 
     // Get the first media item URL or use a placeholder
     let imageUrl = "/intricate-nail-art.png"
@@ -133,7 +135,7 @@ function transformStrapiPost(post: any): Post {
       image: imageUrl,
       title: post.title || "", // Ensure title is included
       description: post.description || "",
-      likes: post.likesCount || 0,
+      likes: likes, // Pass the actual likes array instead of likesCount
       comments: [], // We'll fetch comments separately if needed
       timestamp,
       tags,

@@ -29,35 +29,24 @@ async function safeFetch(url: string, options: RequestInit = {}) {
   }
 }
 
-export async function toggleFollow(username: string, currentlyFollowing: boolean): Promise<FollowActionResult> {
+export async function toggleFollow(username: string, _currentlyFollowing?: boolean): Promise<FollowActionResult> {
   try {
     const apiUrl = getApiUrl()
 
-    // Get the token from cookies (client-side)
-    let token = ""
-
-    // In a client component, we need to get the token from document.cookie
-    if (typeof window !== "undefined") {
-      const cookies = document.cookie.split(";").reduce(
-        (acc, cookie) => {
-          const [key, value] = cookie.trim().split("=")
-          acc[key] = value
-          return acc
-        },
-        {} as Record<string, string>,
-      )
-      token = cookies.jwt || cookies.authToken
-    }
+    // Get the token from cookies (server-side)
+    const { cookies } = await import("next/headers")
+    const cookieStore = cookies()
+    const token = cookieStore.get("jwt")?.value || cookieStore.get("authToken")?.value
 
     if (!token) {
       return {
         success: false,
-        isFollowing: currentlyFollowing,
+        isFollowing: false,
         message: "Authentication required to follow users",
       }
     }
 
-    // First, we need to get the user ID for the username
+    // First, get the user ID for the username
     const userResponse = await safeFetch(`${apiUrl}/api/users?filters[username][$eq]=${encodeURIComponent(username)}`, {
       headers: {
         "Content-Type": "application/json",
@@ -75,7 +64,7 @@ export async function toggleFollow(username: string, currentlyFollowing: boolean
       throw new Error(`User ${username} not found`)
     }
 
-    // Check if the follow relationship already exists to prevent duplicates
+    // Always check current database state first to prevent race conditions
     const followsQuery = qs.stringify(
       {
         filters: {
@@ -109,27 +98,19 @@ export async function toggleFollow(username: string, currentlyFollowing: boolean
 
     const followCheckData = await followCheckResponse.json()
     const existingFollow = followCheckData.data?.length > 0 || followCheckData.length > 0
+    const followId = followCheckData.data?.[0]?.id || followCheckData[0]?.id
 
-    // If the current state doesn't match the database state, sync them
-    if (currentlyFollowing !== existingFollow) {
-      console.log(
-        `UI follow state (${currentlyFollowing}) doesn't match database state (${existingFollow}). Syncing...`,
-      )
-      currentlyFollowing = existingFollow
-    }
+    console.log(`Current database follow state for ${username}: ${existingFollow}`)
 
-    // Now handle follow/unfollow based on current status
-    if (currentlyFollowing) {
-      // Unfollow: Find the follow relationship and delete it
-      const followId = followCheckData.data?.[0]?.id || followCheckData[0]?.id
-
+    // Determine action based on current database state
+    if (existingFollow) {
+      // User is currently following - unfollow them
       if (!followId) {
-        console.log("Follow relationship not found, user might already be unfollowed")
+        console.log("Follow relationship exists but no ID found")
         return {
-          success: true,
-          isFollowing: false,
-          newFollowerCount: await getFollowerCount(apiUrl, token, userId),
-          message: "User already unfollowed",
+          success: false,
+          isFollowing: true,
+          message: "Unable to unfollow user",
         }
       }
 
@@ -141,19 +122,10 @@ export async function toggleFollow(username: string, currentlyFollowing: boolean
           Authorization: `Bearer ${token}`,
         },
       })
-    } else {
-      // Prevent duplicate follows
-      if (existingFollow) {
-        console.log("Follow relationship already exists, preventing duplicate")
-        return {
-          success: true,
-          isFollowing: true,
-          newFollowerCount: await getFollowerCount(apiUrl, token, userId),
-          message: "Already following this user",
-        }
-      }
 
-      // Follow: Create a new follow relationship
+      console.log(`Successfully unfollowed ${username}`)
+    } else {
+      // User is not currently following - follow them
       await safeFetch(`${apiUrl}/api/follows`, {
         method: "POST",
         headers: {
@@ -163,32 +135,36 @@ export async function toggleFollow(username: string, currentlyFollowing: boolean
         body: JSON.stringify({
           data: {
             following: userId,
-            // No need to specify follower, Strapi will use the authenticated user
+            // Strapi will automatically set the follower to the authenticated user
           },
         }),
       })
+
+      console.log(`Successfully followed ${username}`)
     }
 
     // Get updated follower count
     const newFollowerCount = await getFollowerCount(apiUrl, token, userId)
+    const newIsFollowing = !existingFollow // Toggle the state
 
-    // Return success response
+    // Return success response with the new state
     const result: FollowActionResult = {
       success: true,
-      isFollowing: !currentlyFollowing,
+      isFollowing: newIsFollowing,
       newFollowerCount,
+      message: newIsFollowing ? `Now following ${username}` : `Unfollowed ${username}`,
     }
 
-    // Revalidate the profile page to reflect the changes
+    // Revalidate the profile pages to reflect the changes
     revalidatePath("/profile")
-    revalidatePath(`/profile/${username}`) // Also revalidate the user's profile page if it exists
+    revalidatePath(`/profile/${username}`)
 
     return result
   } catch (error) {
     console.error("Error toggling follow status:", error)
     return {
       success: false,
-      isFollowing: currentlyFollowing,
+      isFollowing: false,
       message: "Failed to update follow status",
     }
   }
