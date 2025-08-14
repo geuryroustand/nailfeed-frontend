@@ -902,10 +902,8 @@ export default function Post({
             aria-label={`View ${commentCount} comments`}
           >
             <MessageCircle className="h-5 w-5 mr-2" />
-            <span className="text-sm font-medium hidden md:inline-block">
-              Comments ({commentCount > 0 ? commentCount : "0"})
-            </span>
-            <span className="text-sm font-medium md:hidden">Comments ({commentCount > 0 ? commentCount : "0"})</span>
+            <span className="text-sm font-medium hidden md:inline-block">Comments</span>
+            <span className="text-sm font-medium md:hidden">Comments</span>
           </button>
 
           <ShareMenu

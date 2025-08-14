@@ -24,13 +24,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL("/auth?error=no_token", request.url))
     }
 
-    // Use local Strapi URL in development, production URL otherwise
     const strapiUrl =
       process.env.NODE_ENV === "development"
         ? "http://127.0.0.1:1337"
         : process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
 
-    console.log("Using Strapi URL:", strapiUrl)
+    console.log("Using Strapi URL for Google auth:", strapiUrl)
 
     // Add more detailed logging to debug the environment detection
     console.log("Environment details:", {

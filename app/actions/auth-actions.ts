@@ -2,16 +2,16 @@
 
 import { cookies } from "next/headers"
 
-// Get the appropriate Strapi base URL
-function getStrapiUrl() {
-  if (process.env.NODE_ENV === "development") {
+// Get the appropriate Strapi base URL based on auth type
+function getStrapiUrl(authType: "google" | "regular" = "regular") {
+  if (process.env.NODE_ENV === "development" && authType === "google") {
     return "http://127.0.0.1:1337"
   }
 
   return process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
 }
 
-export async function getCurrentUser() {
+export async function getCurrentUser(authType: "google" | "regular" = "regular") {
   try {
     const cookieStore = await cookies()
 
@@ -24,7 +24,7 @@ export async function getCurrentUser() {
       return null
     }
 
-    const strapiUrl = getStrapiUrl()
+    const strapiUrl = getStrapiUrl(authType)
     console.log("getCurrentUser using Strapi URL:", strapiUrl)
 
     const response = await fetch(`${strapiUrl}/api/users/me?populate=*`, {
@@ -36,11 +36,29 @@ export async function getCurrentUser() {
 
     if (!response.ok) {
       console.error("Failed to fetch user data:", response.status, response.statusText)
+      const errorText = await response.text()
+      console.error("Error response body:", errorText)
       return null
     }
 
-    const userData = await response.json()
-    return userData
+    const contentType = response.headers.get("content-type")
+    if (!contentType || !contentType.includes("application/json")) {
+      console.error("Response is not JSON, content-type:", contentType)
+      const responseText = await response.text()
+      console.error("Non-JSON response body:", responseText)
+      return null
+    }
+
+    try {
+      const userData = await response.json()
+      return userData
+    } catch (jsonError) {
+      console.error("Failed to parse JSON response:", jsonError)
+      // Try to get the response text for debugging
+      const responseText = await response.text()
+      console.error("Invalid JSON response body:", responseText)
+      return null
+    }
   } catch (error) {
     console.error("Error fetching current user:", error)
     return null
