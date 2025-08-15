@@ -20,11 +20,6 @@ const LoadMorePosts = dynamic(() => import("@/components/load-more-posts"), {
   ssr: false,
 })
 
-const ApiDiagnostics = dynamic(() => import("@/components/api-diagnostics"), {
-  loading: () => null,
-  ssr: false,
-})
-
 // Import split components
 import PostFeedHeader from "./post-feed-header"
 import PostFeedError from "./post-feed-error"
@@ -301,9 +296,6 @@ export default function PostFeedOptimized({
 
   return (
     <div className="space-y-6">
-      {/* API Debugger - only in development */}
-      {process.env.NODE_ENV !== "production" && <ApiDiagnostics />}
-
       {/* API Error Display */}
       {apiError && (
         <PostFeedError

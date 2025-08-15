@@ -13,7 +13,6 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useSearch } from "@/context/search-context"
 import { useToast } from "@/hooks/use-toast"
-import ApiDiagnostics from "@/components/api-diagnostics"
 import { useRouter } from "next/navigation"
 import { ReactionProvider } from "@/context/reaction-context"
 
@@ -396,9 +395,6 @@ export default function PostFeed({
 
   return (
     <div className="space-y-6">
-      {/* API Debugger - only in development */}
-      {process.env.NODE_ENV !== "production" && <ApiDiagnostics />}
-
       {/* API Error Display */}
       {apiError && (
         <div
@@ -409,7 +405,13 @@ export default function PostFeed({
             <p className="font-medium">{isConnectionError ? "Connection Issue" : "Error loading posts"}</p>
           </div>
           <p className="text-sm mt-1">{apiError}</p>
-          <Button variant="outline" size="sm" className="mt-2" onClick={handleRetry} disabled={isLoading}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 bg-transparent"
+            onClick={handleRetry}
+            disabled={isLoading}
+          >
             {isLoading ? (
               <>
                 <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
@@ -432,7 +434,7 @@ export default function PostFeed({
           <div className="flex items-center space-x-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8">
+                <Button variant="outline" size="sm" className="h-8 bg-transparent">
                   <Filter className="h-4 w-4 mr-1" />
                   Filter
                 </Button>
@@ -516,7 +518,13 @@ export default function PostFeed({
           ) : (
             <div className="p-8 text-center">
               <p className="text-gray-500">No posts found. Create your first post or check back later!</p>
-              <Button variant="outline" size="sm" className="mt-4" onClick={handleRetry} disabled={isLoading}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-4 bg-transparent"
+                onClick={handleRetry}
+                disabled={isLoading}
+              >
                 {isLoading ? (
                   <>
                     <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
