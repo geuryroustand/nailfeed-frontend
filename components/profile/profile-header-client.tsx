@@ -36,6 +36,13 @@ export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClie
   useEffect(() => {
     const fetchAccurateCounts = async () => {
       try {
+        if (!userData.username) {
+          console.error("[v0] ProfileHeader: Username is undefined, cannot fetch counts")
+          setFollowerCount(Math.max(0, userData.followersCount || 0))
+          setFollowingCount(Math.max(0, userData.followingCount || 0))
+          return
+        }
+
         console.log("[v0] ProfileHeader: Fetching accurate counts for", userData.username)
 
         const [followersResult, followingResult] = await Promise.all([
@@ -63,6 +70,16 @@ export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClie
 
   const handleFollowToggle = async () => {
     if (!isOtherUser) return
+
+    if (!userData.username) {
+      console.error("[v0] ProfileHeader: Cannot follow/unfollow - username is undefined")
+      toast({
+        title: "Error",
+        description: "Unable to process follow request - user data is incomplete",
+        variant: "destructive",
+      })
+      return
+    }
 
     setIsLoading(true)
 
@@ -144,6 +161,15 @@ export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClie
     console.log("ProfileHeaderClient - userData:", userData)
     console.log("ProfileHeaderClient - coverImageUrl:", userData.coverImageUrl)
   }, [userData])
+
+  if (!userData.username) {
+    console.error("[v0] ProfileHeader: Cannot render - username is undefined")
+    return (
+      <div className="p-4 text-center">
+        <p className="text-red-500">Error: Unable to load profile data</p>
+      </div>
+    )
+  }
 
   return (
     <>

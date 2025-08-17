@@ -31,5 +31,5 @@ export default function ProfileStats({ user }: ProfileStatsProps) {
   if (!statsData.engagement.comments) statsData.engagement.comments = 0
   if (!statsData.engagement.saves) statsData.engagement.saves = 0
 
-  return <ProfileStatsClient stats={statsData} />
+  return <ProfileStatsClient stats={statsData} username={user.username} isOwnProfile={true} />
 }
