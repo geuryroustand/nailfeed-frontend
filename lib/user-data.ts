@@ -2,7 +2,6 @@
 import { UserService } from "@/lib/services/user-service"
 import { cookies } from "next/headers"
 import config from "@/lib/config"
-import { PostService } from "@/lib/services/post-service" // Direct import of PostService
 
 export type UserProfile = {
   username: string
@@ -62,6 +61,9 @@ export async function getUserProfile(username?: string): Promise<UserProfile | n
       // since getCurrentUser() doesn't include posts
       let userPosts = []
       try {
+        // Import the PostService to fetch posts
+        const { PostService } = await import("@/lib/services/post-service")
+
         // Fetch posts for the current user
         userPosts = await PostService.getPostsByUsername(currentUser.username, token)
 
@@ -117,6 +119,9 @@ export async function getUserProfile(username?: string): Promise<UserProfile | n
       console.log(`No posts found in user data for ${username}, fetching posts separately`)
 
       try {
+        // Import the PostService to fetch posts
+        const { PostService } = await import("@/lib/services/post-service")
+
         // Fetch posts for the user
         const posts = await PostService.getPostsByUsername(username, token)
 

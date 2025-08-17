@@ -71,8 +71,12 @@ export async function generateMetadata({ params }: PostPageProps, parent: Resolv
 // Generate static params for popular posts (ISR)
 export async function generateStaticParams() {
   try {
-    // Instead, return empty array to let Next.js handle dynamic generation
-    return []
+    // Fetch IDs of popular posts for static generation
+    const popularPostIds = await import("@/lib/popular-posts").then((module) => module.getPopularPostIds())
+
+    return popularPostIds.map((id) => ({
+      id: id.toString(),
+    }))
   } catch (error) {
     console.error("Error generating static params:", error)
     return []
