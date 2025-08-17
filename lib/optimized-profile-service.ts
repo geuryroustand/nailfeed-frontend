@@ -41,6 +41,11 @@ export async function fetchUserProfile(username: string) {
           profileImage: true,
           coverImage: true,
           posts: {
+            filters: {
+              publishedAt: {
+                $notNull: true,
+              },
+            },
             populate: {
               mediaItems: {
                 populate: {
@@ -82,7 +87,6 @@ export async function fetchUserProfile(username: string) {
             },
           },
         },
-        status: "published",
       },
       {
         encodeValuesOnly: true, // Don't encode the keys, only the values

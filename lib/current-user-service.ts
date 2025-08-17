@@ -28,6 +28,11 @@ export async function fetchCurrentUserProfile() {
           profileImage: true,
           coverImage: true,
           posts: {
+            filters: {
+              publishedAt: {
+                $notNull: true,
+              },
+            },
             populate: {
               mediaItems: {
                 populate: {
