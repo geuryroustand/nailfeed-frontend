@@ -1,11 +1,5 @@
 const CACHE_NAME = "nailfeed-v1"
-const urlsToCache = [
-  "/",
-  "/manifest.json",
-  "/favicon.ico",
-  "/apple-icon.png",
-  "/offline", // Add offline page to cache
-]
+const urlsToCache = ["/", "/manifest.json", "/favicon.ico"]
 
 // Install event - cache essential resources
 self.addEventListener("install", (event) => {
@@ -13,7 +7,14 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       console.log("Caching essential resources")
-      return cache.addAll(urlsToCache)
+      return Promise.allSettled(
+        urlsToCache.map((url) =>
+          cache.add(url).catch((error) => {
+            console.log(`Failed to cache ${url}:`, error)
+            return null
+          }),
+        ),
+      )
     }),
   )
   self.skipWaiting()
@@ -32,7 +33,22 @@ self.addEventListener("fetch", (event) => {
         response ||
         fetch(event.request).catch(() => {
           if (event.request.mode === "navigate") {
-            return caches.match("/offline") || new Response("Offline", { status: 200 })
+            return new Response(
+              `
+              <!DOCTYPE html>
+              <html>
+                <head><title>Offline - NailFeed</title></head>
+                <body style="font-family: system-ui; text-align: center; padding: 2rem;">
+                  <h1>You're offline</h1>
+                  <p>Please check your internet connection and try again.</p>
+                </body>
+              </html>
+            `,
+              {
+                status: 200,
+                headers: { "Content-Type": "text/html" },
+              },
+            )
           }
           return new Response("Network error", { status: 408 })
         })
