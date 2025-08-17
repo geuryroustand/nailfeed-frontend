@@ -1,62 +1,77 @@
-import type React from "react";
-import { Inter } from "next/font/google";
-import "./globals.css";
-import { ThemeProvider } from "@/components/theme-provider";
-import { Toaster } from "@/components/ui/toaster";
-import { AuthProvider } from "@/context/auth-context";
-import { MoodProvider } from "@/context/mood-context";
-import { CollectionsProvider } from "@/context/collections-context";
-import { ProfileProvider } from "@/context/profile-context";
-import ClientHeaderWrapper from "@/components/client-header-wrapper";
-import ApiStatusIndicator from "@/components/api-status-indicator";
-import { ReactionProvider } from "@/context/reaction-context";
-import config from "@/lib/config";
+import type React from "react"
+import type { Metadata } from "next"
+import { Inter } from "next/font/google"
+import "./globals.css"
+import { ThemeProvider } from "@/components/theme-provider"
+import { Toaster } from "@/components/ui/toaster"
+import { AuthProvider } from "@/context/auth-context"
+import { MoodProvider } from "@/context/mood-context"
+import { CollectionsProvider } from "@/context/collections-context"
+import { ProfileProvider } from "@/context/profile-context"
+import ClientHeaderWrapper from "@/components/client-header-wrapper"
+import ApiStatusIndicator from "@/components/api-status-indicator"
+import { ReactionProvider } from "@/context/reaction-context"
+import config from "@/lib/config"
 // Import our polyfill
-import "@/lib/polyfills";
-import QueryProvider from "@/components/query-provider";
-import PWAInstaller from "@/components/pwa-installer";
-import Script from "next/script";
+import "@/lib/polyfills"
+import QueryProvider from "@/components/query-provider"
+import PWAInstaller from "@/components/pwa-installer"
+import Script from "next/script"
 
 // Initialize configuration
-config.initialize();
+config.initialize()
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ["latin"] })
+
+export const metadata: Metadata = {
+  title: {
+    default: "NailFeed",
+    template: "%s | NailFeed",
+  },
+  description: "Share and discover amazing nail art designs with the community",
+  applicationName: "NailFeed",
+  generator: "v0.dev",
+  keywords: ["nail art", "nail designs", "beauty", "manicure", "nail polish", "nail inspiration"],
+  authors: [{ name: "NailFeed Team" }],
+  creator: "NailFeed",
+  publisher: "NailFeed",
+  formatDetection: {
+    telephone: false,
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "NailFeed",
+  },
+  themeColor: "#ec4899",
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+    minimumScale: 1,
+    userScalable: false,
+    viewportFit: "cover",
+  },
+  manifest: "/manifest.json",
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-icon.png",
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+  },
+}
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode
 }) {
   return (
     <html lang="en">
       <head>
-        <meta name="application-name" content="NailFeed" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="NailFeed" />
-        <meta
-          name="description"
-          content="Share and discover amazing nail art designs with the community"
-        />
-        <meta name="format-detection" content="telephone=no" />
-        <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="theme-color" content="#ec4899" />
-
-        <link rel="apple-touch-icon" href="/apple-icon.png" />
-        <link rel="manifest" href="/manifest.json" />
-        <link rel="shortcut icon" href="/favicon.ico" />
-
-        <meta
-          name="viewport"
-          content="minimum-scale=1, initial-scale=1, width=device-width, shrink-to-fit=no, user-scalable=no, viewport-fit=cover"
-        />
-
         {process.env.NODE_ENV === "production" && (
           <>
-            <Script
-              strategy="afterInteractive"
-              src="https://www.googletagmanager.com/gtag/js?id=G-Z3MYDXLS7Y"
-            />
+            <Script strategy="afterInteractive" src="https://www.googletagmanager.com/gtag/js?id=G-Z3MYDXLS7Y" />
             <Script id="google-analytics" strategy="afterInteractive">
               {`
         window.dataLayer = window.dataLayer || [];
@@ -69,12 +84,7 @@ export default function RootLayout({
         )}
       </head>
       <body className={inter.className}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="light"
-          enableSystem
-          disableTransitionOnChange
-        >
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <QueryProvider>
             <AuthProvider>
               <ProfileProvider>
@@ -94,9 +104,5 @@ export default function RootLayout({
         </ThemeProvider>
       </body>
     </html>
-  );
+  )
 }
-
-export const metadata = {
-  generator: "v0.dev",
-};
