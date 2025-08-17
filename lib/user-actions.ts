@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 import type { FollowActionResult, ProfileUpdateResult } from "./user-data"
 import qs from "qs"
+import { cookies } from "next/headers"
 
 // Helper function to get API URL
 function getApiUrl() {
@@ -34,7 +35,6 @@ export async function toggleFollow(username: string, _currentlyFollowing?: boole
     const apiUrl = getApiUrl()
 
     // Get the token from cookies (server-side)
-    const { cookies } = await import("next/headers")
     const cookieStore = cookies()
     const token = cookieStore.get("jwt")?.value || cookieStore.get("authToken")?.value
 
@@ -253,7 +253,6 @@ export async function checkFollowStatus(username: string): Promise<{
     console.log(`Checking follow status for ${username} using API URL: ${apiUrl}`)
 
     // Get the token from cookies (server-side)
-    const { cookies } = await import("next/headers")
     const cookieStore = cookies()
     const token = cookieStore.get("jwt")?.value || cookieStore.get("authToken")?.value
 

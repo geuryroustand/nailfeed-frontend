@@ -2,18 +2,13 @@
 
 import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import dynamic from "next/dynamic"
+import CollectionFormModal from "./collection-form-modal"
 import type { Collection } from "@/types/collection"
 import CollectionGridItem from "./collection-grid-item"
 import CollectionListItem from "./collection-list-item"
 import { useCollectionsContext } from "./collections-layout"
 import { useToast } from "@/hooks/use-toast"
 import { createCollection, updateCollection, deleteCollection } from "@/lib/actions/collections-server-actions"
-
-// Lazy load modals for better performance
-const CollectionFormModal = dynamic(() => import("./collection-form-modal"), {
-  ssr: false,
-})
 
 interface CollectionsGridClientProps {
   initialCollections: Collection[]
@@ -182,7 +177,6 @@ export default function CollectionsGridClient({ initialCollections }: Collection
         </div>
       )}
 
-      {/* Lazy-loaded modals */}
       {isCreateModalOpen && (
         <CollectionFormModal
           mode="create"

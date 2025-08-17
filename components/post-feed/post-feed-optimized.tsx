@@ -1,24 +1,14 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import dynamic from "next/dynamic"
+import CreatePostModal from "@/components/create-post-modal"
+import LoadMorePosts from "@/components/load-more-posts"
 import type { Post as PostType } from "@/lib/post-data"
 import { useAuth } from "@/context/auth-context"
 import { useSearch } from "@/context/search-context"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { fetchPostsAction, refreshPostsAction } from "@/lib/actions/post-server-actions"
-
-// Code split non-critical components
-const CreatePostModal = dynamic(() => import("@/components/create-post-modal"), {
-  loading: () => null,
-  ssr: false,
-})
-
-const LoadMorePosts = dynamic(() => import("@/components/load-more-posts"), {
-  loading: () => <div className="animate-pulse h-12 bg-gray-200 rounded" />,
-  ssr: false,
-})
 
 // Import split components
 import PostFeedHeader from "./post-feed-header"

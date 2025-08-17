@@ -10,10 +10,7 @@ import type { ExplorePostWithLiked } from "@/lib/explore-data"
 import { likePost, unlikePost, savePost, unsavePost, addComment, fetchMorePosts } from "@/lib/explore-actions"
 import LoadMoreIndicator from "./load-more-indicator"
 import Link from "next/link"
-import { lazy, Suspense } from "react"
-
-// Lazy load the modal for better performance
-const PostDetailModal = lazy(() => import("./post-detail-modal-enhanced"))
+import PostDetailModal from "./post-detail-modal-enhanced"
 
 interface ExploreGridClientEnhancedProps {
   initialPosts: ExplorePostWithLiked[]
@@ -282,21 +279,13 @@ export default function ExploreGridClientEnhanced({
       </div>
 
       {selectedPost && (
-        <Suspense
-          fallback={
-            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
-            </div>
-          }
-        >
-          <PostDetailModal
-            post={selectedPost}
-            onClose={() => setSelectedPost(null)}
-            onLike={() => handleLike(selectedPost)}
-            onSave={() => handleSave(selectedPost)}
-            onAddComment={(comment) => handleAddComment(selectedPost.id, comment)}
-          />
-        </Suspense>
+        <PostDetailModal
+          post={selectedPost}
+          onClose={() => setSelectedPost(null)}
+          onLike={() => handleLike(selectedPost)}
+          onSave={() => handleSave(selectedPost)}
+          onAddComment={(comment) => handleAddComment(selectedPost.id, comment)}
+        />
       )}
     </>
   )
