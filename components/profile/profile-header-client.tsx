@@ -11,6 +11,7 @@ import { toggleFollow } from "@/lib/user-actions"
 import { useToast } from "@/hooks/use-toast"
 import type { UserProfileResponse } from "@/lib/services/user-service"
 import CreatePostModal from "@/components/create-post-modal"
+import { getFollowers, getFollowing } from "@/lib/services/user-network-service"
 
 interface ProfileHeaderClientProps {
   userData: UserProfileResponse & {
@@ -25,73 +26,82 @@ interface ProfileHeaderClientProps {
 
 export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClientProps) {
   const [isFollowing, setIsFollowing] = useState(userData.isFollowing || false)
-  const [followerCount, setFollowerCount] = useState(userData.followersCount || 0)
-  const [followingCount, setFollowingCount] = useState(userData.followingCount || 0)
+  const [followerCount, setFollowerCount] = useState(0)
+  const [followingCount, setFollowingCount] = useState(0)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showCreatePostModal, setShowCreatePostModal] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
 
-  // Update state if props change, ensuring we always have values
   useEffect(() => {
+    const fetchAccurateCounts = async () => {
+      try {
+        console.log("[v0] ProfileHeader: Fetching accurate counts for", userData.username)
+
+        const [followersResult, followingResult] = await Promise.all([
+          getFollowers(userData.username, 1, 1), // Just get first page to get total
+          getFollowing(userData.username, 1, 1), // Just get first page to get total
+        ])
+
+        console.log("[v0] ProfileHeader: Followers result:", followersResult.total)
+        console.log("[v0] ProfileHeader: Following result:", followingResult.total)
+
+        setFollowerCount(followersResult.total)
+        setFollowingCount(followingResult.total)
+      } catch (error) {
+        console.error("[v0] ProfileHeader: Error fetching counts:", error)
+        // Fallback to original counts if fetch fails
+        setFollowerCount(Math.max(0, userData.followersCount || 0))
+        setFollowingCount(Math.max(0, userData.followingCount || 0))
+      }
+    }
+
+    fetchAccurateCounts()
     setIsFollowing(userData.isFollowing || false)
-    // Only update if we have valid values
-    if (userData.followersCount !== undefined) {
-      setFollowerCount(userData.followersCount)
-    }
-    if (userData.followingCount !== undefined) {
-      setFollowingCount(userData.followingCount)
-    }
-  }, [userData.isFollowing, userData.followersCount, userData.followingCount])
+    console.log("[v0] ProfileHeader: Initial follow state:", userData.isFollowing)
+  }, [userData.username, userData.isFollowing, userData.followersCount, userData.followingCount])
 
   const handleFollowToggle = async () => {
-    if (!isOtherUser) return // Don't allow following yourself
+    if (!isOtherUser) return
 
     setIsLoading(true)
 
-    // Store current state for potential revert
     const previousFollowState = isFollowing
     const previousFollowerCount = followerCount
 
-    // Optimistic update
-    const newFollowState = !isFollowing
-    setIsFollowing(newFollowState)
-    setFollowerCount((prev) => (newFollowState ? prev + 1 : Math.max(0, prev - 1)))
-
     try {
-      // Call server action - it will determine the correct action based on database state
+      console.log(`[v0] ProfileHeader: Attempting to ${isFollowing ? "unfollow" : "follow"} ${userData.username}`)
       const result = await toggleFollow(userData.username)
 
       if (!result.success) {
-        // Revert optimistic update if failed
-        setIsFollowing(previousFollowState)
-        setFollowerCount(previousFollowerCount)
-
         toast({
           title: "Error",
           description: result.message || "Failed to update follow status",
           variant: "destructive",
         })
       } else {
-        // Update with actual state from server (in case of race conditions)
+        console.log(`[v0] ProfileHeader: Server returned isFollowing: ${result.isFollowing}`)
         setIsFollowing(result.isFollowing)
+
         if (result.newFollowerCount !== undefined) {
           setFollowerCount(result.newFollowerCount)
+        } else {
+          setFollowerCount((prev) => (result.isFollowing ? prev + 1 : Math.max(0, prev - 1)))
         }
 
-        // Show success message
         toast({
           title: result.isFollowing ? "Following" : "Unfollowed",
           description: result.isFollowing
             ? `You are now following ${userData.displayName || userData.username}`
             : `You unfollowed ${userData.displayName || userData.username}`,
         })
+
+        setTimeout(() => {
+          console.log(`[v0] ProfileHeader: Final follow state: ${result.isFollowing}`)
+        }, 100)
       }
     } catch (error) {
-      // Revert optimistic update if error
-      setIsFollowing(previousFollowState)
-      setFollowerCount(previousFollowerCount)
-
+      console.error("[v0] ProfileHeader: Error in handleFollowToggle:", error)
       toast({
         title: "Error",
         description: "An unexpected error occurred",
@@ -103,25 +113,19 @@ export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClie
   }
 
   const handlePostCreated = (newPost: any) => {
-    // Show success toast
     toast({
       title: "Post created!",
       description: "Your post has been published successfully.",
     })
 
-    // Refresh the page to show the new post
-    // A more sophisticated approach would update the state
     setTimeout(() => {
       window.location.reload()
     }, 1000)
   }
 
-  // Helper function to check if a field has real user content (not placeholder)
   const hasRealContent = (field?: string): boolean => {
-    // Return false if field doesn't exist or is empty
     if (!field || field.trim() === "") return false
 
-    // List of specific placeholder texts to filter out
     const placeholderTexts = [
       "Updated bio information",
       "New Location",
@@ -133,11 +137,9 @@ export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClie
       "add your",
     ]
 
-    // Check if the field contains any of the placeholder texts
     return !placeholderTexts.some((text) => field.toLowerCase().includes(text.toLowerCase()))
   }
 
-  // Debug userData when it changes
   useEffect(() => {
     console.log("ProfileHeaderClient - userData:", userData)
     console.log("ProfileHeaderClient - coverImageUrl:", userData.coverImageUrl)
@@ -146,7 +148,6 @@ export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClie
   return (
     <>
       <div className="relative">
-        {/* Cover Image */}
         <div className="h-40 md:h-60 bg-gradient-to-r from-pink-300 via-purple-300 to-indigo-300 relative overflow-hidden">
           {console.log("Cover Image URL:", userData.coverImageUrl)}
           {userData.coverImageUrl ? (
@@ -164,7 +165,7 @@ export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClie
                 backgroundImage: `url('${userData.coverImageUrl}')`,
                 backgroundSize: "cover",
                 backgroundPosition: "center",
-                maxWidth: "100%", // Ensure image doesn't exceed container width
+                maxWidth: "100%",
                 width: "100%",
                 height: "100%",
               }}
@@ -183,12 +184,11 @@ export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClie
               style={{
                 backgroundImage: "url('/nail-pattern-bg.png')",
                 backgroundSize: "cover",
-                maxWidth: "100%", // Ensure image doesn't exceed container width
+                maxWidth: "100%",
               }}
             />
           )}
 
-          {/* Action buttons */}
           <div className="absolute top-4 right-4 flex space-x-2">
             {!isOtherUser && (
               <>
@@ -224,7 +224,6 @@ export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClie
           </div>
         </div>
 
-        {/* Avatar - positioned to overlap the cover image */}
         <div className="absolute left-1/2 transform -translate-x-1/2 -bottom-16 md:-bottom-20">
           <motion.div
             initial={{ scale: 0.9, opacity: 0, y: 20 }}
@@ -234,11 +233,7 @@ export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClie
           >
             <div className="rounded-full p-1 bg-white shadow-lg">
               <Avatar className="h-32 w-32 md:h-40 md:w-40 border-4 border-white">
-                <AvatarImage
-                  src={userData.profileImageUrl || ""}
-                  alt={userData.username}
-                  className="object-cover" // Ensure proper image scaling
-                />
+                <AvatarImage src={userData.profileImageUrl || ""} alt={userData.username} className="object-cover" />
                 <AvatarFallback>{userData.username.substring(0, 2).toUpperCase()}</AvatarFallback>
               </Avatar>
             </div>
@@ -253,43 +248,30 @@ export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClie
         </div>
       </div>
 
-      {/* Spacer for avatar overflow */}
       <div className="h-16 md:h-20"></div>
 
-      {/* User Info */}
       <div className="text-center px-4 pb-6">
         <h1 className="text-2xl font-bold">{userData.displayName || userData.username}</h1>
         <p className="text-gray-500 text-sm">@{userData.username}</p>
 
-        {/* Follower and Following Counts - Always visible to all users */}
         <div className="flex justify-center gap-6 mt-3">
           <div className="text-center">
-            <p className="font-semibold">
-              {followerCount !== undefined
-                ? followerCount.toLocaleString()
-                : (userData.followersCount || 0).toLocaleString()}
-            </p>
+            <p className="font-semibold">{followerCount.toLocaleString()}</p>
             <p className="text-xs text-gray-500">Followers</p>
           </div>
           <div className="text-center">
-            <p className="font-semibold">
-              {followingCount !== undefined
-                ? followingCount.toLocaleString()
-                : (userData.followingCount || 0).toLocaleString()}
-            </p>
+            <p className="font-semibold">{followingCount.toLocaleString()}</p>
             <p className="text-xs text-gray-500">Following</p>
           </div>
           <div className="text-center">
-            <p className="font-semibold">{userData.postsCount?.toLocaleString() || "0"}</p>
+            <p className="font-semibold">{Math.max(0, userData.postsCount || 0).toLocaleString()}</p>
             <p className="text-xs text-gray-500">Posts</p>
           </div>
         </div>
 
         <div className="mt-4 max-w-md mx-auto">
-          {/* Display bio if it has real content (not placeholder) */}
           {hasRealContent(userData.bio) && <p className="text-sm whitespace-pre-wrap">{userData.bio}</p>}
 
-          {/* Only display website if it has content */}
           {hasRealContent(userData.website) && (
             <a
               href={userData.website.startsWith("http") ? userData.website : `https://${userData.website}`}
@@ -301,7 +283,6 @@ export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClie
             </a>
           )}
 
-          {/* Only display location if it has real content (not placeholder) */}
           {hasRealContent(userData.location) && (
             <p className="text-sm text-gray-500 mt-1">
               <span>📍 {userData.location}</span>
@@ -317,7 +298,7 @@ export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClie
               onClick={handleFollowToggle}
               disabled={isLoading}
             >
-              {isLoading ? "Processing..." : isFollowing ? "Following" : "Follow"}
+              {isLoading ? "Processing..." : isFollowing ? "Unfollow" : "Follow"}
             </Button>
             <Button variant="outline" className="rounded-full px-6 bg-transparent">
               Message

@@ -82,6 +82,7 @@ export async function fetchUserProfile(username: string) {
             },
           },
         },
+        status: "published",
       },
       {
         encodeValuesOnly: true, // Don't encode the keys, only the values
@@ -154,6 +155,68 @@ export async function fetchUserProfile(username: string) {
     // Process posts data with media items using the new processor
     const posts = processPostsForGallery(userData.posts || [])
 
+    let isFollowing = false
+    if (isAuthenticated && cookieToken) {
+      try {
+        const currentUserResponse = await fetch(`${apiUrl}/api/users/me`, {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${cookieToken}`,
+          },
+          cache: "no-store",
+        })
+
+        if (currentUserResponse.ok) {
+          const currentUserData = await currentUserResponse.json()
+          const currentUserId = currentUserData.id
+
+          console.log(`[v0] Checking if user ${currentUserId} is following ${userData.username} (ID: ${userData.id})`)
+
+          // Check if current user is following this profile user
+          const followsQuery = qs.stringify(
+            {
+              filters: {
+                $and: [
+                  {
+                    follower: {
+                      id: {
+                        $eq: currentUserId,
+                      },
+                    },
+                  },
+                  {
+                    following: {
+                      id: {
+                        $eq: userData.id,
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+            { encodeValuesOnly: true },
+          )
+
+          const followCheckResponse = await fetch(`${apiUrl}/api/follows?${followsQuery}`, {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${cookieToken}`,
+            },
+            cache: "no-store",
+          })
+
+          if (followCheckResponse.ok) {
+            const followCheckData = await followCheckResponse.json()
+            isFollowing = !!(followCheckData.data?.length > 0 || followCheckData.length > 0)
+            console.log(`Follow status for ${username}: ${isFollowing}`)
+          }
+        }
+      } catch (error) {
+        console.error("Error checking follow status:", error)
+        // Continue with isFollowing = false
+      }
+    }
+
     // Transform the data to match the expected format
     const transformedUser: UserProfileResponse = {
       ...processedUser,
@@ -165,6 +228,7 @@ export async function fetchUserProfile(username: string) {
       followers: followers,
       following: following,
       posts: posts,
+      isFollowing: isFollowing,
     }
 
     console.log(`Successfully fetched optimized profile data for ${username}`)

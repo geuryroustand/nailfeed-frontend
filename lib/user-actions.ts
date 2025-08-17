@@ -46,6 +46,25 @@ export async function toggleFollow(username: string, _currentlyFollowing?: boole
       }
     }
 
+    const currentUserResponse = await safeFetch(`${apiUrl}/api/users/me`, {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    })
+
+    const currentUserData = await currentUserResponse.json()
+    const currentUserId = currentUserData.id
+    const currentUserDocumentId = currentUserData.documentId
+
+    if (!currentUserId || !currentUserDocumentId) {
+      return {
+        success: false,
+        isFollowing: false,
+        message: "Unable to get current user information",
+      }
+    }
+
     // First, get the user ID for the username
     const userResponse = await safeFetch(`${apiUrl}/api/users?filters[username][$eq]=${encodeURIComponent(username)}`, {
       headers: {
@@ -59,12 +78,12 @@ export async function toggleFollow(username: string, _currentlyFollowing?: boole
 
     // Handle different response formats
     const userId = userData.data?.[0]?.id || userData[0]?.id
+    const userDocumentId = userData.data?.[0]?.documentId || userData[0]?.documentId
 
-    if (!userId) {
+    if (!userId || !userDocumentId) {
       throw new Error(`User ${username} not found`)
     }
 
-    // Always check current database state first to prevent race conditions
     const followsQuery = qs.stringify(
       {
         filters: {
@@ -72,7 +91,7 @@ export async function toggleFollow(username: string, _currentlyFollowing?: boole
             {
               follower: {
                 id: {
-                  $eq: "me",
+                  $eq: currentUserId,
                 },
               },
             },
@@ -99,14 +118,17 @@ export async function toggleFollow(username: string, _currentlyFollowing?: boole
     const followCheckData = await followCheckResponse.json()
     const existingFollow = followCheckData.data?.length > 0 || followCheckData.length > 0
     const followId = followCheckData.data?.[0]?.id || followCheckData[0]?.id
+    const followDocumentId = followCheckData.data?.[0]?.documentId || followCheckData[0]?.documentId
 
-    console.log(`Current database follow state for ${username}: ${existingFollow}`)
+    console.log(`[v0] Current database follow state for ${username}: ${existingFollow}`)
+    console.log(`[v0] Follow relationship ID: ${followId}`)
+    console.log(`[v0] Follow relationship documentId: ${followDocumentId}`)
 
     // Determine action based on current database state
     if (existingFollow) {
       // User is currently following - unfollow them
-      if (!followId) {
-        console.log("Follow relationship exists but no ID found")
+      if (!followDocumentId) {
+        console.log("[v0] Follow relationship exists but no documentId found")
         return {
           success: false,
           isFollowing: true,
@@ -114,8 +136,8 @@ export async function toggleFollow(username: string, _currentlyFollowing?: boole
         }
       }
 
-      // Delete the follow relationship
-      await safeFetch(`${apiUrl}/api/follows/${followId}`, {
+      console.log(`[v0] Sending DELETE request to unfollow ${username} with documentId ${followDocumentId}`)
+      await safeFetch(`${apiUrl}/api/follows/${followDocumentId}`, {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
@@ -123,9 +145,10 @@ export async function toggleFollow(username: string, _currentlyFollowing?: boole
         },
       })
 
-      console.log(`Successfully unfollowed ${username}`)
+      console.log(`[v0] Successfully unfollowed ${username}`)
     } else {
       // User is not currently following - follow them
+      console.log(`[v0] Sending POST request to follow ${username}`)
       await safeFetch(`${apiUrl}/api/follows`, {
         method: "POST",
         headers: {
@@ -134,18 +157,26 @@ export async function toggleFollow(username: string, _currentlyFollowing?: boole
         },
         body: JSON.stringify({
           data: {
-            following: userId,
-            // Strapi will automatically set the follower to the authenticated user
+            follower: {
+              connect: [currentUserDocumentId],
+            },
+            following: {
+              connect: [userDocumentId],
+            },
           },
         }),
       })
 
-      console.log(`Successfully followed ${username}`)
+      console.log(`[v0] Successfully followed ${username}`)
     }
+
+    await new Promise((resolve) => setTimeout(resolve, 100))
 
     // Get updated follower count
     const newFollowerCount = await getFollowerCount(apiUrl, token, userId)
     const newIsFollowing = !existingFollow // Toggle the state
+
+    console.log(`[v0] Final result - isFollowing: ${newIsFollowing}, followerCount: ${newFollowerCount}`)
 
     // Return success response with the new state
     const result: FollowActionResult = {

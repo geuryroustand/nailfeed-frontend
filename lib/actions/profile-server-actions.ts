@@ -55,6 +55,7 @@ export async function fetchProfileData(username: string) {
             populate: ["following"],
           },
         },
+        status: "published",
       },
       { encodeValuesOnly: true },
     )
