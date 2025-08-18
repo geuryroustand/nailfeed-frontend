@@ -12,7 +12,7 @@ export default function AuthSocial() {
   const baseURL =
     process.env.NODE_ENV === "development"
       ? "http://localhost:1337"
-      : process.env.NEXT_PUBLIC_API_URL;
+      : "https://api.nailfeed.com";
 
   const handleLinkClick = (provider: string) => {
     setIsLoading(provider);
