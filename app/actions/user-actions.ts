@@ -5,7 +5,6 @@ import { revalidatePath, revalidateTag } from "next/cache"
 import type { UserProfileResponse, UserUpdateInput } from "@/lib/services/user-service"
 import { UserService } from "@/lib/services/user-service"
 import { redirect } from "next/navigation"
-import { validateImage, IMAGE_VALIDATION_PRESETS } from "@/lib/image-validation"
 
 export type UserActionResult<T = any> = {
   success: boolean
@@ -219,22 +218,6 @@ export async function uploadProfileImage(formData: FormData): Promise<UserAction
       }
     }
 
-    // Validate the image on the server side
-    try {
-      const validationResult = await validateImage(file, IMAGE_VALIDATION_PRESETS.profileImage)
-      if (!validationResult.valid) {
-        return {
-          success: false,
-          error: validationResult.message || "Invalid image file",
-        }
-      }
-    } catch (validationError) {
-      return {
-        success: false,
-        error: "Error validating image. Please try a different image.",
-      }
-    }
-
     try {
       // Upload the profile image using the UserService with fresh token
       const success = await UserService.uploadProfileImage(token, userId, file)
@@ -323,22 +306,6 @@ export async function uploadCoverImage(formData: FormData): Promise<UserActionRe
       return {
         success: false,
         error: "File size exceeds 3MB limit. Please choose a smaller image.",
-      }
-    }
-
-    // Validate the image on the server side
-    try {
-      const validationResult = await validateImage(file, IMAGE_VALIDATION_PRESETS.coverImage)
-      if (!validationResult.valid) {
-        return {
-          success: false,
-          error: validationResult.message || "Invalid image file",
-        }
-      }
-    } catch (validationError) {
-      return {
-        success: false,
-        error: "Error validating image. Please try a different image.",
       }
     }
 
