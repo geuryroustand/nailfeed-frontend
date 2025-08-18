@@ -1,6 +1,6 @@
 "use client"
 
-import { Home, Search, PlusSquare, User, Menu } from "lucide-react"
+import { Home, PlusSquare, User, Menu, Lightbulb } from "lucide-react"
 import { motion } from "framer-motion"
 import { useState, useEffect } from "react"
 import Link from "next/link"
@@ -24,7 +24,7 @@ export default function BottomNav({ activeTab: initialActiveTab = "home" }: Bott
     { id: "menu", icon: Menu, label: "Menu", action: () => setIsMobileMenuOpen(true) },
     { id: "home", icon: Home, label: "Home", href: "/" },
     { id: "create", icon: PlusSquare, label: "Create", href: isAuthenticated ? "/" : "/auth" },
-    { id: "search", icon: Search, label: "Explore", href: "/explore" },
+    { id: "suggestions", icon: Lightbulb, label: "Ideas", href: "/suggestions" },
     // Conditionally change the profile tab to point to auth if not logged in
     {
       id: "profile",

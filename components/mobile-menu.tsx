@@ -2,7 +2,19 @@
 
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { X, Home, Search, Compass, Heart, MessageCircle, PlusSquare, User, Bookmark, Palette } from "lucide-react"
+import {
+  X,
+  Home,
+  Search,
+  Compass,
+  Heart,
+  MessageCircle,
+  PlusSquare,
+  User,
+  Bookmark,
+  Palette,
+  Lightbulb,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -38,6 +50,7 @@ export default function MobileMenu({ isOpen, onClose, activeItem = "home" }: Mob
     { id: "home", icon: Home, label: "Home", href: "/" },
     { id: "search", icon: Search, label: "Search", href: "/" },
     { id: "explore", icon: Compass, label: "Explore", href: "/explore" },
+    { id: "suggestions", icon: Lightbulb, label: "Community Ideas", href: "/suggestions" },
     { id: "messages", icon: MessageCircle, label: "Messages", href: "/" },
     { id: "notifications", icon: Heart, label: "Notifications", href: "/" },
     { id: "create", icon: PlusSquare, label: "Create", href: "/" },
@@ -113,7 +126,7 @@ export default function MobileMenu({ isOpen, onClose, activeItem = "home" }: Mob
               ) : (
                 <div className="space-y-2">
                   <Link href="/auth" onClick={onClose}>
-                    <Button variant="outline" className="w-full">
+                    <Button variant="outline" className="w-full bg-transparent">
                       Log in
                     </Button>
                   </Link>

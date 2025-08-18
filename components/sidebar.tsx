@@ -3,7 +3,19 @@
 import { useState } from "react"
 import { useAuth } from "@/context/auth-context"
 import { motion } from "framer-motion"
-import { Home, Search, Compass, Heart, MessageCircle, PlusSquare, User, Menu, Bookmark, Palette } from "lucide-react"
+import {
+  Home,
+  Search,
+  Compass,
+  Heart,
+  MessageCircle,
+  PlusSquare,
+  User,
+  Menu,
+  Bookmark,
+  Palette,
+  Lightbulb,
+} from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -24,6 +36,7 @@ export default function Sidebar({ activeItem = "home" }: SidebarProps) {
     { id: "home", icon: Home, label: "Home", href: "/" },
     { id: "search", icon: Search, label: "Search", href: "/" },
     { id: "explore", icon: Compass, label: "Explore", href: "/explore" },
+    { id: "suggestions", icon: Lightbulb, label: "Community Ideas", href: "/suggestions" },
     { id: "messages", icon: MessageCircle, label: "Messages", href: "/" },
     { id: "notifications", icon: Heart, label: "Notifications", href: "/" },
     { id: "create", icon: PlusSquare, label: "Create", href: "/" },
@@ -58,7 +71,6 @@ export default function Sidebar({ activeItem = "home" }: SidebarProps) {
           const Icon = item.icon
           const isActive = activeItem === item.id
 
-          // For authenticated routes, we'll handle the click manually
           const requiresAuth = ["/profile", "/collections", "/mood", "/messages", "/notifications"].some((path) =>
             item.href.startsWith(path),
           )
@@ -141,7 +153,7 @@ export default function Sidebar({ activeItem = "home" }: SidebarProps) {
           <div className={cn("px-4 py-3", collapsed ? "text-center" : "")}>
             <div className="space-y-2">
               <Link href="/auth">
-                <Button variant="outline" className="w-full">
+                <Button variant="outline" className="w-full bg-transparent">
                   Log in
                 </Button>
               </Link>
