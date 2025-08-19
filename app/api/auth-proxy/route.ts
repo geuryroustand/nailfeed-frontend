@@ -39,15 +39,6 @@ export async function POST(request: NextRequest) {
 
     const url = joinUrl(API_BASE_URL, endpoint)
 
-    if (endpoint.includes("/comments/")) {
-      console.log("[v0] Auth proxy - Comment request:", {
-        endpoint,
-        method,
-        data,
-        url,
-      })
-    }
-
     // Start with safe defaults. Whitelist a small set of headers from the client.
     const headers: HeadersInit = {
       "Content-Type": "application/json",
@@ -67,23 +58,10 @@ export async function POST(request: NextRequest) {
 
     if (jwt) {
       headers["Authorization"] = `Bearer ${jwt}`
-      if (endpoint.includes("/comments/")) {
-        console.log("[v0] Auth proxy - Using JWT from cookie")
-      }
     } else if (authorizationOverride && typeof authorizationOverride === "string") {
       headers["Authorization"] = authorizationOverride
-      if (endpoint.includes("/comments/")) {
-        console.log("[v0] Auth proxy - Using authorization override")
-      }
     } else if (SERVER_API_TOKEN) {
       headers["Authorization"] = `Bearer ${SERVER_API_TOKEN}`
-      if (endpoint.includes("/comments/")) {
-        console.log("[v0] Auth proxy - Using server API token")
-      }
-    } else {
-      if (endpoint.includes("/comments/")) {
-        console.log("[v0] Auth proxy - No authorization available")
-      }
     }
 
     const fetchOptions: RequestInit = {
@@ -98,30 +76,16 @@ export async function POST(request: NextRequest) {
 
     const resp = await fetch(url, fetchOptions)
 
-    if (endpoint.includes("/comments/")) {
-      console.log("[v0] Auth proxy - Response status:", resp.status)
-    }
-
     // Proxy back response as-is (JSON or text)
     const contentType = resp.headers.get("content-type") || ""
     const status = resp.status
 
     if (contentType.includes("application/json")) {
       const json = await resp.json()
-
-      if (endpoint.includes("/comments/") && !resp.ok) {
-        console.error("[v0] Auth proxy - Comment error response:", json)
-      }
-
       return NextResponse.json(json, { status })
     }
 
     const text = await resp.text()
-
-    if (endpoint.includes("/comments/") && !resp.ok) {
-      console.error("[v0] Auth proxy - Comment error text:", text)
-    }
-
     return new NextResponse(text, {
       status,
       headers: { "content-type": contentType || "text/plain" },
