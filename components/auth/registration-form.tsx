@@ -38,11 +38,12 @@ export default function RegistrationForm() {
 
   useEffect(() => {
     if (state.status === "success") {
-      // Refresh auth context before redirecting to ensure UI updates
-      checkAuthStatus().then(() => {
+      setTimeout(async () => {
+        console.log("[v0] Registration successful, refreshing auth state...")
+        await checkAuthStatus()
         router.replace("/")
         router.refresh()
-      })
+      }, 500)
     }
   }, [state.status, router, checkAuthStatus])
 

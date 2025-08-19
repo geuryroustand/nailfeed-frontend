@@ -33,10 +33,12 @@ export default function LoginForm() {
 
   useEffect(() => {
     if (state.status === "success") {
-      checkAuthStatus().then(() => {
+      setTimeout(async () => {
+        console.log("[v0] Login successful, refreshing auth state...")
+        await checkAuthStatus()
         router.replace("/")
         router.refresh()
-      })
+      }, 500)
     }
   }, [state.status, router, checkAuthStatus])
 
