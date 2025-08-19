@@ -20,12 +20,14 @@ export async function getCurrentUser(authType: "google" | "regular" = "regular")
       cookieStore.get("authToken")?.value || cookieStore.get("jwt")?.value || cookieStore.get("auth_token")?.value
 
     if (!authToken) {
-      console.log("No auth token found in cookies")
+      console.log("[v0] No auth token found in cookies")
       return null
     }
 
+    console.log("[v0] Found auth token, making request to Strapi...")
+
     const strapiUrl = getStrapiUrl(authType)
-    console.log("getCurrentUser using Strapi URL:", strapiUrl)
+    console.log("[v0] getCurrentUser using Strapi URL:", strapiUrl)
 
     const response = await fetch(`${strapiUrl}/api/users/me?populate=*`, {
       headers: {
@@ -35,32 +37,33 @@ export async function getCurrentUser(authType: "google" | "regular" = "regular")
     })
 
     if (!response.ok) {
-      console.error("Failed to fetch user data:", response.status, response.statusText)
+      console.error("[v0] Failed to fetch user data:", response.status, response.statusText)
       const errorText = await response.text()
-      console.error("Error response body:", errorText)
+      console.error("[v0] Error response body:", errorText)
       return null
     }
 
     const contentType = response.headers.get("content-type")
     if (!contentType || !contentType.includes("application/json")) {
-      console.error("Response is not JSON, content-type:", contentType)
+      console.error("[v0] Response is not JSON, content-type:", contentType)
       const responseText = await response.text()
-      console.error("Non-JSON response body:", responseText)
+      console.error("[v0] Non-JSON response body:", responseText)
       return null
     }
 
     try {
       const userData = await response.json()
+      console.log("[v0] Successfully fetched user data:", userData?.username || "unknown user")
       return userData
     } catch (jsonError) {
-      console.error("Failed to parse JSON response:", jsonError)
+      console.error("[v0] Failed to parse JSON response:", jsonError)
       // Try to get the response text for debugging
       const responseText = await response.text()
-      console.error("Invalid JSON response body:", responseText)
+      console.error("[v0] Invalid JSON response body:", responseText)
       return null
     }
   } catch (error) {
-    console.error("Error fetching current user:", error)
+    console.error("[v0] Error fetching current user:", error)
     return null
   }
 }
