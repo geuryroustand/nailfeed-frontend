@@ -1,9 +1,14 @@
 "use client"
 
 import type React from "react"
-
 import { createContext, useContext, useState, useCallback } from "react"
-import { ReactionService, type ReactionType } from "@/lib/services/reaction-service"
+import { useAuth } from "@/context/auth-context"
+import {
+  getUserReaction as getUserReactionAction,
+  addReaction as addReactionAction,
+  getReactionCounts as getReactionCountsAction,
+  type ReactionType,
+} from "@/app/actions/reaction-actions"
 
 interface ReactionContextType {
   getUserReaction: (postId: number | string) => Promise<{ id: string; type: ReactionType } | null>
@@ -16,82 +21,54 @@ const ReactionContext = createContext<ReactionContextType | undefined>(undefined
 
 export function ReactionProvider({ children }: { children: React.ReactNode }) {
   const [cache, setCache] = useState<Record<string, any>>({})
+  const { user, isAuthenticated } = useAuth()
 
-  const getUserReaction = useCallback(async (postId: number | string) => {
-    try {
-      // Get the current user ID from auth context or localStorage
-      let userId = null
-      if (typeof window !== "undefined") {
-        const userStr = localStorage.getItem("user")
-        if (userStr) {
-          const user = JSON.parse(userStr)
-          userId = user.id
-        } else {
-          // Try to get from cookie
-          const cookies = document.cookie.split(";")
-          const userIdCookie = cookies.find((cookie) => cookie.trim().startsWith("userId="))
-          if (userIdCookie) {
-            userId = userIdCookie.split("=")[1].trim()
-          }
+  const getUserReaction = useCallback(
+    async (postId: number | string) => {
+      try {
+        if (!isAuthenticated || !user?.id) {
+          return null
         }
-      }
 
-      if (!userId) {
+        const result = await getUserReactionAction(postId)
+        return result
+      } catch (error) {
+        console.error("Error getting user reaction:", error)
         return null
       }
+    },
+    [isAuthenticated, user],
+  )
 
-      const result = await ReactionService.getUserReaction(postId, userId)
-      return result
-    } catch (error) {
-      console.error("Error getting user reaction:", error)
-      return null
-    }
-  }, [])
-
-  const addReaction = useCallback(async (postId: number | string, type: ReactionType, documentId?: string) => {
-    try {
-      // Get the current user ID and documentId from auth context or localStorage
-      let userId = null
-      let userDocumentId = null
-
-      if (typeof window !== "undefined") {
-        const userStr = localStorage.getItem("user")
-        if (userStr) {
-          const user = JSON.parse(userStr)
-          userId = user.id
-          userDocumentId = user.documentId
-        } else {
-          // Try to get from cookie
-          const cookies = document.cookie.split(";")
-          const userIdCookie = cookies.find((cookie) => cookie.trim().startsWith("userId="))
-          if (userIdCookie) {
-            userId = userIdCookie.split("=")[1].trim()
-            // For documentId, we'll use the same value as userId if not available
-            userDocumentId = userId
-          }
+  const addReaction = useCallback(
+    async (postId: number | string, type: ReactionType, documentId?: string) => {
+      try {
+        if (!isAuthenticated || !user?.id) {
+          throw new Error("User not authenticated")
         }
+
+        const result = await addReactionAction(postId, type, documentId)
+
+        if (!result.success) {
+          throw new Error(result.error || "Failed to add reaction")
+        }
+
+        // Invalidate cache for this post
+        setCache((prev) => {
+          const newCache = { ...prev }
+          delete newCache[`counts-${postId}`]
+          delete newCache[`detailed-${postId}`]
+          return newCache
+        })
+
+        return result.reaction
+      } catch (error) {
+        console.error("Error adding reaction:", error)
+        throw error
       }
-
-      if (!userId || !userDocumentId) {
-        throw new Error("User not authenticated")
-      }
-
-      const result = await ReactionService.addReaction(postId, type, documentId, userId, userDocumentId)
-
-      // Invalidate cache for this post
-      setCache((prev) => {
-        const newCache = { ...prev }
-        delete newCache[`counts-${postId}`]
-        delete newCache[`detailed-${postId}`]
-        return newCache
-      })
-
-      return result
-    } catch (error) {
-      console.error("Error adding reaction:", error)
-      throw error
-    }
-  }, [])
+    },
+    [isAuthenticated, user],
+  )
 
   const getReactionCounts = useCallback(
     async (postId: number | string) => {
@@ -103,7 +80,7 @@ export function ReactionProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const counts = await ReactionService.getReactionCounts(postId)
+        const counts = await getReactionCountsAction(postId)
 
         // Cache the result
         setCache((prev) => ({
@@ -115,12 +92,12 @@ export function ReactionProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         console.error("Error getting reaction counts:", error)
         return {
-          like: 0,
-          love: 0,
-          haha: 0,
-          wow: 0,
-          sad: 0,
-          angry: 0,
+          like: { count: 0, users: [] },
+          love: { count: 0, users: [] },
+          haha: { count: 0, users: [] },
+          wow: { count: 0, users: [] },
+          sad: { count: 0, users: [] },
+          angry: { count: 0, users: [] },
         }
       }
     },
@@ -137,15 +114,15 @@ export function ReactionProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const detailed = await ReactionService.getDetailedReactions(postId)
+        const detailed = await getReactionCountsAction(postId)
 
         // Cache the result
         setCache((prev) => ({
           ...prev,
-          [cacheKey]: detailed,
+          [cacheKey]: { reactions: detailed },
         }))
 
-        return detailed
+        return { reactions: detailed }
       } catch (error) {
         console.error("Error getting detailed reactions:", error)
         return {
