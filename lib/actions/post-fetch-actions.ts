@@ -10,11 +10,23 @@ import { normalizeImageUrl } from "@/lib/image-utils"
 
 function transformStrapiPost(post: any): Post {
   try {
+    console.log("[v0] Transforming post data:", JSON.stringify(post, null, 2))
+
+    if (!post) {
+      throw new Error("Post data is null or undefined")
+    }
+
+    if (!post.id) {
+      throw new Error("Post ID is missing")
+    }
+
     // Extract user data - handle both data.attributes structure and direct structure
     const user = post.user?.data ? post.user.data.attributes : post.user || {}
+    console.log("[v0] User data extracted:", user)
 
     // Extract media items - handle both data array and direct array
     const mediaItems = post.mediaItems?.data || post.mediaItems || []
+    console.log("[v0] Media items extracted:", mediaItems.length)
 
     // Extract tags - handle both data array and direct array
     const tags = post.tags?.data
@@ -22,6 +34,7 @@ function transformStrapiPost(post: any): Post {
       : post.tags
         ? post.tags.map((tag: any) => tag.name || "")
         : []
+    console.log("[v0] Tags extracted:", tags)
 
     const likes = post.likes?.data || post.likes || []
 
@@ -29,59 +42,81 @@ function transformStrapiPost(post: any): Post {
     let imageUrl = "/intricate-nail-art.png"
 
     if (mediaItems && mediaItems.length > 0) {
-      // Handle different possible structures for media items
-      const firstMedia = mediaItems[0].attributes || mediaItems[0]
-      const fileData = firstMedia.file?.data?.attributes || firstMedia.file
+      try {
+        // Handle different possible structures for media items
+        const firstMedia = mediaItems[0].attributes || mediaItems[0]
+        const fileData = firstMedia.file?.data?.attributes || firstMedia.file
 
-      // Check all possible paths for the image URL
-      if (fileData?.url) {
-        imageUrl = normalizeImageUrl(fileData.url)
-      } else if (fileData?.formats?.medium?.url) {
-        imageUrl = normalizeImageUrl(fileData.formats.medium.url)
-      } else if (fileData?.formats?.small?.url) {
-        imageUrl = normalizeImageUrl(fileData.formats.small.url)
-      } else if (fileData?.formats?.thumbnail?.url) {
-        imageUrl = normalizeImageUrl(fileData.formats.thumbnail.url)
+        // Check all possible paths for the image URL
+        if (fileData?.url) {
+          imageUrl = normalizeImageUrl(fileData.url)
+        } else if (fileData?.formats?.medium?.url) {
+          imageUrl = normalizeImageUrl(fileData.formats.medium.url)
+        } else if (fileData?.formats?.small?.url) {
+          imageUrl = normalizeImageUrl(fileData.formats.small.url)
+        } else if (fileData?.formats?.thumbnail?.url) {
+          imageUrl = normalizeImageUrl(fileData.formats.thumbnail.url)
+        }
+        console.log("[v0] Image URL extracted:", imageUrl)
+      } catch (mediaError) {
+        console.error("[v0] Error processing media items:", mediaError)
+        // Keep default image URL
       }
     }
 
     // Get user profile image - handle different possible structures
     let userImageUrl = "/serene-woman-gaze.png"
-    const profileImage = user.profileImage?.data?.attributes || user.profileImage
+    try {
+      const profileImage = user.profileImage?.data?.attributes || user.profileImage
 
-    if (profileImage?.url) {
-      userImageUrl = normalizeImageUrl(profileImage.url)
-    } else if (profileImage?.formats?.thumbnail?.url) {
-      userImageUrl = normalizeImageUrl(profileImage.formats.thumbnail.url)
+      if (profileImage?.url) {
+        userImageUrl = normalizeImageUrl(profileImage.url)
+      } else if (profileImage?.formats?.thumbnail?.url) {
+        userImageUrl = normalizeImageUrl(profileImage.formats.thumbnail.url)
+      }
+      console.log("[v0] User image URL extracted:", userImageUrl)
+    } catch (userImageError) {
+      console.error("[v0] Error processing user image:", userImageError)
+      // Keep default user image URL
     }
 
     // Format the timestamp
     const timestamp = post.publishedAt ? formatTimestamp(post.publishedAt) : "Recently"
+    console.log("[v0] Timestamp formatted:", timestamp)
 
     // Process media items to ensure they have proper URLs
-    const processedMediaItems = mediaItems.map((item: any) => {
-      const itemData = item.attributes || item
-      const fileData = itemData.file?.data?.attributes || itemData.file
+    const processedMediaItems = mediaItems.map((item: any, index: number) => {
+      try {
+        const itemData = item.attributes || item
+        const fileData = itemData.file?.data?.attributes || itemData.file
 
-      let url = ""
-      if (fileData?.url) {
-        url = normalizeImageUrl(fileData.url)
-      } else if (fileData?.formats?.medium?.url) {
-        url = normalizeImageUrl(fileData.formats.medium.url)
-      } else if (fileData?.formats?.small?.url) {
-        url = normalizeImageUrl(fileData.formats.small.url)
-      } else if (fileData?.formats?.thumbnail?.url) {
-        url = normalizeImageUrl(fileData.formats.thumbnail.url)
-      }
+        let url = ""
+        if (fileData?.url) {
+          url = normalizeImageUrl(fileData.url)
+        } else if (fileData?.formats?.medium?.url) {
+          url = normalizeImageUrl(fileData.formats.medium.url)
+        } else if (fileData?.formats?.small?.url) {
+          url = normalizeImageUrl(fileData.formats.small.url)
+        } else if (fileData?.formats?.thumbnail?.url) {
+          url = normalizeImageUrl(fileData.formats.thumbnail.url)
+        }
 
-      return {
-        id: item.id,
-        type: itemData.type || "image",
-        url: url,
+        return {
+          id: item.id || `media-${index}`,
+          type: itemData.type || "image",
+          url: url,
+        }
+      } catch (itemError) {
+        console.error(`[v0] Error processing media item ${index}:`, itemError)
+        return {
+          id: `media-${index}`,
+          type: "image",
+          url: "/intricate-nail-art.png",
+        }
       }
     })
 
-    return {
+    const transformedPost = {
       id: post.id,
       documentId: post.documentId || `post-${post.id}`,
       userId: user.id || null,
@@ -90,16 +125,20 @@ function transformStrapiPost(post: any): Post {
       image: imageUrl,
       title: post.title || "",
       description: post.description || "",
-      likes: likes, // Pass the actual likes array instead of likesCount
-      comments: [], // We'll fetch comments separately if needed
+      likes: likes,
+      comments: [],
       timestamp,
       tags,
       mediaItems: processedMediaItems,
       contentType: post.contentType || "image",
       galleryLayout: post.galleryLayout || "grid",
     }
+
+    console.log("[v0] Post transformation completed successfully")
+    return transformedPost
   } catch (error) {
-    console.error("Error transforming post data:", error)
+    console.error("[v0] Error transforming post data:", error)
+    console.error("[v0] Original post data:", JSON.stringify(post, null, 2))
     throw new Error(`Failed to transform post data: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
@@ -134,7 +173,7 @@ function formatTimestamp(dateString: string): string {
 // Optimized function to fetch a post by ID using qs for query construction
 export const fetchPostById = cache(async (id: string | number): Promise<Post | null> => {
   try {
-    console.log(`Fetching post with ID: ${id}`)
+    console.log(`[v0] Fetching post with ID: ${id}`)
 
     // Build a structured query using qs - revised for Strapi v5 compatibility
     const query = {
@@ -186,7 +225,7 @@ export const fetchPostById = cache(async (id: string | number): Promise<Post | n
     const apiUrl = process.env.API_URL || "https://nailfeed-backend-production.up.railway.app"
     const fullUrl = `${apiUrl}${apiUrl.endsWith("/") ? "" : "/"}${endpoint.startsWith("/") ? endpoint.substring(1) : endpoint}`
 
-    console.log(`Making request to: ${fullUrl}`)
+    console.log(`[v0] Making request to: ${fullUrl}`)
 
     // Make the request with AbortController for timeout
     const controller = new AbortController()
@@ -204,17 +243,18 @@ export const fetchPostById = cache(async (id: string | number): Promise<Post | n
 
       if (!fetchResponse.ok) {
         const errorText = await fetchResponse.text()
-        console.error(`API error (${fetchResponse.status}): ${errorText}`)
+        console.error(`[v0] API error (${fetchResponse.status}): ${errorText}`)
 
         if (fetchResponse.status === 404) {
-          return null // Not found
+          return null
         }
 
         throw new Error(`API error (${fetchResponse.status}): ${errorText}`)
       }
 
       const response = await fetchResponse.json()
-      console.log(`Successfully fetched post ${id}`)
+      console.log(`[v0] Successfully fetched post ${id}`)
+      console.log(`[v0] Raw API response:`, JSON.stringify(response, null, 2))
 
       // Transform the API response to our Post interface
       if (response.data) {
@@ -235,19 +275,20 @@ export const fetchPostById = cache(async (id: string | number): Promise<Post | n
         }
       }
 
+      console.log("[v0] No data found in response")
       return null
     } catch (error) {
       clearTimeout(timeoutId)
 
       if (error.name === "AbortError") {
-        console.error(`Request timeout for post ${id}`)
+        console.error(`[v0] Request timeout for post ${id}`)
         throw new Error(`Request timeout for post ${id}`)
       }
 
       throw error
     }
   } catch (error) {
-    console.error(`Error fetching post ${id}:`, error)
+    console.error(`[v0] Error fetching post ${id}:`, error)
     throw error
   }
 })
@@ -334,7 +375,7 @@ export const fetchRelatedPosts = cache(async (postId: string | number, tags: str
 
       if (!fetchResponse.ok) {
         const errorText = await fetchResponse.text()
-        console.error(`API error (${fetchResponse.status}): ${errorText}`)
+        console.error(`[v0] API error (${fetchResponse.status}): ${errorText}`)
         return [] // Return empty array on error
       }
 
@@ -356,14 +397,14 @@ export const fetchRelatedPosts = cache(async (postId: string | number, tags: str
       clearTimeout(timeoutId)
 
       if (error.name === "AbortError") {
-        console.error(`Request timeout for related posts`)
+        console.error(`[v0] Request timeout for related posts`)
         return [] // Return empty array on timeout
       }
 
       throw error
     }
   } catch (error) {
-    console.error(`Error fetching related posts:`, error)
+    console.error(`[v0] Error fetching related posts:`, error)
     return []
   }
 })

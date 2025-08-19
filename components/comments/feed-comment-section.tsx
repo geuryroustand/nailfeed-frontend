@@ -81,6 +81,10 @@ export default function FeedCommentSection({
   onCommentDeleted,
   onCommentEdited,
 }: FeedCommentSectionProps) {
+  const authContext = useAuth()
+  const user = authContext?.user || null
+  const isAuthenticated = authContext?.isAuthenticated || false
+
   const [comments, setComments] = useState<Comment[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -92,7 +96,7 @@ export default function FeedCommentSection({
   const [reportDialogOpen, setReportDialogOpen] = useState(false)
   const [totalComments, setTotalComments] = useState(0)
   const [editingComment, setEditingComment] = useState<{ id: number; content: string } | null>(null)
-  const { user, isAuthenticated } = useAuth() || { user: null, isAuthenticated: false }
+
   const { toast } = useToast()
   const commentInputRef = useRef<HTMLTextAreaElement>(null)
   const commentsEndRef = useRef<HTMLDivElement>(null)
@@ -128,29 +132,31 @@ export default function FeedCommentSection({
   }
 
   const fetchComments = async (pageNum = 1, reset = false) => {
-    // Skip fetching if we don't have a valid post ID
-    if (!postId && !documentId) {
-      console.log("Skipping comment fetch - no valid post ID")
-      setIsLoading(false)
-      setComments([])
-      setTotalComments(0)
-      return
-    }
-
-    if (reset) {
-      setIsLoading(true)
-    } else {
-      setIsFetchingMore(true)
-    }
-
-    setError(null)
-
     try {
+      console.log("[v0] Fetching comments for post:", { postId, documentId, pageNum, reset })
+
+      // Skip fetching if we don't have a valid post ID
+      if (!postId && !documentId) {
+        console.log("[v0] Skipping comment fetch - no valid post ID")
+        setIsLoading(false)
+        setComments([])
+        setTotalComments(0)
+        return
+      }
+
+      if (reset) {
+        setIsLoading(true)
+      } else {
+        setIsFetchingMore(true)
+      }
+
+      setError(null)
+
       // Use the documentId if available, otherwise use numeric ID
       const identifier = documentId || postId
 
       const response = await CommentsService.getComments(postId, identifier.toString(), pageNum, pageSize)
-      console.log(`Fetched comments for page ${pageNum}:`, response)
+      console.log("[v0] Fetched comments for page", pageNum, ":", response)
 
       const commentsData = response.data || []
       const pagination = response.pagination
@@ -183,11 +189,9 @@ export default function FeedCommentSection({
       // Mark initial fetch as completed
       initialFetchCompleted.current = true
     } catch (err) {
-      console.error("Error fetching comments:", err)
-      // Check if this is an authentication error (403 Forbidden)
+      console.error("[v0] Error fetching comments:", err)
       const isAuthError = err?.error?.status === 403 || err?.status === 403
 
-      // For auth errors, show a more specific message
       if (isAuthError) {
         // Don't show error to user, just show empty state
         setComments([])
@@ -204,9 +208,11 @@ export default function FeedCommentSection({
 
   // Fetch comments immediately when component mounts
   useEffect(() => {
+    console.log("[v0] Comments component mounting with:", { postId, documentId })
+
     // Skip fetching if we don't have a valid post ID
     if (!postId && !documentId) {
-      console.log("Skipping comment fetch - no valid post ID")
+      console.log("[v0] Skipping comment fetch - no valid post ID")
       setIsLoading(false)
       return
     }
@@ -467,7 +473,6 @@ export default function FeedCommentSection({
       })
     } catch (err) {
       const errorMessage = parseErrorMessage(err)
-      setError(errorMessage)
 
       toast({
         title: "Error deleting comment",
