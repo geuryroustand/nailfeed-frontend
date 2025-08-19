@@ -60,22 +60,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true)
 
     try {
-      console.log("Checking auth status...")
+      console.log("[v0] Checking auth status...")
 
-      // Try to get token from cookie - check all possible formats
       const token = getCookie("authToken") || getCookie("jwt") || getCookie("auth_token")
 
       if (token) {
-        console.log("Found token in cookie:", token.substring(0, 10) + "...")
+        console.log("[v0] Found token in cookie:", token.substring(0, 10) + "...")
         setJwt(token)
 
         // Verify token with server
         const userData = await getCurrentUser()
 
         if (userData) {
-          console.log("User authenticated:", userData)
+          console.log("[v0] User authenticated, updating UI state:", userData)
           setUser(userData)
           setIsAuthenticated(true)
+
+          setTimeout(() => {
+            setIsLoading(false)
+          }, 100)
 
           // Ensure the token is available in all cookie formats for compatibility
           if (!getCookie("jwt")) {
@@ -93,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setCookie("userId", userData.id.toString(), 7)
           }
         } else {
-          console.log("No authenticated user found")
+          console.log("[v0] No authenticated user found, clearing state")
           setUser(null)
           setJwt(null)
           setIsAuthenticated(false)
@@ -105,13 +108,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           document.cookie = "userId=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
         }
       } else {
-        console.log("No token found in cookies")
+        console.log("[v0] No token found in cookies, user not authenticated")
         setUser(null)
         setJwt(null)
         setIsAuthenticated(false)
       }
     } catch (error) {
-      console.error("Auth check error:", error)
+      console.error("[v0] Auth check error:", error)
       setUser(null)
       setJwt(null)
       setIsAuthenticated(false)

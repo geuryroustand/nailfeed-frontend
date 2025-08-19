@@ -1,54 +1,49 @@
-"use client";
+"use client"
 
-import { useEffect, useState } from "react";
-import { useActionState } from "react";
-import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
-import { loginWithFormAction, type AuthActionState } from "@/app/auth/actions";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react"
+import { useActionState } from "react"
+import { useRouter } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
+import { loginWithFormAction, type AuthActionState } from "@/app/auth/actions"
+import { Eye, EyeOff, Loader2 } from "lucide-react"
+import { useAuth } from "@/context/auth-context"
 
-const initialState: AuthActionState = { status: "idle" };
+const initialState: AuthActionState = { status: "idle" }
 
 export default function LoginForm() {
-  const router = useRouter();
-  const [state, action, isPending] = useActionState(
-    loginWithFormAction,
-    initialState
-  );
+  const router = useRouter()
+  const { checkAuthStatus } = useAuth()
+  const [state, action, isPending] = useActionState(loginWithFormAction, initialState)
 
   // Controlled inputs to preserve values on error
-  const [identifier, setIdentifier] = useState("");
-  const [password, setPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  const [identifier, setIdentifier] = useState("")
+  const [password, setPassword] = useState("")
+  const [rememberMe, setRememberMe] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   // Hydrate inputs from server-returned values on error
   useEffect(() => {
     if (state.status === "error" && state.values) {
-      if (state.values.identifier) setIdentifier(state.values.identifier);
-      if (state.values.rememberMe) setRememberMe(true);
+      if (state.values.identifier) setIdentifier(state.values.identifier)
+      if (state.values.rememberMe) setRememberMe(true)
     }
-  }, [state]);
+  }, [state])
 
   useEffect(() => {
     if (state.status === "success") {
-      router.replace("/");
+      checkAuthStatus().then(() => {
+        router.replace("/")
+        router.refresh()
+      })
     }
-  }, [state.status, router]);
+  }, [state.status, router, checkAuthStatus])
 
   return (
-    <form
-      action={action}
-      className="space-y-4"
-      aria-describedby="login-form-status"
-    >
+    <form action={action} className="space-y-4" aria-describedby="login-form-status">
       <div>
-        <label
-          htmlFor="identifier"
-          className="block text-sm font-medium text-gray-700"
-        >
+        <label htmlFor="identifier" className="block text-sm font-medium text-gray-700">
           Email or Username
         </label>
         <Input
@@ -60,9 +55,7 @@ export default function LoginForm() {
           value={identifier}
           onChange={(e) => setIdentifier(e.target.value)}
           aria-invalid={Boolean(state.fieldErrors?.identifier)}
-          aria-errormessage={
-            state.fieldErrors?.identifier ? "identifier-error" : undefined
-          }
+          aria-errormessage={state.fieldErrors?.identifier ? "identifier-error" : undefined}
         />
         {state.fieldErrors?.identifier && (
           <p id="identifier-error" className="mt-1 text-sm text-red-600">
@@ -72,10 +65,7 @@ export default function LoginForm() {
       </div>
 
       <div>
-        <label
-          htmlFor="password"
-          className="block text-sm font-medium text-gray-700"
-        >
+        <label htmlFor="password" className="block text-sm font-medium text-gray-700">
           Password
         </label>
         <div className="relative">
@@ -89,9 +79,7 @@ export default function LoginForm() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             aria-invalid={Boolean(state.fieldErrors?.password)}
-            aria-errormessage={
-              state.fieldErrors?.password ? "password-error" : undefined
-            }
+            aria-errormessage={state.fieldErrors?.password ? "password-error" : undefined}
           />
           <Button
             type="button"
@@ -102,11 +90,7 @@ export default function LoginForm() {
             aria-pressed={showPassword}
             onClick={() => setShowPassword((s) => !s)}
           >
-            {showPassword ? (
-              <EyeOff className="h-4 w-4" />
-            ) : (
-              <Eye className="h-4 w-4" />
-            )}
+            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </Button>
         </div>
         {state.fieldErrors?.password && (
@@ -123,10 +107,7 @@ export default function LoginForm() {
           onCheckedChange={(v) => setRememberMe(Boolean(v))}
           aria-label="Remember me"
         />
-        <label
-          htmlFor="rememberMe"
-          className="text-sm text-gray-700 cursor-pointer"
-        >
+        <label htmlFor="rememberMe" className="text-sm text-gray-700 cursor-pointer">
           Remember me
         </label>
         {/* Hidden field to actually submit the boolean reliably */}
@@ -149,21 +130,12 @@ export default function LoginForm() {
         )}
       </Button>
 
-      <div
-        id="login-form-status"
-        className="min-h-[1.25rem]"
-        aria-live="polite"
-        aria-atomic="true"
-      >
+      <div id="login-form-status" className="min-h-[1.25rem]" aria-live="polite" aria-atomic="true">
         {state.status === "error" && (
-          <p className="text-sm text-red-600">
-            {state.message || "Something went wrong. Try again."}
-          </p>
+          <p className="text-sm text-red-600">{state.message || "Something went wrong. Try again."}</p>
         )}
-        {state.status === "success" && (
-          <p className="text-sm text-green-600">Success! Redirecting…</p>
-        )}
+        {state.status === "success" && <p className="text-sm text-green-600">Success! Redirecting…</p>}
       </div>
     </form>
-  );
+  )
 }

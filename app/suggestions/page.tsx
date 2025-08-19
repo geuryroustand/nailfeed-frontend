@@ -8,6 +8,7 @@ export const metadata = {
   description: "Share and vote on feature suggestions for NailFeed",
 }
 
+export const dynamic = "force-dynamic"
 export const revalidate = 60
 
 function SuggestionsLoading() {
