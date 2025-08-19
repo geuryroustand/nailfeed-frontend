@@ -25,6 +25,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}))
     const { endpoint, method = "GET", data, headers: incomingHeaders = {}, authorizationOverride } = body || {}
 
+    if (endpoint && endpoint.includes("/comments/")) {
+      console.log("[v0] Auth proxy handling comment request:", { endpoint, method })
+    }
+
     if (!endpoint || typeof endpoint !== "string") {
       return NextResponse.json(
         {
@@ -52,16 +56,45 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Determine Authorization header
     const cookieStore = await cookies()
-    const jwt = cookieStore.get("jwt")?.value ?? cookieStore.get("authToken")?.value
+
+    // Try multiple cookie names that might contain the JWT
+    const jwtCookie = cookieStore.get("jwt")
+    const authTokenCookie = cookieStore.get("authToken")
+    const auth_tokenCookie = cookieStore.get("auth_token")
+
+    // Debug logging for comment requests
+    if (endpoint && endpoint.includes("/comments/")) {
+      console.log("[v0] Cookie debug for comment request:", {
+        jwtCookie: jwtCookie ? `present (length: ${jwtCookie.value.length})` : "not found",
+        authTokenCookie: authTokenCookie ? `present (length: ${authTokenCookie.value.length})` : "not found",
+        auth_tokenCookie: auth_tokenCookie ? `present (length: ${auth_tokenCookie.value.length})` : "not found",
+        hasServerToken: !!SERVER_API_TOKEN,
+        authorizationOverride: authorizationOverride ? "provided" : "not provided",
+      })
+    }
+
+    const jwt = jwtCookie?.value ?? authTokenCookie?.value ?? auth_tokenCookie?.value
 
     if (jwt) {
       headers["Authorization"] = `Bearer ${jwt}`
+      if (endpoint && endpoint.includes("/comments/")) {
+        console.log("[v0] Using JWT from cookies for comment request, token length:", jwt.length)
+      }
     } else if (authorizationOverride && typeof authorizationOverride === "string") {
       headers["Authorization"] = authorizationOverride
+      if (endpoint && endpoint.includes("/comments/")) {
+        console.log("[v0] Using authorization override for comment request")
+      }
     } else if (SERVER_API_TOKEN) {
       headers["Authorization"] = `Bearer ${SERVER_API_TOKEN}`
+      if (endpoint && endpoint.includes("/comments/")) {
+        console.log("[v0] Using server API token for comment request")
+      }
+    } else {
+      if (endpoint && endpoint.includes("/comments/")) {
+        console.log("[v0] No authorization found for comment request - this will likely fail")
+      }
     }
 
     const fetchOptions: RequestInit = {
@@ -74,7 +107,38 @@ export async function POST(request: NextRequest) {
       fetchOptions.body = typeof data === "string" ? data : JSON.stringify(data)
     }
 
+    if (endpoint && endpoint.includes("/comments/")) {
+      console.log("[v0] Making request to Strapi:", {
+        url,
+        method,
+        hasAuth: !!headers["Authorization"],
+        authType: headers["Authorization"] ? headers["Authorization"].substring(0, 20) + "..." : "none",
+      })
+    }
+
     const resp = await fetch(url, fetchOptions)
+
+    if (endpoint && endpoint.includes("/comments/")) {
+      console.log("[v0] Strapi response:", {
+        status: resp.status,
+        statusText: resp.statusText,
+        ok: resp.ok,
+      })
+
+      // If it's an error response, log more details
+      if (!resp.ok) {
+        const errorText = await resp.text()
+        console.log("[v0] Strapi error response body:", errorText)
+
+        // Return the error response
+        try {
+          const errorJson = JSON.parse(errorText)
+          return NextResponse.json(errorJson, { status: resp.status })
+        } catch {
+          return NextResponse.json({ error: errorText }, { status: resp.status })
+        }
+      }
+    }
 
     // Proxy back response as-is (JSON or text)
     const contentType = resp.headers.get("content-type") || ""
