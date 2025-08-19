@@ -1,6 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import { cache } from "react"
 import { getApiUrl } from "@/lib/api-helpers"
 import { getCurrentUser } from "@/app/actions/auth-actions"
 
@@ -34,57 +35,158 @@ export interface Suggestion {
   isCreator?: boolean
 }
 
-async function getVoteCounts(
-  userId?: number,
-): Promise<{ [suggestionId: string]: { count: number; userHasVoted: boolean } }> {
-  try {
-    console.log("[v0] Fetching vote counts from suggestion-votes endpoint")
-    console.log("[v0] Current userId for vote checking:", userId)
+const getVoteCounts = cache(
+  async (userId?: number): Promise<{ [suggestionId: string]: { count: number; userHasVoted: boolean } }> => {
+    try {
+      const response = await fetch(`${API_URL}/api/suggestion-votes?populate[0]=suggestion&populate[1]=user`, {
+        headers: {
+          Authorization: `Bearer ${API_TOKEN}`,
+        },
+        next: {
+          revalidate: 30,
+          tags: ["suggestion-votes"],
+        },
+      })
 
-    const response = await fetch(`${API_URL}/api/suggestion-votes?populate[0]=suggestion&populate[1]=user`, {
+      if (!response.ok) {
+        console.error("Failed to fetch vote counts:", response.status, response.statusText)
+        return {}
+      }
+
+      const data = await response.json()
+      const voteCounts: { [suggestionId: string]: { count: number; userHasVoted: boolean } } = {}
+
+      // Group votes by suggestion
+      data.data?.forEach((vote: any) => {
+        const suggestionId = vote.suggestion?.documentId
+        if (suggestionId) {
+          if (!voteCounts[suggestionId]) {
+            voteCounts[suggestionId] = { count: 0, userHasVoted: false }
+          }
+          voteCounts[suggestionId].count++
+
+          // Check if current user has voted
+          if (userId && vote.user?.id === userId) {
+            voteCounts[suggestionId].userHasVoted = true
+          }
+        }
+      })
+
+      return voteCounts
+    } catch (error) {
+      console.error("Error fetching vote counts:", error)
+      return {}
+    }
+  },
+)
+
+export const getBasicSuggestions = cache(async (): Promise<Suggestion[]> => {
+  try {
+    const response = await fetch(`${API_URL}/api/suggestions?populate[0]=user&sort=createdAt:desc`, {
       headers: {
         Authorization: `Bearer ${API_TOKEN}`,
       },
-      next: { revalidate: 60 },
+      next: {
+        revalidate: 60,
+        tags: ["suggestions"],
+      },
     })
 
     if (!response.ok) {
-      console.error("Failed to fetch vote counts:", response.status, response.statusText)
-      return {}
+      console.error("Failed to fetch suggestions:", response.status, response.statusText)
+      return []
     }
 
     const data = await response.json()
+    return data.data || []
+  } catch (error) {
+    console.error("Error fetching basic suggestions:", error)
+    return []
+  }
+})
+
+export const getSuggestions = cache(async (userId?: number): Promise<Suggestion[]> => {
+  try {
+    let currentUserId: number | undefined = userId
+
+    // Get current user in parallel with data fetching
+    const userPromise = getCurrentUser().catch(() => null)
+
+    const [suggestionsResponse, votesResponse, currentUser] = await Promise.allSettled([
+      fetch(`${API_URL}/api/suggestions?populate[0]=user&sort=createdAt:desc`, {
+        headers: {
+          Authorization: `Bearer ${API_TOKEN}`,
+        },
+        next: {
+          revalidate: 60,
+          tags: ["suggestions"],
+        },
+      }),
+      fetch(`${API_URL}/api/suggestion-votes?populate[0]=suggestion&populate[1]=user`, {
+        headers: {
+          Authorization: `Bearer ${API_TOKEN}`,
+        },
+        next: {
+          revalidate: 30,
+          tags: ["suggestion-votes"],
+        },
+      }),
+      userPromise,
+    ])
+
+    // Handle user result
+    if (currentUser.status === "fulfilled" && currentUser.value) {
+      currentUserId = currentUser.value.id
+    }
+
+    // Handle suggestions result
+    let suggestions: any[] = []
+    if (suggestionsResponse.status === "fulfilled" && suggestionsResponse.value.ok) {
+      const suggestionsData = await suggestionsResponse.value.json()
+      suggestions = suggestionsData.data || []
+    }
+
+    // Handle votes result
     const voteCounts: { [suggestionId: string]: { count: number; userHasVoted: boolean } } = {}
+    if (votesResponse.status === "fulfilled" && votesResponse.value.ok) {
+      const votesData = await votesResponse.value.json()
 
-    console.log("[v0] Raw vote data:", JSON.stringify(data.data, null, 2))
+      // Process vote counts
+      votesData.data?.forEach((vote: any) => {
+        const suggestionId = vote.suggestion?.documentId
+        if (suggestionId) {
+          if (!voteCounts[suggestionId]) {
+            voteCounts[suggestionId] = { count: 0, userHasVoted: false }
+          }
+          voteCounts[suggestionId].count++
 
-    // Group votes by suggestion
-    data.data?.forEach((vote: any) => {
-      const suggestionId = vote.suggestion?.documentId
-      if (suggestionId) {
-        if (!voteCounts[suggestionId]) {
-          voteCounts[suggestionId] = { count: 0, userHasVoted: false }
+          if (currentUserId && vote.user?.id === currentUserId) {
+            voteCounts[suggestionId].userHasVoted = true
+          }
         }
-        voteCounts[suggestionId].count++
+      })
+    }
 
-        console.log("[v0] Checking vote - Vote user ID:", vote.user?.id, "Current user ID:", userId)
-
-        // Check if current user has voted
-        if (userId && vote.user?.id === userId) {
-          voteCounts[suggestionId].userHasVoted = true
-          console.log("[v0] User has voted on suggestion:", suggestionId)
-        }
+    const suggestionsWithVotes = suggestions.map((suggestion: any) => {
+      const voteData = voteCounts[suggestion.documentId] || { count: 0, userHasVoted: false }
+      return {
+        ...suggestion,
+        voteCount: voteData.count,
+        userHasVoted: currentUserId ? voteData.userHasVoted : false,
+        isCreator: currentUserId ? suggestion.user?.id === currentUserId : false,
+        suggestion_votes: Array(voteData.count).fill({ id: 0, user: { id: 0, username: "" } }),
       }
     })
 
-    console.log("[v0] Vote counts processed:", Object.keys(voteCounts).length, "suggestions have votes")
-    console.log("[v0] Final vote counts:", JSON.stringify(voteCounts, null, 2))
-    return voteCounts
+    // Sort by vote count
+    suggestionsWithVotes.sort((a: any, b: any) => (b.voteCount || 0) - (a.voteCount || 0))
+
+    return suggestionsWithVotes
   } catch (error) {
-    console.error("Error fetching vote counts:", error)
-    return {}
+    console.error("Error fetching suggestions:", error)
+    return []
   }
-}
+})
 
 export async function createSuggestion(formData: FormData) {
   try {
@@ -265,8 +367,6 @@ export async function updateSuggestion(suggestionId: string, formData: FormData)
     const result = await response.json()
     console.log("[v0] Successfully updated suggestion:", result.data?.documentId)
 
-    revalidatePath("/suggestions")
-
     return { success: true, data: result.data }
   } catch (error) {
     console.error("Error updating suggestion:", error)
@@ -274,75 +374,5 @@ export async function updateSuggestion(suggestionId: string, formData: FormData)
       success: false,
       error: error instanceof Error ? error.message : "Failed to update suggestion",
     }
-  }
-}
-
-export async function getSuggestions(userId?: number): Promise<Suggestion[]> {
-  try {
-    console.log("[v0] Fetching suggestions from:", `${API_URL}/api/suggestions`)
-
-    let currentUserId: number | undefined = userId
-
-    try {
-      const currentUser = await getCurrentUser()
-      currentUserId = currentUser?.id || userId
-      console.log("[v0] Successfully got current user ID:", currentUserId)
-    } catch (error) {
-      console.warn("[v0] Failed to get current user, continuing without auth:", error)
-      // Continue without user context - suggestions will still load
-    }
-
-    const response = await fetch(`${API_URL}/api/suggestions?populate[0]=user&sort=createdAt:desc`, {
-      headers: {
-        Authorization: `Bearer ${API_TOKEN}`,
-      },
-      next: { revalidate: 60 },
-    })
-
-    console.log("[v0] Response status:", response.status)
-
-    if (!response.ok) {
-      console.error("Failed to fetch suggestions:", response.status, response.statusText)
-      const errorText = await response.text()
-      console.error("Error response body:", errorText)
-      return []
-    }
-
-    const contentType = response.headers.get("content-type")
-    if (!contentType || !contentType.includes("application/json")) {
-      console.error("Response is not JSON, content-type:", contentType)
-      return []
-    }
-
-    const data = await response.json()
-    console.log("[v0] Successfully fetched suggestions:", data.data?.length || 0, "items")
-
-    const voteCounts = await getVoteCounts(currentUserId)
-
-    const suggestionsWithVotes = (data.data || []).map((suggestion: any) => {
-      const voteData = voteCounts[suggestion.documentId] || { count: 0, userHasVoted: false }
-      return {
-        ...suggestion,
-        voteCount: voteData.count,
-        userHasVoted: currentUserId ? voteData.userHasVoted : false,
-        isCreator: currentUserId ? suggestion.user?.id === currentUserId : false,
-        suggestion_votes: Array(voteData.count).fill({ id: 0, user: { id: 0, username: "" } }),
-      }
-    })
-
-    suggestionsWithVotes.sort((a: any, b: any) => (b.voteCount || 0) - (a.voteCount || 0))
-
-    console.log("[v0] Suggestions with vote counts:", suggestionsWithVotes.length, "items processed")
-    if (suggestionsWithVotes.length > 0) {
-      console.log("[v0] First suggestion vote data:")
-      console.log("[v0] - voteCount:", suggestionsWithVotes[0].voteCount)
-      console.log("[v0] - userHasVoted:", suggestionsWithVotes[0].userHasVoted)
-      console.log("[v0] - isCreator:", suggestionsWithVotes[0].isCreator)
-    }
-
-    return suggestionsWithVotes
-  } catch (error) {
-    console.error("Error fetching suggestions:", error)
-    return []
   }
 }

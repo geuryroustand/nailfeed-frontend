@@ -1,68 +1,37 @@
 "use client"
 
-import { useState, useCallback } from "react"
-import { getSuggestions, type Suggestion } from "@/app/actions/suggestion-actions"
+import { useState, useCallback, useOptimistic } from "react"
+import type { Suggestion } from "@/app/actions/suggestion-actions"
 import SuggestionsList from "@/components/suggestions/suggestions-list"
 import CreateSuggestionModal from "@/components/suggestions/create-suggestion-modal"
 import { Button } from "@/components/ui/button"
 import { Lightbulb, Plus } from "lucide-react"
 import BottomNav from "@/components/bottom-nav"
 import Sidebar from "@/components/sidebar"
-import React from "react"
 
-function SuggestionsLoading() {
-  return (
-    <div className="space-y-4">
-      {[...Array(5)].map((_, i) => (
-        <div key={i} className="bg-white rounded-lg p-6 shadow-sm animate-pulse">
-          <div className="h-6 bg-gray-200 rounded w-3/4 mb-3"></div>
-          <div className="h-4 bg-gray-200 rounded w-full mb-4"></div>
-          <div className="flex items-center justify-between">
-            <div className="h-4 bg-gray-200 rounded w-20"></div>
-            <div className="h-8 bg-gray-200 rounded w-16"></div>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
+interface SuggestionsContentProps {
+  initialSuggestions: Suggestion[]
 }
 
-export default function SuggestionsClientPage() {
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+export default function SuggestionsContent({ initialSuggestions }: SuggestionsContentProps) {
+  const [optimisticSuggestions, addOptimisticSuggestion] = useOptimistic(
+    initialSuggestions,
+    (state, newSuggestion: Suggestion) => [newSuggestion, ...state],
+  )
 
-  React.useEffect(() => {
-    const loadSuggestions = async () => {
-      const data = await getSuggestions()
-      setSuggestions(data)
-      setIsLoading(false)
-    }
-    loadSuggestions()
-  }, [])
+  const [suggestions, setSuggestions] = useState<Suggestion[]>(initialSuggestions)
 
-  const handleSuggestionCreated = useCallback((newSuggestion: Suggestion) => {
-    setSuggestions((prev) => [newSuggestion, ...prev])
-  }, [])
-
-  if (isLoading) {
-    return (
-      <main className="min-h-screen bg-gray-50">
-        <div className="flex">
-          {/* Desktop Sidebar */}
-          <div className="hidden md:block md:w-64 lg:w-72 fixed h-screen border-r border-gray-200">
-            <Sidebar activeItem="suggestions" />
-          </div>
-
-          {/* Main Content */}
-          <div className="w-full md:pl-64 lg:pl-72">
-            <div className="container max-w-4xl mx-auto px-4 pt-6 pb-16 md:py-8">
-              <SuggestionsLoading />
-            </div>
-          </div>
-        </div>
-      </main>
-    )
+  if (initialSuggestions !== suggestions && initialSuggestions.length !== suggestions.length) {
+    setSuggestions(initialSuggestions)
   }
+
+  const handleSuggestionCreated = useCallback(
+    (newSuggestion: Suggestion) => {
+      addOptimisticSuggestion(newSuggestion)
+      setSuggestions((prev) => [newSuggestion, ...prev])
+    },
+    [addOptimisticSuggestion],
+  )
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -97,7 +66,7 @@ export default function SuggestionsClientPage() {
             </div>
 
             {/* Suggestions List */}
-            <SuggestionsList initialSuggestions={suggestions} />
+            <SuggestionsList initialSuggestions={optimisticSuggestions} />
           </div>
         </div>
       </div>

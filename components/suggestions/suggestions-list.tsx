@@ -94,8 +94,17 @@ export default function SuggestionsList({ initialSuggestions, onAddSuggestion }:
     })
   }
 
-  const handleSuggestionUpdated = () => {
-    window.location.reload()
+  const handleSuggestionUpdated = (updatedSuggestion: Suggestion) => {
+    setSuggestions((prev) =>
+      prev.map((suggestion) =>
+        suggestion.documentId === updatedSuggestion.documentId ? { ...suggestion, ...updatedSuggestion } : suggestion,
+      ),
+    )
+
+    toast({
+      title: "Suggestion updated",
+      description: "Your suggestion has been successfully updated.",
+    })
   }
 
   if (suggestions.length === 0) {

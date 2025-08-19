@@ -15,7 +15,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { updateSuggestion } from "@/app/actions/suggestion-actions"
+import { updateSuggestion, type Suggestion } from "@/app/actions/suggestion-actions"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
 
@@ -27,7 +27,7 @@ interface EditSuggestionModalProps {
     title: string
     description: string
   }
-  onSuggestionUpdated?: () => void
+  onSuggestionUpdated?: (updatedSuggestion: Suggestion) => void
 }
 
 export function EditSuggestionModal({ isOpen, onClose, suggestion, onSuggestionUpdated }: EditSuggestionModalProps) {
@@ -39,12 +39,22 @@ export function EditSuggestionModal({ isOpen, onClose, suggestion, onSuggestionU
 
     try {
       const formData = new FormData(event.currentTarget)
+      const title = formData.get("title") as string
+      const description = formData.get("description") as string
+
+      const optimisticUpdate = {
+        ...suggestion,
+        title,
+        description,
+        updatedAt: new Date().toISOString(),
+      } as Suggestion
+
       const result = await updateSuggestion(suggestion.documentId, formData)
 
       if (result.success) {
         toast.success("Suggestion updated successfully!")
         onClose()
-        onSuggestionUpdated?.()
+        onSuggestionUpdated?.(result.data || optimisticUpdate)
       } else {
         toast.error(result.error || "Failed to update suggestion")
       }

@@ -1,5 +1,3 @@
-import { toast } from "@/hooks/use-toast"
-
 // Types for authentication
 export interface User {
   id: number
@@ -36,7 +34,7 @@ const TOKEN_EXPIRATION_BUFFER = 5 * 60 * 1000
 // Authentication service
 export const AuthService = {
   // Register a new user
-  async register(username: string, email: string, password: string): Promise<AuthResponse | null> {
+  async register(username: string, email: string, password: string): Promise<AuthResponse | { error: string } | null> {
     try {
       // Use API if available, otherwise use mock data
       if (!API_URL) {
@@ -70,7 +68,8 @@ export const AuthService = {
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error?.message || "Registration failed")
+        const errorMessage = errorData.error?.message || "Registration failed"
+        return { error: errorMessage }
       }
 
       const data = await response.json()
@@ -81,12 +80,7 @@ export const AuthService = {
       }
       return data
     } catch (error) {
-      toast({
-        title: "Registration failed",
-        description: error instanceof Error ? error.message : "An unknown error occurred",
-        variant: "destructive",
-      })
-      return null
+      return { error: error instanceof Error ? error.message : "An unknown error occurred" }
     }
   },
 
@@ -152,11 +146,11 @@ export const AuthService = {
   },
 
   // Request password reset
-  async forgotPassword(email: string): Promise<boolean> {
+  async forgotPassword(email: string): Promise<{ success: boolean; error?: string }> {
     try {
       // Use API if available, otherwise use mock data
       if (!API_URL) {
-        return true
+        return { success: true }
       }
 
       const response = await fetch(`${API_URL}/api/auth/forgot-password`, {
@@ -171,22 +165,21 @@ export const AuthService = {
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.error?.message || "Password reset request failed")
+        return { success: false, error: error.error?.message || "Password reset request failed" }
       }
 
-      return true
+      return { success: true }
     } catch (error) {
-      toast({
-        title: "Request failed",
-        description: error instanceof Error ? error.message : "An unknown error occurred",
-        variant: "destructive",
-      })
-      return false
+      return { success: false, error: error instanceof Error ? error.message : "An unknown error occurred" }
     }
   },
 
   // Reset password with token
-  async resetPassword(code: string, password: string, passwordConfirmation: string): Promise<AuthResponse | null> {
+  async resetPassword(
+    code: string,
+    password: string,
+    passwordConfirmation: string,
+  ): Promise<AuthResponse | { error: string } | null> {
     try {
       // Use API if available, otherwise use mock data
       if (!API_URL) {
@@ -215,18 +208,13 @@ export const AuthService = {
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.error?.message || "Password reset failed")
+        return { error: error.error?.message || "Password reset failed" }
       }
 
       const data = await response.json()
       return data
     } catch (error) {
-      toast({
-        title: "Password reset failed",
-        description: error instanceof Error ? error.message : "An unknown error occurred",
-        variant: "destructive",
-      })
-      return null
+      return { error: error instanceof Error ? error.message : "An unknown error occurred" }
     }
   },
 
@@ -237,11 +225,11 @@ export const AuthService = {
   },
 
   // Confirm email with token
-  async confirmEmail(confirmationToken: string): Promise<boolean> {
+  async confirmEmail(confirmationToken: string): Promise<{ success: boolean; error?: string }> {
     try {
       // Use API if available, otherwise use mock data
       if (!API_URL) {
-        return true
+        return { success: true }
       }
 
       const response = await fetch(`${API_URL}/api/auth/email-confirmation?confirmation=${confirmationToken}`, {
@@ -250,17 +238,15 @@ export const AuthService = {
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.error?.message || `Email confirmation failed with status: ${response.status}`)
+        return {
+          success: false,
+          error: error.error?.message || `Email confirmation failed with status: ${response.status}`,
+        }
       }
 
-      return true
+      return { success: true }
     } catch (error: any) {
-      toast({
-        title: "Email confirmation failed",
-        description: error instanceof Error ? error.message : `An unknown error occurred: ${error}`,
-        variant: "destructive",
-      })
-      return false
+      return { success: false, error: error instanceof Error ? error.message : `An unknown error occurred: ${error}` }
     }
   },
 
@@ -306,7 +292,7 @@ export const AuthService = {
   },
 
   // Update user profile
-  async updateProfile(token: string, userData: Partial<User>): Promise<User | null> {
+  async updateProfile(token: string, userData: Partial<User>): Promise<User | { error: string } | null> {
     try {
       // Use API if available, otherwise use mock data
       if (!API_URL) {
@@ -330,27 +316,22 @@ export const AuthService = {
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.error?.message || "Failed to update profile")
+        return { error: error.error?.message || "Failed to update profile" }
       }
 
       const data = await response.json()
       return data
     } catch (error) {
-      toast({
-        title: "Profile update failed",
-        description: error instanceof Error ? error.message : "An unknown error occurred",
-        variant: "destructive",
-      })
-      return null
+      return { error: error instanceof Error ? error.message : "An unknown error occurred" }
     }
   },
 
   // Upload profile image
-  async uploadProfileImage(token: string, userId: number, file: File): Promise<boolean> {
+  async uploadProfileImage(token: string, userId: number, file: File): Promise<{ success: boolean; error?: string }> {
     try {
       // Use API if available, otherwise use mock data
       if (!API_URL) {
-        return true
+        return { success: true }
       }
 
       const formData = new FormData()
@@ -369,17 +350,12 @@ export const AuthService = {
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.error?.message || "Failed to upload image")
+        return { success: false, error: error.error?.message || "Failed to upload image" }
       }
 
-      return true
+      return { success: true }
     } catch (error) {
-      toast({
-        title: "Image upload failed",
-        description: error instanceof Error ? error.message : "An unknown error occurred",
-        variant: "destructive",
-      })
-      return false
+      return { success: false, error: error instanceof Error ? error.message : "An unknown error occurred" }
     }
   },
 
@@ -414,6 +390,11 @@ export const AuthService = {
 
   // Store token in cookie
   storeTokenInCookie(token: string): void {
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      console.log("Server-side environment detected, skipping direct cookie setting")
+      return
+    }
+
     // This function will be called from the client side
     console.log("Storing JWT in cookie:", token)
 
