@@ -7,7 +7,7 @@ import type { BackgroundType } from "@/components/post-background-selector"
 
 export async function createPost(formData: FormData) {
   try {
-    console.log("Server Action: Starting post creation process")
+    console.log("[v0] Server Action: Starting post creation process")
 
     // Check if user is authenticated - try multiple sources
     let token = cookies().get("jwt")?.value || cookies().get("authToken")?.value
@@ -17,25 +17,36 @@ export async function createPost(formData: FormData) {
     // If no token in cookies, try to get it from the form data
     if (!token) {
       token = formData.get("jwt") as string
-      console.log("Server Action: Using token from form data:", token ? "Token found" : "No token")
+      console.log("[v0] Server Action: Using token from form data:", token ? "Token found" : "No token")
+    }
 
-      // Store the token in cookies for future requests
-      if (token) {
-        cookies().set("jwt", token, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          sameSite: "strict",
-          path: "/",
-          maxAge: 7 * 24 * 60 * 60, // 7 days
-        })
-        cookies().set("authToken", token, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          sameSite: "strict",
-          path: "/",
-          maxAge: 7 * 24 * 60 * 60, // 7 days
-        })
+    if (!token) {
+      console.error("[v0] Server Action: No authentication token found in cookies or form data")
+      return {
+        success: false,
+        error: "Authentication required. Please log in to create posts.",
       }
+    }
+
+    console.log("[v0] Server Action: Token found, length:", token.length)
+    console.log("[v0] Server Action: Token starts with:", token.substring(0, 20) + "...")
+
+    // Store the token in cookies for future requests
+    if (token) {
+      cookies().set("jwt", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        path: "/",
+        maxAge: 7 * 24 * 60 * 60, // 7 days
+      })
+      cookies().set("authToken", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        path: "/",
+        maxAge: 7 * 24 * 60 * 60, // 7 days
+      })
     }
 
     // Try to get the user documentId from form data (preferred)
@@ -55,36 +66,27 @@ export async function createPost(formData: FormData) {
 
         if (userObject && userObject.documentId && !userDocumentId) {
           userDocumentId = userObject.documentId
-          console.log("Server Action: Extracted user document ID from user object:", userDocumentId)
+          console.log("[v0] Server Action: Extracted user document ID from user object:", userDocumentId)
         } else if (userObject && userObject.id && !userId) {
           userId = userObject.id.toString()
-          console.log("Server Action: Extracted user ID from user object:", userId)
+          console.log("[v0] Server Action: Extracted user ID from user object:", userId)
         }
       } catch (e) {
-        console.error("Server Action: Error parsing user object:", e)
-      }
-    }
-
-    // If no token is found, return an error - only authenticated users can post
-    if (!token) {
-      console.error("Server Action: No authentication token found")
-      return {
-        success: false,
-        error: "Authentication required. Please log in to create posts.",
+        console.error("[v0] Server Action: Error parsing user object:", e)
       }
     }
 
     // If no user ID is found, return an error
     if (!userDocumentId && !userId) {
-      console.error("Server Action: No user ID found")
+      console.error("[v0] Server Action: No user ID found")
       return {
         success: false,
         error: "User identification required. Please log in again.",
       }
     }
 
-    console.log("Server Action: Authentication verified, proceeding with post creation")
-    console.log(`Server Action: Using user ID: ${userId || userDocumentId}`)
+    console.log("[v0] Server Action: Authentication verified, proceeding with post creation")
+    console.log(`[v0] Server Action: Using user ID: ${userId || userDocumentId}`)
 
     // Extract data from formData
     const title = formData.get("title") as string
@@ -106,11 +108,11 @@ export async function createPost(formData: FormData) {
           tags = parsedTags
         }
       } catch (e) {
-        console.error("Server Action: Error parsing tags JSON:", e)
+        console.error("[v0] Server Action: Error parsing tags JSON:", e)
       }
     }
 
-    console.log("Server Action: Tags from form data:", tags)
+    console.log("[v0] Server Action: Tags from form data:", tags)
 
     // Prepare API URL and headers
     const apiUrl = process.env.API_URL || "https://nailfeed-backend-production.up.railway.app"
@@ -124,7 +126,7 @@ export async function createPost(formData: FormData) {
     const hasMediaFiles = mediaFilesEntries.length > 0
 
     if (hasMediaFiles) {
-      console.log("Server Action: Uploading media files first...")
+      console.log("[v0] Server Action: Uploading media files first...")
 
       try {
         // Upload files to Strapi upload endpoint
@@ -138,6 +140,10 @@ export async function createPost(formData: FormData) {
         }
 
         const uploadUrl = `${apiUrl}/api/upload`
+
+        console.log("[v0] Server Action: Upload URL:", uploadUrl)
+        console.log("[v0] Server Action: Upload headers - Authorization:", `Bearer ${token.substring(0, 20)}...`)
+
         const uploadResponse = await fetch(uploadUrl, {
           method: "POST",
           headers: {
@@ -146,13 +152,21 @@ export async function createPost(formData: FormData) {
           body: uploadFormData,
         })
 
+        console.log("[v0] Server Action: Upload response status:", uploadResponse.status)
+        console.log(
+          "[v0] Server Action: Upload response headers:",
+          Object.fromEntries(uploadResponse.headers.entries()),
+        )
+
         if (!uploadResponse.ok) {
           const errorText = await uploadResponse.text()
+          console.error("[v0] Server Action: Upload failed with status:", uploadResponse.status)
+          console.error("[v0] Server Action: Upload error response:", errorText)
           throw new Error(`File upload failed with status ${uploadResponse.status}: ${errorText}`)
         }
 
         const uploadedFiles = await uploadResponse.json()
-        console.log("Server Action: Files uploaded successfully:", uploadedFiles)
+        console.log("[v0] Server Action: Files uploaded successfully:", uploadedFiles)
 
         // Create mediaItems array with uploaded file IDs
         uploadedMediaItems = uploadedFiles.map((file: any, index: number) => ({
@@ -161,9 +175,9 @@ export async function createPost(formData: FormData) {
           order: index + 1,
         }))
 
-        console.log("Server Action: Prepared media items:", uploadedMediaItems)
+        console.log("[v0] Server Action: Prepared media items:", uploadedMediaItems)
       } catch (error) {
-        console.error("Server Action: File upload failed:", error)
+        console.error("[v0] Server Action: File upload failed:", error)
         return {
           success: false,
           error: `File upload failed: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -187,7 +201,7 @@ export async function createPost(formData: FormData) {
       },
     }
 
-    console.log("Server Action: Creating post with data:", JSON.stringify(postData, null, 2))
+    console.log("[v0] Server Action: Creating post with data:", JSON.stringify(postData, null, 2))
 
     const postEndpoint = "/api/posts"
     const postUrl = `${apiUrl}${apiUrl.endsWith("/") ? "" : "/"}${postEndpoint.startsWith("/") ? postEndpoint.substring(1) : postEndpoint}`
@@ -203,27 +217,27 @@ export async function createPost(formData: FormData) {
     })
 
     // Log the response status for debugging
-    console.log(`Server Action: Post creation response status: ${postResponse.status}`)
+    console.log(`[v0] Server Action: Post creation response status: ${postResponse.status}`)
 
     let responseText
     try {
       responseText = await postResponse.text()
-      console.log("Server Action: Raw post creation response:", responseText)
+      console.log("[v0] Server Action: Raw post creation response:", responseText)
     } catch (e) {
-      console.error("Server Action: Failed to get response text:", e)
+      console.error("[v0] Server Action: Failed to get response text:", e)
     }
 
     if (!postResponse.ok) {
-      console.error(`Server Action: Post creation failed with status ${postResponse.status}:`, responseText)
+      console.error(`[v0] Server Action: Post creation failed with status ${postResponse.status}:`, responseText)
       throw new Error(`Post creation failed with status ${postResponse.status}: ${responseText}`)
     }
 
     let result
     try {
       result = JSON.parse(responseText || "{}")
-      console.log("Server Action: Post creation successful:", result)
+      console.log("[v0] Server Action: Post creation successful:", result)
     } catch (e) {
-      console.error("Server Action: Failed to parse response JSON:", e)
+      console.error("[v0] Server Action: Failed to parse response JSON:", e)
       throw new Error("Failed to parse server response")
     }
 
@@ -236,7 +250,7 @@ export async function createPost(formData: FormData) {
     revalidatePath("/explore", "layout")
     revalidatePath(`/post/${postId}`, "layout")
 
-    console.log("Server Action: Post creation process completed successfully")
+    console.log("[v0] Server Action: Post creation process completed successfully")
     return {
       success: true,
       post: {
@@ -252,7 +266,7 @@ export async function createPost(formData: FormData) {
       },
     }
   } catch (error) {
-    console.error("Server Action: Error in createPost:", error)
+    console.error("[v0] Server Action: Error in createPost:", error)
     return {
       success: false,
       error:

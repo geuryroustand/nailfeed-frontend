@@ -24,7 +24,7 @@ export async function getCurrentUser(authType: "google" | "regular" = "regular")
       return null
     }
 
-    console.log("[v0] Found auth token, making request to Strapi...")
+    console.log("[v0] Found auth token in cookies, length:", authToken.length)
 
     const strapiUrl = getStrapiUrl(authType)
     console.log("[v0] getCurrentUser using Strapi URL:", strapiUrl)
@@ -53,8 +53,10 @@ export async function getCurrentUser(authType: "google" | "regular" = "regular")
 
     try {
       const userData = await response.json()
-      console.log("[v0] Successfully fetched user data:", userData?.username || "unknown user")
-      return userData
+      return {
+        ...userData,
+        _jwt: authToken, // Include the actual JWT token
+      }
     } catch (jsonError) {
       console.error("[v0] Failed to parse JSON response:", jsonError)
       // Try to get the response text for debugging
@@ -64,6 +66,20 @@ export async function getCurrentUser(authType: "google" | "regular" = "regular")
     }
   } catch (error) {
     console.error("[v0] Error fetching current user:", error)
+    return null
+  }
+}
+
+export async function getJwtToken() {
+  try {
+    const cookieStore = await cookies()
+    const authToken =
+      cookieStore.get("authToken")?.value || cookieStore.get("jwt")?.value || cookieStore.get("auth_token")?.value
+
+    console.log("[v0] getJwtToken - token found:", !!authToken)
+    return authToken || null
+  } catch (error) {
+    console.error("[v0] Error getting JWT token:", error)
     return null
   }
 }

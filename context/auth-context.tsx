@@ -46,10 +46,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userData = await getCurrentUser()
 
       if (userData) {
-        console.log("[v0] User authenticated, updating UI state:", userData.username || "unknown user")
-        setUser(userData)
+        console.log("[v0] User authenticated, updating UI state:", userData)
+        const { _jwt, ...userDataWithoutJwt } = userData
+        setUser(userDataWithoutJwt)
+        setJwt(_jwt || null)
         setIsAuthenticated(true)
-        setJwt("authenticated")
+
+        console.log("[v0] JWT token set in context:", !!_jwt)
       } else {
         console.log("[v0] No authenticated user found, clearing state")
         setUser(null)
@@ -98,12 +101,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const setUserData = (userData: User, token?: string) => {
-    console.log("[v0] Setting user data in context:", userData.username || "unknown user")
+    console.log("[v0] Setting user data in context:", userData)
+    console.log("[v0] Setting JWT token in context:", !!token)
 
     if (userData) {
       setUser(userData)
       setIsAuthenticated(true)
-      setJwt(token || "authenticated")
+      setJwt(token || null)
     }
   }
 

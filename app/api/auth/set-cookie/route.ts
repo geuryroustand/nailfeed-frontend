@@ -9,27 +9,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Token is required" }, { status: 400 })
     }
 
-    console.log("[v0] Setting JWT cookie on server side...")
+    // Remove this line:
+    // console.log("Setting cookie on server side with token:", token.substring(0, 10) + "...")
 
-    const cookieStore = await cookies()
-
-    const cookieOptions = {
-      httpOnly: false, // Allow client-side access for debugging
+    // Set the cookie with appropriate options - HttpOnly only in production
+    cookies().set({
+      name: "authToken",
+      value: token,
+      httpOnly: process.env.NODE_ENV === "production", // Only HTTP-only in production
       secure: process.env.NODE_ENV === "production",
       maxAge: 60 * 60 * 24 * 7, // 1 week
       path: "/",
-      sameSite: "lax" as const,
-    }
-
-    // Set primary cookie names
-    cookieStore.set("authToken", token, cookieOptions)
-    cookieStore.set("jwt", token, cookieOptions)
-
-    console.log("[v0] JWT cookies set successfully")
+      sameSite: "lax",
+    })
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("[v0] Error setting cookie:", error)
+    console.error("Error setting cookie:", error)
     return NextResponse.json({ error: "Failed to set cookie" }, { status: 500 })
   }
 }
