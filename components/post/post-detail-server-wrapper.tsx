@@ -1,11 +1,11 @@
 import { Suspense } from "react"
-import { trackPostView } from "@/lib/actions/post-detail-actions"
 import PostDetailHeader from "./post-detail-header"
 import PostDetailContent from "./post-detail-content"
 import PostDetailActions from "./post-detail-actions"
 import PostDetailComments from "./post-detail-comments"
 import PostDetailRelated from "./post-detail-related"
 import StructuredData from "./structured-data"
+import PostViewTracker from "./post-view-tracker"
 import type { Post } from "@/lib/post-data"
 
 interface PostDetailServerWrapperProps {
@@ -23,15 +23,12 @@ export default async function PostDetailServerWrapper({ post, relatedPosts }: Po
     documentId: post.documentId || `post-${post.id}`,
   }
 
-  // Track post view (fire and forget)
-  trackPostView(post.id).catch((error) => {
-    console.error("Failed to track post view:", error)
-  })
-
   return (
     <>
       {/* Add structured data for SEO */}
       <StructuredData post={post} url={postUrl} />
+
+      <PostViewTracker postId={post.id} />
 
       <div className="max-w-4xl mx-auto">
         {/* Post Header */}
