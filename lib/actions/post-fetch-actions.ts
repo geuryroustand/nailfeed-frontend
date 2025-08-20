@@ -413,28 +413,49 @@ export const fetchRelatedPosts = cache(async (postId: string | number, tags: str
 export const fetchPostWithRelated = cache(
   async (idOrDocumentId: string | number): Promise<{ post: Post | null; relatedPosts: Post[] }> => {
     try {
-      // First fetch the post
-      const post = await fetchPostById(idOrDocumentId)
+      console.log(`[v0] Starting fetchPostWithRelated for: ${idOrDocumentId}`)
 
-      if (!post) {
+      // First fetch the post with enhanced error handling
+      let post: Post | null = null
+      try {
+        post = await fetchPostById(idOrDocumentId)
+        console.log(`[v0] Post fetch result:`, post ? "success" : "not found")
+      } catch (postError) {
+        console.error(`[v0] Error fetching post ${idOrDocumentId}:`, postError)
         return { post: null, relatedPosts: [] }
       }
 
-      // Then fetch related posts if the post has tags
-      let relatedPosts: Post[] = []
-      if (post.tags && post.tags.length > 0) {
-        relatedPosts = await fetchRelatedPosts(post.id, post.tags, 4)
+      if (!post) {
+        console.log(`[v0] Post ${idOrDocumentId} not found`)
+        return { post: null, relatedPosts: [] }
       }
 
-      // Track post view (non-blocking)
-      trackPostView(post.id).catch((error) => {
-        console.error(`Error tracking post view: ${error}`)
-      })
+      // Then fetch related posts if the post has tags - with error handling
+      let relatedPosts: Post[] = []
+      if (post.tags && post.tags.length > 0) {
+        try {
+          relatedPosts = await fetchRelatedPosts(post.id, post.tags, 4)
+          console.log(`[v0] Related posts fetched: ${relatedPosts.length}`)
+        } catch (relatedError) {
+          console.error(`[v0] Error fetching related posts:`, relatedError)
+          relatedPosts = []
+        }
+      }
 
+      // Track post view (non-blocking) - wrap in try-catch to prevent any issues
+      try {
+        trackPostView(post.id).catch((error) => {
+          console.error(`[v0] Error tracking post view: ${error}`)
+        })
+      } catch (trackError) {
+        console.error(`[v0] Error setting up post view tracking:`, trackError)
+      }
+
+      console.log(`[v0] fetchPostWithRelated completed successfully`)
       return { post, relatedPosts }
     } catch (error) {
-      console.error(`Error in fetchPostWithRelated for ${idOrDocumentId}:`, error)
-      throw error
+      console.error(`[v0] Critical error in fetchPostWithRelated for ${idOrDocumentId}:`, error)
+      return { post: null, relatedPosts: [] }
     }
   },
 )

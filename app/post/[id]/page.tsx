@@ -79,15 +79,19 @@ export async function generateMetadata({ params }: PostPageProps, parent: Resolv
 
 export default async function PostPage({ params }: PostPageProps) {
   try {
+    console.log(`[v0] Post page rendering for ID: ${params.id}`)
     const idOrDocumentId = params.id
 
     // Use the optimized server action to fetch both post and related posts
     const { post, relatedPosts } = await getPostWithRelated(idOrDocumentId)
+    console.log(`[v0] Post data received:`, post ? "success" : "not found")
 
     if (!post) {
+      console.log(`[v0] Post ${idOrDocumentId} not found, showing 404`)
       return notFound()
     }
 
+    console.log(`[v0] Rendering post page successfully`)
     return (
       <div className="container mx-auto px-4 py-6 sm:py-8">
         <Suspense fallback={<PostDetailSkeleton />}>
@@ -96,16 +100,21 @@ export default async function PostPage({ params }: PostPageProps) {
       </div>
     )
   } catch (error) {
-    console.error("Error rendering post page:", error)
+    console.error(`[v0] Post page error:`, error)
 
-    // Return an error UI instead of notFound()
     return (
       <div className="container mx-auto px-4 py-6 sm:py-8">
         <Alert variant="destructive" className="mb-6">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
+          <AlertTitle>Something went wrong</AlertTitle>
           <AlertDescription>
-            We encountered an error loading this post. Please try again later or return to the home page.
+            We couldn't load this post. Please try again or return to the home page.
+            {process.env.NODE_ENV === "development" && (
+              <details className="mt-2 text-xs">
+                <summary>Debug Info (Development Only)</summary>
+                <pre className="mt-1 whitespace-pre-wrap">{error instanceof Error ? error.message : String(error)}</pre>
+              </details>
+            )}
           </AlertDescription>
         </Alert>
 

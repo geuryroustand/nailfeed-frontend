@@ -14,10 +14,12 @@ export const getPostWithRelated = cache(
     relatedPosts: Post[]
   }> => {
     try {
-      console.log(`Server Action: Fetching post ${idOrDocumentId} with related posts`)
-      return await fetchPostWithRelated(idOrDocumentId)
+      console.log(`[v0] Server Action: Fetching post ${idOrDocumentId} with related posts`)
+      const result = await fetchPostWithRelated(idOrDocumentId)
+      console.log(`[v0] Server Action: Fetch completed, post found: ${result.post ? "yes" : "no"}`)
+      return result
     } catch (error) {
-      console.error(`Error in getPostWithRelated for ${idOrDocumentId}:`, error)
+      console.error(`[v0] Error in getPostWithRelated for ${idOrDocumentId}:`, error)
       return { post: null, relatedPosts: [] }
     }
   },
