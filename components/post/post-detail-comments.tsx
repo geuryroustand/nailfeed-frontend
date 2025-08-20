@@ -26,7 +26,14 @@ export default function PostDetailComments({ postId, documentId }: PostDetailCom
           </div>
         }
       >
-        <FeedCommentSection postId={postId} documentId={documentId} allowViewingForAll={true} />
+        <FeedCommentSection
+          postId={postId}
+          documentId={documentId}
+          allowViewingForAll={true}
+          onCommentAdded={() => {
+            // Optional callback for when comments are added
+          }}
+        />
       </Suspense>
     </div>
   )
