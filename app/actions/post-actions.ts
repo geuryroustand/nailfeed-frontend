@@ -244,11 +244,44 @@ export async function createPost(formData: FormData) {
     const postId = result.data.id
     const postDocumentId = result.data.documentId || `doc-${postId}`
 
-    // Ensure proper cache invalidation
     revalidatePath("/", "layout")
     revalidatePath("/profile", "layout")
     revalidatePath("/explore", "layout")
     revalidatePath(`/post/${postId}`, "layout")
+
+    // Trigger immediate cache invalidation via revalidation API
+    try {
+      const revalidateUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/revalidate/post`
+      await fetch(revalidateUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.REVALIDATE_SECRET || "fallback-secret"}`,
+        },
+        body: JSON.stringify({
+          paths: ["/"],
+          tags: ["posts", "feed"],
+          postId: postId,
+        }),
+      }).catch((error) => {
+        console.log("[v0] Server Action: Revalidation API call failed:", error)
+      })
+
+      // Send message to service worker to invalidate cache
+      if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+        navigator.serviceWorker.ready
+          .then((registration) => {
+            registration.active?.postMessage({
+              type: "INVALIDATE_CACHE",
+            })
+          })
+          .catch((error) => {
+            console.log("[v0] Server Action: Service worker message failed:", error)
+          })
+      }
+    } catch (error) {
+      console.log("[v0] Server Action: Cache invalidation failed:", error)
+    }
 
     console.log("[v0] Server Action: Post creation process completed successfully")
     return {

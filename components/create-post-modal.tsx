@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useRef, useEffect, useMemo } from "react"
+import { useState, useRef, useEffect, useMemo, useCallback } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -325,6 +325,15 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
     return { isValid: true }
   }
 
+  const invalidateServiceWorkerCache = useCallback(() => {
+    if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: "INVALIDATE_CACHE",
+        pattern: "/api/posts",
+      })
+    }
+  }, [])
+
   // Modify the handleSubmit function to include content validation
   // Find the handleSubmit function and add this code at the beginning:
   const handleSubmit = async () => {
@@ -417,10 +426,16 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
         })
       }
 
+      invalidateServiceWorkerCache()
+
       // Call the server action with the new flow
       const result = await fetch("/api/posts/create", {
         method: "POST",
         body: formData,
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+        },
       })
 
       if (!result.ok) {
@@ -432,6 +447,15 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
 
       if (!responseData.success) {
         throw new Error(responseData.error || "Failed to create post")
+      }
+
+      invalidateServiceWorkerCache()
+
+      // Force a hard refresh of the page cache
+      if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: "REFRESH_CACHE",
+        })
       }
 
       // Create a new post object for the UI

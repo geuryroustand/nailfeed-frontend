@@ -26,17 +26,7 @@ export default function PWAInstaller() {
 
     window.addEventListener("beforeinstallprompt", handler)
 
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker
-        .register("/sw.js")
-        .then((registration) => {
-          console.log("SW registered: ", registration)
-        })
-        .catch((registrationError) => {
-          console.log("SW registration failed: ", registrationError)
-          // Silently fail - PWA features just won't be available
-        })
-    }
+    // The PWA plugin will automatically register the service worker
 
     return () => {
       window.removeEventListener("beforeinstallprompt", handler)

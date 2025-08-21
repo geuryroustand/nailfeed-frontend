@@ -1,5 +1,5 @@
 import type React from "react"
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
@@ -16,6 +16,7 @@ import config from "@/lib/config"
 import "@/lib/polyfills"
 import QueryProvider from "@/components/query-provider"
 import PWAInstaller from "@/components/pwa-installer"
+import PWAUpdatePrompt from "@/components/pwa-update-prompt"
 import Script from "next/script"
 
 // Initialize configuration
@@ -43,14 +44,6 @@ export const metadata: Metadata = {
     statusBarStyle: "default",
     title: "NailFeed",
   },
-  themeColor: "#ec4899",
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    minimumScale: 1,
-    userScalable: false,
-    viewportFit: "cover",
-  },
   manifest: "/manifest.json",
   icons: {
     icon: "/favicon.ico",
@@ -59,6 +52,12 @@ export const metadata: Metadata = {
   other: {
     "mobile-web-app-capable": "yes",
   },
+}
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#ec4899",
 }
 
 export default function RootLayout({
@@ -96,6 +95,7 @@ export default function RootLayout({
                     <ApiStatusIndicator />
                     <Toaster />
                     <PWAInstaller />
+                    <PWAUpdatePrompt />
                   </MoodProvider>
                 </CollectionsProvider>
               </ProfileProvider>

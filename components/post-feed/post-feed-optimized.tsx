@@ -93,6 +93,15 @@ export default function PostFeedOptimized({
     }
   }, [retryCount])
 
+  const invalidateServiceWorkerCache = useCallback(() => {
+    if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: "INVALIDATE_CACHE",
+        pattern: "/api/posts",
+      })
+    }
+  }, [])
+
   // Load initial posts
   const loadInitialPosts = useCallback(async () => {
     if (initialPosts && initialPosts.length > 0 && !initialError && retryCount === 0) {
@@ -114,7 +123,10 @@ export default function PostFeedOptimized({
     setApiError(null)
     setIsConnectionError(false)
 
+    invalidateServiceWorkerCache()
+
     try {
+      const cacheBuster = Date.now()
       const response = await refreshPostsAction()
 
       if (response.error) {
@@ -168,7 +180,7 @@ export default function PostFeedOptimized({
     } finally {
       setIsLoading(false)
     }
-  }, [initialPosts, initialError, retryCount, toast])
+  }, [initialPosts, initialError, retryCount, toast, invalidateServiceWorkerCache])
 
   // Load more posts
   const loadMorePosts = async () => {
@@ -237,9 +249,11 @@ export default function PostFeedOptimized({
       variant: "default",
     })
 
+    invalidateServiceWorkerCache()
+
     setTimeout(() => {
       loadInitialPosts()
-    }, 2000)
+    }, 500)
   }
 
   const handlePostDeleted = (postId: number) => {
