@@ -92,7 +92,7 @@
   },
   "packageManager": "npm@10",
   "engines": {
-    "node": "20.x",
-    "npm": ">=8.0.0"
+    "node": "22.x",
+    "npm": ">=10.0.0"
   }
 }
