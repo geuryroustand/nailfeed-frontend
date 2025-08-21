@@ -1,5 +1,4 @@
 import { Suspense } from "react"
-import { trackPostView } from "@/lib/actions/post-detail-actions"
 import PostDetailHeader from "./post-detail-header"
 import PostDetailContent from "./post-detail-content"
 import PostDetailActions from "./post-detail-actions"
@@ -22,11 +21,6 @@ export default async function PostDetailServerWrapper({ post, relatedPosts }: Po
     ...post,
     documentId: post.documentId || `post-${post.id}`,
   }
-
-  // Track post view (fire and forget)
-  trackPostView(post.id).catch((error) => {
-    console.error("Failed to track post view:", error)
-  })
 
   return (
     <>

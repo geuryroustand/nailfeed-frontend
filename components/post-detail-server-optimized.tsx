@@ -4,7 +4,7 @@ import type { Post } from "@/lib/post-data"
 import PostDetailSkeleton from "./post-detail-skeleton"
 import PostDetailClientWrapper from "./post-detail-client-wrapper"
 import PostContentStatic from "./post/post-content-static"
-import { trackPostView } from "@/lib/actions/post-detail-actions"
+// import { trackPostView } from "@/lib/actions/post-detail-actions"
 import EnhancedMediaGallery from "@/components/enhanced-media-gallery"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import Link from "next/link"
@@ -26,7 +26,7 @@ export default function PostDetailServerOptimized({ post, relatedPosts = [] }: P
   }
 
   // Track post view (non-blocking)
-  trackPostView(post.id).catch(console.error)
+  // trackPostView(post.id).catch(console.error)
 
   // Format the timestamp
   const formattedDate = post.createdAt ? formatBackendDate(post.createdAt) : formatDate(post.timestamp)

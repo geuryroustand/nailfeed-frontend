@@ -23,40 +23,47 @@ export const getPostWithRelated = cache(
   },
 )
 
-// Server action to track post view with analytics
+// Server action to track post view with analytics (disabled - no backend endpoint)
 export async function trackPostView(postId: number | string): Promise<void> {
-  try {
-    console.log(`Server Action: Tracking view for post ${postId}`)
-
-    // Skip tracking in development
-    if (process.env.NODE_ENV === "development") {
-      return
-    }
-
-    const apiUrl = process.env.API_URL || "https://nailfeed-backend-production.up.railway.app"
-    const endpoint = `/api/analytics/view`
-    const fullUrl = `${apiUrl}${apiUrl.endsWith("/") ? "" : "/"}${endpoint.startsWith("/") ? endpoint.substring(1) : endpoint}`
-
-    await fetch(fullUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.API_TOKEN || ""}`,
-      },
-      body: JSON.stringify({
-        postId,
-        source: "web",
-        timestamp: new Date().toISOString(),
-      }),
-    })
-
-    // Revalidate analytics data
-    revalidateTag(`analytics-${postId}`)
-  } catch (error) {
-    // Log error but don't propagate it
-    console.error(`Error tracking view for post ${postId}:`, error)
-  }
+  // Analytics tracking is disabled - no backend endpoint available
+  console.log(`Analytics tracking disabled for post ${postId}`)
+  return Promise.resolve()
 }
+
+// Server action to track post view with analytics
+// export async function trackPostView(postId: number | string): Promise<void> {
+//   try {
+//     console.log(`Server Action: Tracking view for post ${postId}`)
+
+//     // Skip tracking in development
+//     if (process.env.NODE_ENV === "development") {
+//       return
+//     }
+
+//     const apiUrl = process.env.API_URL || "https://nailfeed-backend-production.up.railway.app"
+//     const endpoint = `/api/analytics/view`
+//     const fullUrl = `${apiUrl}${apiUrl.endsWith("/") ? "" : "/"}${endpoint.startsWith("/") ? endpoint.substring(1) : endpoint}`
+
+//     await fetch(fullUrl, {
+//       method: "POST",
+//       headers: {
+//         "Content-Type": "application/json",
+//         Authorization: `Bearer ${process.env.API_TOKEN || ""}`,
+//       },
+//       body: JSON.stringify({
+//         postId,
+//         source: "web",
+//         timestamp: new Date().toISOString(),
+//       }),
+//     })
+
+//     // Revalidate analytics data
+//     revalidateTag(`analytics-${postId}`)
+//   } catch (error) {
+//     // Log error but don't propagate it
+//     console.error(`Error tracking view for post ${postId}:`, error)
+//   }
+// }
 
 // Server action to revalidate post data
 export async function revalidatePost(postId: string | number): Promise<void> {

@@ -166,14 +166,7 @@ export default function PostDetailClientWrapperOptimized({ post, relatedPosts }:
       {/* Comments section */}
       <div id="comments-section" className="bg-white rounded-xl shadow-sm overflow-hidden mb-6 p-4 sm:p-6">
         <h2 className="text-xl font-semibold mb-4">Comments</h2>
-        <FeedCommentSection
-          postId={post.id}
-          documentId={post.documentId}
-          allowViewingForAll={true}
-          onCommentAdded={() => {
-            // Optional callback for when comments are added
-          }}
-        />
+        <FeedCommentSection postId={post.id} documentId={post.documentId} allowViewingForAll={true} />
       </div>
 
       {/* Related posts */}
