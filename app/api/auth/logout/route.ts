@@ -3,11 +3,11 @@ import { cookies } from "next/headers"
 
 export async function POST() {
   try {
-    // Clear the auth cookie
-    cookies().delete("authToken")
+    const cookiesToClear = ["authToken", "jwt", "auth_token", "userId", "pendingVerificationEmail", "user", "session"]
 
-    // Clear any other cookies we might have set
-    cookies().delete("pendingVerificationEmail")
+    cookiesToClear.forEach((cookieName) => {
+      cookies().delete(cookieName)
+    })
 
     return NextResponse.json({ success: true })
   } catch (error) {

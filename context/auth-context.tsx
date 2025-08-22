@@ -71,6 +71,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = async () => {
+    setUser(null)
+    setJwt(null)
+    setIsAuthenticated(false)
+
     try {
       const response = await fetch("/api/auth/logout", {
         method: "POST",
@@ -80,23 +84,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error("Logout failed")
       }
 
-      setUser(null)
-      setJwt(null)
-      setIsAuthenticated(false)
+      const cookiesToClear = ["authToken", "jwt", "auth_token", "userId", "pendingVerificationEmail", "user", "session"]
 
-      document.cookie = "authToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
-      document.cookie = "jwt=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
-      document.cookie = "auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
-      document.cookie = "userId=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;"
+      cookiesToClear.forEach((cookieName) => {
+        // Clear with multiple path and domain combinations to ensure complete removal
+        document.cookie = `${cookieName}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax;`
+        document.cookie = `${cookieName}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax; domain=${window.location.hostname};`
+        document.cookie = `${cookieName}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax; domain=.${window.location.hostname};`
+      })
 
       router.push("/auth")
       router.refresh()
+
+      // Additional cleanup - clear any localStorage/sessionStorage if used
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("user")
+        localStorage.removeItem("jwt")
+        localStorage.removeItem("authToken")
+        sessionStorage.removeItem("user")
+        sessionStorage.removeItem("jwt")
+        sessionStorage.removeItem("authToken")
+      }
     } catch (error) {
       console.error("Logout error:", error)
-      setUser(null)
-      setJwt(null)
-      setIsAuthenticated(false)
       router.push("/auth")
+      router.refresh()
     }
   }
 
