@@ -83,19 +83,6 @@ export class PostService {
             populate: { file: { fields: ["url", "formats"] } },
           },
           tags: { fields: ["id", "name", "documentId"] },
-          likes: {
-            fields: ["type", "createdAt"],
-            populate: {
-              user: {
-                fields: ["username", "email"],
-                populate: {
-                  profileImage: {
-                    fields: ["url", "formats"],
-                  },
-                },
-              },
-            },
-          },
         },
         pagination: { page, pageSize },
         sort: ["publishedAt:desc"],
@@ -167,19 +154,6 @@ export class PostService {
             populate: { file: { fields: ["url", "formats"] } },
           },
           tags: { fields: ["id", "name", "documentId"] },
-          likes: {
-            fields: ["type", "createdAt"],
-            populate: {
-              user: {
-                fields: ["username", "email"],
-                populate: {
-                  profileImage: {
-                    fields: ["url", "formats"],
-                  },
-                },
-              },
-            },
-          },
         },
         sort: ["publishedAt:desc"],
         pagination: { pageSize: 50 },
@@ -240,19 +214,6 @@ export class PostService {
             populate: { file: { fields: ["url", "formats"] } },
           },
           tags: { fields: ["id", "name", "documentId"] },
-          likes: {
-            fields: ["type", "createdAt"],
-            populate: {
-              user: {
-                fields: ["username", "email"],
-                populate: {
-                  profileImage: {
-                    fields: ["url", "formats"],
-                  },
-                },
-              },
-            },
-          },
         },
         ...(!isNumericId ? { filters: { documentId: { $eq: idOrDocumentId } } } : {}),
       }
@@ -405,19 +366,6 @@ export class PostService {
                   populate: { file: { fields: ["url", "formats"] } },
                 },
                 tags: { fields: ["id", "name", "documentId"] },
-                likes: {
-                  fields: ["type", "createdAt"],
-                  populate: {
-                    user: {
-                      fields: ["username", "email"],
-                      populate: {
-                        profileImage: {
-                          fields: ["url", "formats"],
-                        },
-                      },
-                    },
-                  },
-                },
               },
             },
             { encodeValuesOnly: true },

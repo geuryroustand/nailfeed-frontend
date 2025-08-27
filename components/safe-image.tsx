@@ -3,7 +3,7 @@
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
 import { getAbsoluteImageUrl } from "@/lib/image-utils"
-import { MediaItem } from "./media-item"
+// import { MediaItem } from "./media-item" // Removed due to circular dependency
 
 interface SafeImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   showPlaceholder?: boolean
@@ -95,5 +95,5 @@ export function SafeImage({ src, alt = "Image", showPlaceholder = true, classNam
     )
   }
 
-  return <MediaItem src={imgSrc} alt={alt} className={className} onError={handleError} {...props} />
+  return <img src={imgSrc || "/placeholder.svg"} alt={alt} className={className} onError={handleError} {...props} />
 }

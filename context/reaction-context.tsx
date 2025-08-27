@@ -3,12 +3,7 @@
 import type React from "react"
 import { createContext, useContext, useState, useCallback } from "react"
 import { useAuth } from "@/context/auth-context"
-import {
-  getUserReaction as getUserReactionAction,
-  addReaction as addReactionAction,
-  getReactionCounts as getReactionCountsAction,
-  type ReactionType,
-} from "@/app/actions/reaction-actions"
+import { ReactionService, type ReactionType } from "@/lib/services/reaction-service"
 
 interface ReactionContextType {
   getUserReaction: (postId: number | string) => Promise<{ id: string; type: ReactionType } | null>
@@ -30,7 +25,7 @@ export function ReactionProvider({ children }: { children: React.ReactNode }) {
           return null
         }
 
-        const result = await getUserReactionAction(postId)
+        const result = await ReactionService.getUserReaction(postId)
         return result
       } catch (error) {
         console.error("Error getting user reaction:", error)
@@ -47,21 +42,17 @@ export function ReactionProvider({ children }: { children: React.ReactNode }) {
           throw new Error("User not authenticated")
         }
 
-        const result = await addReactionAction(postId, type, documentId)
+        const result = await ReactionService.addReaction(postId, type, documentId, user.id, user.documentId)
 
-        if (!result.success) {
-          throw new Error(result.error || "Failed to add reaction")
-        }
-
-        // Invalidate cache for this post
         setCache((prev) => {
           const newCache = { ...prev }
           delete newCache[`counts-${postId}`]
           delete newCache[`detailed-${postId}`]
+          delete newCache[`user-reaction-${postId}`]
           return newCache
         })
 
-        return result.reaction
+        return result
       } catch (error) {
         console.error("Error adding reaction:", error)
         throw error
@@ -80,7 +71,7 @@ export function ReactionProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const counts = await getReactionCountsAction(postId)
+        const counts = await ReactionService.getReactionCounts(postId)
 
         // Cache the result
         setCache((prev) => ({
@@ -114,7 +105,7 @@ export function ReactionProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const detailed = await getReactionCountsAction(postId)
+        const detailed = await ReactionService.getReactionCounts(postId)
 
         // Cache the result
         setCache((prev) => ({

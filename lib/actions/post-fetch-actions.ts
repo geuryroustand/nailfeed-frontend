@@ -37,6 +37,7 @@ function transformStrapiPost(post: any): Post {
     console.log("[v0] Tags extracted:", tags)
 
     const likes = post.likes?.data || post.likes || []
+    console.log("[v0] Processing likes with user data:", likes)
 
     // Get the first media item URL or use a placeholder
     let imageUrl = "/intricate-nail-art.png"
@@ -47,17 +48,27 @@ function transformStrapiPost(post: any): Post {
         const firstMedia = mediaItems[0].attributes || mediaItems[0]
         const fileData = firstMedia.file?.data?.attributes || firstMedia.file
 
-        // Check all possible paths for the image URL
-        if (fileData?.url) {
-          imageUrl = normalizeImageUrl(fileData.url)
-        } else if (fileData?.formats?.medium?.url) {
-          imageUrl = normalizeImageUrl(fileData.formats.medium.url)
-        } else if (fileData?.formats?.small?.url) {
-          imageUrl = normalizeImageUrl(fileData.formats.small.url)
-        } else if (fileData?.formats?.thumbnail?.url) {
-          imageUrl = normalizeImageUrl(fileData.formats.thumbnail.url)
+        const mediaType = firstMedia.type || "image"
+
+        if (mediaType === "video") {
+          // For videos, use the direct URL without trying to access image formats
+          if (fileData?.url) {
+            imageUrl = normalizeImageUrl(fileData.url)
+            console.log("[v0] Video URL extracted:", imageUrl)
+          }
+        } else {
+          // For images, check all possible paths for the image URL
+          if (fileData?.url) {
+            imageUrl = normalizeImageUrl(fileData.url)
+          } else if (fileData?.formats?.medium?.url) {
+            imageUrl = normalizeImageUrl(fileData.formats.medium.url)
+          } else if (fileData?.formats?.small?.url) {
+            imageUrl = normalizeImageUrl(fileData.formats.small.url)
+          } else if (fileData?.formats?.thumbnail?.url) {
+            imageUrl = normalizeImageUrl(fileData.formats.thumbnail.url)
+          }
+          console.log("[v0] Image URL extracted:", imageUrl)
         }
-        console.log("[v0] Image URL extracted:", imageUrl)
       } catch (mediaError) {
         console.error("[v0] Error processing media items:", mediaError)
         // Keep default image URL
@@ -89,21 +100,31 @@ function transformStrapiPost(post: any): Post {
       try {
         const itemData = item.attributes || item
         const fileData = itemData.file?.data?.attributes || itemData.file
+        const mediaType = itemData.type || "image"
 
         let url = ""
-        if (fileData?.url) {
-          url = normalizeImageUrl(fileData.url)
-        } else if (fileData?.formats?.medium?.url) {
-          url = normalizeImageUrl(fileData.formats.medium.url)
-        } else if (fileData?.formats?.small?.url) {
-          url = normalizeImageUrl(fileData.formats.small.url)
-        } else if (fileData?.formats?.thumbnail?.url) {
-          url = normalizeImageUrl(fileData.formats.thumbnail.url)
+
+        if (mediaType === "video") {
+          // For videos, use the direct URL
+          if (fileData?.url) {
+            url = normalizeImageUrl(fileData.url)
+          }
+        } else {
+          // For images, try different format sizes
+          if (fileData?.url) {
+            url = normalizeImageUrl(fileData.url)
+          } else if (fileData?.formats?.medium?.url) {
+            url = normalizeImageUrl(fileData.formats.medium.url)
+          } else if (fileData?.formats?.small?.url) {
+            url = normalizeImageUrl(fileData.formats.small.url)
+          } else if (fileData?.formats?.thumbnail?.url) {
+            url = normalizeImageUrl(fileData.formats.thumbnail.url)
+          }
         }
 
         return {
           id: item.id || `media-${index}`,
-          type: itemData.type || "image",
+          type: mediaType,
           url: url,
         }
       } catch (itemError) {
@@ -193,7 +214,6 @@ export const fetchPostById = cache(async (id: string | number): Promise<Post | n
           },
         },
         tags: true,
-        likes: true, // Include likes in the query
       },
     }
 
@@ -328,7 +348,6 @@ export const fetchRelatedPosts = cache(async (postId: string | number, tags: str
           },
         },
         tags: true,
-        likes: true, // Include likes in the query
       },
       pagination: {
         limit,

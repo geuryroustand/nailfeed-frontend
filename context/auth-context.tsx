@@ -52,18 +52,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setJwt(_jwt || null)
         setIsAuthenticated(true)
 
+        if (typeof window !== "undefined") {
+          localStorage.setItem("user", JSON.stringify(userDataWithoutJwt))
+          if (_jwt) {
+            localStorage.setItem("jwt", _jwt)
+          }
+        }
+
         console.log("[v0] JWT token set in context:", !!_jwt)
       } else {
         console.log("[v0] No authenticated user found, clearing state")
         setUser(null)
         setJwt(null)
         setIsAuthenticated(false)
+
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("user")
+          localStorage.removeItem("jwt")
+        }
       }
     } catch (error) {
       console.error("[v0] Auth check error:", error)
       setUser(null)
       setJwt(null)
       setIsAuthenticated(false)
+
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("user")
+        localStorage.removeItem("jwt")
+      }
     } finally {
       setIsLoading(false)
       isCheckingAuth.current = false
@@ -120,6 +137,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(userData)
       setIsAuthenticated(true)
       setJwt(token || null)
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem("user", JSON.stringify(userData))
+        if (token) {
+          localStorage.setItem("jwt", token)
+        }
+      }
     }
   }
 

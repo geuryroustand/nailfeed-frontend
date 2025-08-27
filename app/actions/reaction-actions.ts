@@ -16,7 +16,7 @@ export async function getUserReaction(postId: string | number): Promise<{ id: st
     }
 
     const response = await fetch(
-      `${API_URL}/api/likes?filters[post][id][$eq]=${postId}&filters[user][id][$eq]=${user.id}`,
+      `${API_URL}/api/likes?filters[$or][0][post][id][$eq]=${postId}&filters[$or][1][post][documentId][$eq]=${postId}&filters[user][id][$eq]=${user.id}`,
       {
         method: "GET",
         headers: {
@@ -155,13 +155,16 @@ export async function getReactionCounts(
   postId: string | number,
 ): Promise<Record<ReactionType, { count: number; users: any[] }>> {
   try {
-    const response = await fetch(`${API_URL}/api/likes?filters[post][id][$eq]=${postId}&populate=user`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.API_TOKEN}`,
+    const response = await fetch(
+      `${API_URL}/api/likes?filters[$or][0][post][id][$eq]=${postId}&filters[$or][1][post][documentId][$eq]=${postId}&populate=user`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.API_TOKEN}`,
+        },
       },
-    })
+    )
 
     if (!response.ok) {
       console.error(`Failed to get reaction counts: ${response.status}`)
@@ -190,18 +193,18 @@ export async function getReactionCounts(
     // Count reactions by type and collect user information
     if (data.data && Array.isArray(data.data)) {
       data.data.forEach((reaction: any) => {
-        const type = reaction.attributes?.type as ReactionType
-        const userData = reaction.attributes?.user?.data?.attributes
+        const type = (reaction.attributes?.type || reaction.type) as ReactionType
+        const userData = reaction.attributes?.user?.data?.attributes || reaction.user
 
         if (type && reactionData[type] !== undefined) {
           reactionData[type].count++
 
           if (userData) {
             const user = {
-              id: reaction.attributes?.user?.data?.id,
+              id: reaction.attributes?.user?.data?.id || reaction.user?.id,
               username: userData.username || "user",
               displayName: userData.displayName || userData.username,
-              avatar: userData.avatar?.data?.attributes?.url || null,
+              avatar: userData.avatar?.data?.attributes?.url || userData.profileImage?.url || null,
             }
             reactionData[type].users.push(user)
           }

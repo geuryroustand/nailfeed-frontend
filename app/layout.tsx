@@ -18,6 +18,7 @@ import QueryProvider from "@/components/query-provider"
 import PWAInstaller from "@/components/pwa-installer"
 import PWAUpdatePrompt from "@/components/pwa-update-prompt"
 import Script from "next/script"
+import FirstTimeVisitorNotification from "@/components/first-time-visitor-notification"
 
 // Initialize configuration
 config.initialize()
@@ -96,6 +97,7 @@ export default function RootLayout({
                     <Toaster />
                     <PWAInstaller />
                     <PWAUpdatePrompt />
+                    <FirstTimeVisitorNotification />
                   </MoodProvider>
                 </CollectionsProvider>
               </ProfileProvider>

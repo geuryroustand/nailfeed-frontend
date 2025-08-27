@@ -16,6 +16,9 @@ interface ReactionButtonProps {
   onReactionChange?: (type: ReactionType | null) => void
   className?: string
   showCount?: boolean
+  initialReactionCounts?: Record<ReactionType, number>
+  initialTotalCount?: number
+  initialUserReaction?: { id: string; type: ReactionType } | null
 }
 
 export function ReactionButton({
@@ -24,6 +27,9 @@ export function ReactionButton({
   onReactionChange,
   className,
   showCount = true,
+  initialReactionCounts,
+  initialTotalCount,
+  initialUserReaction,
 }: ReactionButtonProps) {
   const [showReactions, setShowReactions] = useState(false)
   const [currentReaction, setCurrentReaction] = useState<ReactionType | null>(null)
@@ -45,22 +51,66 @@ export function ReactionButton({
   const buttonRef = useRef<HTMLButtonElement>(null)
   const hasAttemptedLoad = useRef(false)
 
-  // Memoize the loadReactionData function to prevent unnecessary re-renders
+  useEffect(() => {
+    console.log("[v0] ReactionButton mounted with:", {
+      postId,
+      postDocumentId,
+      hasInitialData: !!(initialReactionCounts && initialTotalCount !== undefined && initialUserReaction !== undefined),
+      initialReactionCounts,
+      initialTotalCount,
+      initialUserReaction,
+    })
+
+    if (initialReactionCounts && initialTotalCount !== undefined && initialUserReaction !== undefined) {
+      console.log("[v0] Using initial reaction data:", {
+        initialReactionCounts,
+        initialTotalCount,
+        initialUserReaction,
+      })
+      setReactionCounts(initialReactionCounts)
+      setTotalCount(initialTotalCount)
+
+      if (initialUserReaction) {
+        setCurrentReaction(initialUserReaction.type)
+        setUserReactionId(initialUserReaction.id)
+        if (onReactionChange) {
+          onReactionChange(initialUserReaction.type)
+        }
+      } else {
+        setCurrentReaction(null)
+        setUserReactionId(null)
+        if (onReactionChange) {
+          onReactionChange(null)
+        }
+      }
+
+      hasAttemptedLoad.current = true
+      return
+    } else {
+      console.log("[v0] No initial reaction data provided, will fetch from API")
+    }
+  }, [initialReactionCounts, initialTotalCount, initialUserReaction, onReactionChange])
+
   const loadReactionData = useCallback(async () => {
-    // Skip if we're not authenticated or user is not available
-    if (!isAuthenticated || !user) {
+    if (hasAttemptedLoad.current || !isAuthenticated || !user) {
+      console.log("[v0] loadReactionData early return:", {
+        hasAttemptedLoad: hasAttemptedLoad.current,
+        isAuthenticated,
+        hasUser: !!user,
+      })
       return
     }
 
+    console.log("[v0] loadReactionData starting API calls for postId:", postId)
+
     try {
-      // Get user's current reaction
       const userReaction = await getUserReaction(postId)
+      console.log("[v0] getUserReaction result:", userReaction)
 
       if (userReaction) {
         setCurrentReaction(userReaction.type as ReactionType)
         setUserReactionId(userReaction.id)
 
-        // Notify parent component if callback provided
         if (onReactionChange) {
           onReactionChange(userReaction.type as ReactionType)
         }
@@ -68,91 +118,96 @@ export function ReactionButton({
         setCurrentReaction(null)
         setUserReactionId(null)
 
-        // Notify parent component if callback provided
         if (onReactionChange) {
           onReactionChange(null)
         }
       }
 
-      // Get reaction counts
       const counts = await getReactionCounts(postId)
+      console.log("[v0] getReactionCounts result:", counts)
 
-      if (counts && counts.reactions) {
-        // New structure with users
+      if (counts) {
         setReactionCounts({
-          like: counts.reactions.like.count,
-          love: counts.reactions.love.count,
-          haha: counts.reactions.haha.count,
-          wow: counts.reactions.wow.count,
-          sad: counts.reactions.sad.count,
-          angry: counts.reactions.angry.count,
+          like: counts.like?.count || 0,
+          love: counts.love?.count || 0,
+          haha: counts.haha?.count || 0,
+          wow: counts.wow?.count || 0,
+          sad: counts.sad?.count || 0,
+          angry: counts.angry?.count || 0,
         })
-      } else {
-        // Fallback to old structure or empty counts
-        setReactionCounts(
-          counts || {
-            like: 0,
-            love: 0,
-            haha: 0,
-            wow: 0,
-            sad: 0,
-            angry: 0,
-          },
-        )
-      }
 
-      // Calculate total count
-      const total = Object.values(counts).reduce((sum, count) => sum + count, 0)
-      setTotalCount(total)
+        const total = Object.values(counts).reduce((sum, reactionData: any) => sum + (reactionData?.count || 0), 0)
+        setTotalCount(total)
+      } else {
+        setReactionCounts({
+          like: 0,
+          love: 0,
+          haha: 0,
+          wow: 0,
+          sad: 0,
+          angry: 0,
+        })
+        setTotalCount(0)
+      }
     } catch (error) {
       console.error("ReactionButton: Error loading reaction data:", error)
     }
   }, [postId, getUserReaction, getReactionCounts, isAuthenticated, user, onReactionChange])
 
-  // Load initial reaction and counts
   useEffect(() => {
+    console.log("[v0] Authenticated user effect:", {
+      postId,
+      isAuthenticated,
+      hasAttemptedLoad: hasAttemptedLoad.current,
+    })
+
     if (postId && isAuthenticated && !hasAttemptedLoad.current) {
       hasAttemptedLoad.current = true
+      console.log("[v0] Calling loadReactionData for authenticated user")
       loadReactionData()
     }
   }, [postId, loadReactionData, isAuthenticated])
 
-  // Load reaction counts even for unauthenticated users
   useEffect(() => {
+    console.log("[v0] Unauthenticated user effect:", {
+      postId,
+      hasAttemptedLoad: hasAttemptedLoad.current,
+    })
+
     if (postId && !hasAttemptedLoad.current) {
       hasAttemptedLoad.current = true
+      console.log("[v0] Loading reaction counts for unauthenticated user")
 
-      // Only get counts for unauthenticated users
       const loadCounts = async () => {
         try {
+          console.log("[v0] Calling getReactionCounts for unauthenticated user, postId:", postId)
           const counts = await getReactionCounts(postId)
+          console.log("[v0] getReactionCounts result for unauthenticated user:", counts)
 
-          if (counts && counts.reactions) {
+          if (counts) {
             setReactionCounts({
-              like: counts.reactions.like.count,
-              love: counts.reactions.love.count,
-              haha: counts.reactions.haha.count,
-              wow: counts.reactions.wow.count,
-              sad: counts.reactions.sad.count,
-              angry: counts.reactions.angry.count,
+              like: counts.like?.count || 0,
+              love: counts.love?.count || 0,
+              haha: counts.haha?.count || 0,
+              wow: counts.wow?.count || 0,
+              sad: counts.sad?.count || 0,
+              angry: counts.angry?.count || 0,
             })
-          } else {
-            setReactionCounts(
-              counts || {
-                like: 0,
-                love: 0,
-                haha: 0,
-                wow: 0,
-                sad: 0,
-                angry: 0,
-              },
-            )
-          }
 
-          const total = Object.values(counts).reduce((sum, count) => sum + count, 0)
-          setTotalCount(total)
+            const total = Object.values(counts).reduce((sum, reactionData: any) => sum + (reactionData?.count || 0), 0)
+            setTotalCount(total)
+          } else {
+            setReactionCounts({
+              like: 0,
+              love: 0,
+              haha: 0,
+              wow: 0,
+              sad: 0,
+              angry: 0,
+            })
+            setTotalCount(0)
+          }
         } catch (error) {
-          // Silently fail for unauthenticated users
           console.error("Error loading reaction counts for unauthenticated user:", error)
         }
       }
@@ -161,7 +216,6 @@ export function ReactionButton({
     }
   }, [postId, getReactionCounts])
 
-  // Handle clicking outside the reactions panel
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -183,12 +237,9 @@ export function ReactionButton({
     }
   }, [showReactions])
 
-  // Handle mouse movement for better UX with the reaction selector
   useEffect(() => {
-    // Handle mouse leave events for the reaction button
     const handleMouseMove = (event: MouseEvent) => {
       if (reactionsRef.current && !reactionsRef.current.contains(event.target as Node) && showReactions) {
-        // Check if mouse has moved far enough away from the reaction button
         const rect = reactionsRef.current.getBoundingClientRect()
         const isOutsideHorizontal = event.clientX < rect.left - 50 || event.clientX > rect.right + 50
         const isOutsideVertical = event.clientY < rect.top - 50 || event.clientY > rect.bottom + 50
@@ -218,7 +269,6 @@ export function ReactionButton({
       return
     }
 
-    // Prevent multiple simultaneous reaction requests
     if (isProcessingReaction) {
       return
     }
@@ -226,27 +276,34 @@ export function ReactionButton({
     setIsProcessingReaction(true)
 
     try {
-      // Store previous state for rollback if needed
       const previousReaction = currentReaction
       const previousCounts = { ...reactionCounts }
       const previousReactionId = userReactionId
 
-      // Determine if we're removing a reaction (clicking the same reaction again)
       const isRemovingReaction = currentReaction === type
-      const newReaction = isRemovingReaction ? null : type
+      const isChangingReaction = currentReaction && currentReaction !== type
+      const isAddingNewReaction = !currentReaction
 
-      // Update local state immediately for responsive UI
+      console.log("[v0] Reaction changed to:", type)
+      console.log("[v0] Current reaction state:", {
+        currentReaction,
+        isRemovingReaction,
+        isChangingReaction,
+        isAddingNewReaction,
+      })
+
+      // Update UI optimistically
+      const newReaction = isRemovingReaction ? null : type
       setCurrentReaction(newReaction)
 
-      // Update counts optimistically
       const newCounts = { ...reactionCounts }
 
-      // If user had a previous reaction, decrease that count
+      // Remove count from previous reaction if exists
       if (currentReaction) {
         newCounts[currentReaction] = Math.max(0, newCounts[currentReaction] - 1)
       }
 
-      // If adding a new reaction, increase that count
+      // Add count to new reaction if not removing
       if (newReaction) {
         newCounts[newReaction] = newCounts[newReaction] + 1
       }
@@ -254,31 +311,29 @@ export function ReactionButton({
       setReactionCounts(newCounts)
       setTotalCount(Object.values(newCounts).reduce((sum, count) => sum + count, 0))
 
-      // Hide the reactions panel immediately for better UX
       setShowReactions(false)
 
-      // Notify parent component immediately
       if (onReactionChange) {
         onReactionChange(newReaction)
       }
 
-      // Call the API in the background
       addReaction(postId, type, postDocumentId, user.id, user.documentId)
         .then((result) => {
-          // Update the reaction ID if we got a new one
+          console.log("[v0] addReaction result:", result)
+
           if (result && result.id) {
             setUserReactionId(result.id)
           } else if (isRemovingReaction) {
             setUserReactionId(null)
           }
 
-          // Show success toast based on the action performed
+          // Show appropriate toast message
           if (isRemovingReaction) {
             toast({
               title: "Reaction removed",
               description: "Your reaction has been removed",
             })
-          } else if (previousReaction) {
+          } else if (isChangingReaction) {
             toast({
               title: "Reaction changed",
               description: `Changed your reaction to ${type}`,
@@ -290,53 +345,68 @@ export function ReactionButton({
             })
           }
 
-          // Refresh counts after API call to ensure accuracy
+          // Refresh counts from server to ensure accuracy
           return getReactionCounts(postId)
         })
         .then((updatedCounts) => {
-          if (updatedCounts && updatedCounts.reactions) {
-            // New structure with users
+          if (updatedCounts) {
             setReactionCounts({
-              like: updatedCounts.reactions.like.count,
-              love: updatedCounts.reactions.love.count,
-              haha: updatedCounts.reactions.haha.count,
-              wow: updatedCounts.reactions.wow.count,
-              sad: updatedCounts.reactions.sad.count,
-              angry: updatedCounts.reactions.angry.count,
+              like: updatedCounts.like?.count || 0,
+              love: updatedCounts.love?.count || 0,
+              haha: updatedCounts.haha?.count || 0,
+              wow: updatedCounts.wow?.count || 0,
+              sad: updatedCounts.sad?.count || 0,
+              angry: updatedCounts.angry?.count || 0,
             })
-          } else {
-            // Fallback to old structure or empty counts
-            setReactionCounts(
-              updatedCounts || {
-                like: 0,
-                love: 0,
-                haha: 0,
-                wow: 0,
-                sad: 0,
-                angry: 0,
-              },
+
+            const total = Object.values(updatedCounts).reduce(
+              (sum, reactionData: any) => sum + (reactionData?.count || 0),
+              0,
             )
+            setTotalCount(total)
           }
 
-          setTotalCount(Object.values(updatedCounts).reduce((sum, count) => sum + count, 0))
+          // Refresh user reaction state to ensure UI shows correct current reaction
+          return getUserReaction(postId)
+        })
+        .then((updatedUserReaction) => {
+          console.log("[v0] Refreshed user reaction after operation:", updatedUserReaction)
+
+          if (updatedUserReaction) {
+            setCurrentReaction(updatedUserReaction.type as ReactionType)
+            setUserReactionId(updatedUserReaction.id)
+            if (onReactionChange) {
+              onReactionChange(updatedUserReaction.type as ReactionType)
+            }
+          } else {
+            setCurrentReaction(null)
+            setUserReactionId(null)
+            if (onReactionChange) {
+              onReactionChange(null)
+            }
+          }
+
+          window.dispatchEvent(
+            new CustomEvent("reactionUpdated", {
+              detail: { postId: String(postId) },
+            }),
+          )
         })
         .catch((error) => {
           console.error("ReactionButton: Error from API call:", error)
 
-          // Show error toast
           toast({
             title: "Error",
             description: "Failed to update your reaction. Reverting to previous state.",
             variant: "destructive",
           })
 
-          // Revert to previous state
+          // Revert to previous state on error
           setCurrentReaction(previousReaction)
           setReactionCounts(previousCounts)
           setTotalCount(Object.values(previousCounts).reduce((sum, count) => sum + count, 0))
           setUserReactionId(previousReactionId)
 
-          // Notify parent component of the reversion
           if (onReactionChange) {
             onReactionChange(previousReaction)
           }
@@ -468,7 +538,6 @@ export function ReactionButton({
         )}
       </motion.button>
 
-      {/* Reactions panel */}
       <AnimatePresence>
         {showReactions && isAuthenticated && !isProcessingReaction && (
           <motion.div

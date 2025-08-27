@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   X,
@@ -18,6 +18,7 @@ import {
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useAuth } from "@/hooks/use-auth"
 
 interface MobileMenuProps {
   isOpen: boolean
@@ -26,9 +27,8 @@ interface MobileMenuProps {
 }
 
 export default function MobileMenu({ isOpen, onClose, activeItem = "home" }: MobileMenuProps) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const { isAuthenticated, user } = useAuth()
 
-  // Close menu when pressing escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose()
@@ -36,7 +36,6 @@ export default function MobileMenu({ isOpen, onClose, activeItem = "home" }: Mob
 
     if (isOpen) {
       document.addEventListener("keydown", handleEscape)
-      // Prevent body scrolling when menu is open
       document.body.style.overflow = "hidden"
     }
 
@@ -116,11 +115,11 @@ export default function MobileMenu({ isOpen, onClose, activeItem = "home" }: Mob
               {isAuthenticated ? (
                 <div className="flex items-center">
                   <Avatar className="h-8 w-8">
-                    <AvatarImage src="/diverse-avatars.png" alt="Your profile" />
-                    <AvatarFallback>YP</AvatarFallback>
+                    <AvatarImage src={user?.profileImage?.url || "/diverse-avatars.png"} alt="Your profile" />
+                    <AvatarFallback>{user?.username?.substring(0, 2).toUpperCase() || "YP"}</AvatarFallback>
                   </Avatar>
                   <div className="ml-3">
-                    <p className="text-sm font-medium">Your Profile</p>
+                    <p className="text-sm font-medium">{user?.displayName || user?.username || "Your Profile"}</p>
                   </div>
                 </div>
               ) : (

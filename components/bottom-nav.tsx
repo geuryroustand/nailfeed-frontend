@@ -5,6 +5,7 @@ import { motion } from "framer-motion"
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import MobileMenu from "./mobile-menu"
+import { useAuth } from "@/hooks/use-auth"
 
 interface BottomNavProps {
   activeTab?: string
@@ -12,7 +13,7 @@ interface BottomNavProps {
 
 export default function BottomNav({ activeTab: initialActiveTab = "home" }: BottomNavProps) {
   const [activeTab, setActiveTab] = useState(initialActiveTab)
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const { isAuthenticated } = useAuth()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   // Update active tab when prop changes

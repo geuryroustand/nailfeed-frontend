@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -11,6 +12,17 @@ interface ReactionUser {
   username: string
   displayName?: string
   avatar?: string
+  profileImage?: {
+    url: string
+    formats?: {
+      thumbnail?: {
+        url: string
+      }
+      small?: {
+        url: string
+      }
+    }
+  }
 }
 
 interface ReactionItem {
@@ -100,9 +112,21 @@ export function ReactionModal({ open, onOpenChange, reactions, totalCount, postI
     return user.displayName || user.username || `User ${user.id}`
   }
 
-  // Helper function to get avatar URL with fallback
-  const getAvatarUrl = (user) => {
-    return user.avatar || `/placeholder.svg?height=40&width=40&query=user`
+  // Helper function to get avatar URL with Cloudinary small format
+  const getAvatarUrl = (user: ReactionUser) => {
+    if (user.profileImage?.formats?.small?.url) {
+      return user.profileImage.formats.small.url
+    }
+    if (user.profileImage?.formats?.thumbnail?.url) {
+      return user.profileImage.formats.thumbnail.url
+    }
+    if (user.profileImage?.url) {
+      return user.profileImage.url
+    }
+    if (user.avatar) {
+      return user.avatar
+    }
+    return `/placeholder.svg?height=40&width=40&query=user`
   }
 
   return (
@@ -147,11 +171,13 @@ export function ReactionModal({ open, onOpenChange, reactions, totalCount, postI
                       key={user.id}
                       className="flex items-center gap-3 p-2 hover:bg-gray-100 rounded-md transition-colors"
                     >
-                      <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-200">
-                        <img
+                      <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-200 relative">
+                        <Image
                           src={getAvatarUrl(user) || "/placeholder.svg"}
                           alt={getUserDisplayName(user)}
-                          className="w-full h-full object-cover"
+                          fill
+                          className="object-cover"
+                          sizes="40px"
                           onError={(e) => {
                             e.currentTarget.src = `/placeholder.svg?height=40&width=40&query=user`
                           }}

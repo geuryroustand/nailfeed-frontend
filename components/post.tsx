@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { MessageCircle, MoreHorizontal, Trash2, AlertCircle } from "lucide-react"
+import { MessageCircle, MoreHorizontal, Trash2, AlertCircle, Heart } from "lucide-react"
 import Link from "next/link"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import type { BackgroundType } from "./post-background-selector"
@@ -24,9 +24,6 @@ import { CommentsService } from "@/lib/services/comments-service"
 
 // Import the date utility function
 import { formatDate, formatBackendDate } from "@/lib/date-utils"
-
-// Import the ReactionButton component
-import { ReactionButton } from "./reaction-button"
 
 import { ReactionService } from "@/lib/services/reaction-service"
 
@@ -94,6 +91,7 @@ interface PostProps {
   onSave?: (postId: number) => void
   onShare?: (postId: number) => void
   className?: string
+  compact?: boolean
 }
 
 type Reaction = "like" | "love" | "haha" | "wow" | "sad" | "angry" | null
@@ -117,7 +115,8 @@ export default function Post({
   onComment,
   onSave,
   onShare,
-  className,
+  className = "",
+  compact = false,
 }: PostProps) {
   const [modalOpen, setModalOpen] = useState(false)
   const [reaction, setReaction] = useState<Reaction>(null)
@@ -143,6 +142,8 @@ export default function Post({
   const [imageError, setImageError] = useState(false)
   const { user, isAuthenticated } = useAuth() || { user: null, isAuthenticated: false }
   const [showComments, setShowComments] = useState(false)
+  const [isReactionLoading, setIsReactionLoading] = useState(false) // Declare isReactionLoading
+  const [totalReactionCount, setTotalReactionCount] = useState(0) // Declare totalReactionCount
 
   // Inside the Post component, add a new state for the try-on modal
   const [tryOnModalOpen, setTryOnModalOpen] = useState(false)
@@ -173,114 +174,151 @@ export default function Post({
   >([])
 
   useEffect(() => {
-    console.log("🔍 Post likes data:", post.likes)
-    console.log("🔍 Post object:", post)
+    const fetchReactions = async () => {
+      try {
+        console.log("🔍 Fetching reactions for post documentId:", post.documentId)
 
-    if (post.likes && Array.isArray(post.likes)) {
-      console.log("✅ Processing likes array with", post.likes.length, "items")
+        // Use documentId for Strapi v5 API call
+        const reactionData = await ReactionService.getReactionCounts(post.documentId)
+        console.log("🔍 Reaction data received:", reactionData)
 
-      // Group likes by type and count them
-      const reactionCounts = post.likes.reduce(
-        (acc, like) => {
-          console.log("🔍 Processing like:", like)
-          const type = like.type || "like"
-          if (!acc[type]) {
-            acc[type] = { count: 0, users: [] }
-          }
-          acc[type].count++
+        // Transform to the expected format
+        const transformedReactions = [
+          {
+            emoji: "👍",
+            label: "like",
+            count: reactionData.like?.count || 0,
+            users: reactionData.like?.users || [],
+          },
+          {
+            emoji: "❤️",
+            label: "love",
+            count: reactionData.love?.count || 0,
+            users: reactionData.love?.users || [],
+          },
+          {
+            emoji: "😂",
+            label: "haha",
+            count: reactionData.haha?.count || 0,
+            users: reactionData.haha?.users || [],
+          },
+          {
+            emoji: "😮",
+            label: "wow",
+            count: reactionData.wow?.count || 0,
+            users: reactionData.wow?.users || [],
+          },
+          {
+            emoji: "😢",
+            label: "sad",
+            count: reactionData.sad?.count || 0,
+            users: reactionData.sad?.users || [],
+          },
+          {
+            emoji: "😡",
+            label: "angry",
+            count: reactionData.angry?.count || 0,
+            users: reactionData.angry?.users || [],
+          },
+        ]
 
-          const user = like.user
-          const profileImageUrl = user.profileImage?.url
-            ? `${API_BASE_URL}${user.profileImage.url}`
-            : `/placeholder.svg?height=40&width=40&query=${user.username}`
-
-          console.log("🔍 User data:", user)
-          console.log("🔍 Profile image URL:", profileImageUrl)
-
-          acc[type].users.push({
-            id: user.username, // Use username as unique identifier
-            username: user.username,
-            displayName: user.username,
-            avatar: profileImageUrl,
-          })
-          return acc
-        },
-        {} as Record<string, { count: number; users: any[] }>,
-      )
-
-      console.log("🔍 Reaction counts:", reactionCounts)
-
-      // Transform to the expected format
-      const transformedReactions = [
-        {
-          emoji: "👍",
-          label: "like",
-          count: reactionCounts.like?.count || 0,
-          users: reactionCounts.like?.users || [],
-        },
-        {
-          emoji: "❤️",
-          label: "love",
-          count: reactionCounts.love?.count || 0,
-          users: reactionCounts.love?.users || [],
-        },
-        {
-          emoji: "😂",
-          label: "haha",
-          count: reactionCounts.haha?.count || 0,
-          users: reactionCounts.haha?.users || [],
-        },
-        {
-          emoji: "😮",
-          label: "wow",
-          count: reactionCounts.wow?.count || 0,
-          users: reactionCounts.wow?.users || [],
-        },
-        {
-          emoji: "😢",
-          label: "sad",
-          count: reactionCounts.sad?.count || 0,
-          users: reactionCounts.sad?.users || [],
-        },
-        {
-          emoji: "😡",
-          label: "angry",
-          count: reactionCounts.angry?.count || 0,
-          users: reactionCounts.angry?.users || [],
-        },
-      ]
-
-      console.log("🔍 Transformed reactions:", transformedReactions)
-      setPostReactions(transformedReactions)
-    } else {
-      console.log("❌ No likes data found, using empty reactions")
-      // Fallback to empty reactions with proper structure
-      setPostReactions([
-        { emoji: "👍", label: "like", count: 0, users: [] },
-        { emoji: "❤️", label: "love", count: 0, users: [] },
-        { emoji: "😂", label: "haha", count: 0, users: [] },
-        { emoji: "😮", label: "wow", count: 0, users: [] },
-        { emoji: "😢", label: "sad", count: 0, users: [] },
-        { emoji: "😡", label: "angry", count: 0, users: [] },
-      ])
+        console.log("🔍 Transformed reactions:", transformedReactions)
+        setPostReactions(transformedReactions)
+        setTotalReactionCount(transformedReactions.reduce((acc, reaction) => acc + reaction.count, 0)) // Calculate total reaction count
+      } catch (error) {
+        console.error("❌ Error fetching reactions:", error)
+        // Set empty reactions on error
+        setPostReactions([
+          { emoji: "👍", label: "like", count: 0, users: [] },
+          { emoji: "❤️", label: "love", count: 0, users: [] },
+          { emoji: "😂", label: "haha", count: 0, users: [] },
+          { emoji: "😮", label: "wow", count: 0, users: [] },
+          { emoji: "😢", label: "sad", count: 0, users: [] },
+          { emoji: "😡", label: "angry", count: 0, users: [] },
+        ])
+        setTotalReactionCount(0) // Set total reaction count to 0 on error
+      }
     }
-  }, [post]) // Fixed dependency to use full post object instead of post.likes
 
-  const handleReaction = async (reactionType: Reaction) => {
-    try {
-      // Get user data from localStorage or context
-      const userStr = localStorage.getItem("user")
-      if (!userStr) {
-        console.error("User not authenticated")
+    if (post.documentId) {
+      fetchReactions()
+    }
+  }, [post.documentId]) // Use documentId as dependency
+
+  useEffect(() => {
+    const fetchUserReaction = async () => {
+      if (!isAuthenticated || !user || !post.documentId) {
         return
       }
 
-      const user = JSON.parse(userStr)
+      try {
+        console.log("[v0] Fetching user's current reaction for post:", post.documentId)
+        const userReaction = await ReactionService.getUserReaction(post.documentId, user.id)
 
-      // Add the reaction using ReactionService
-      await ReactionService.addReaction(post.id, reactionType, post.documentId, user.id, user.documentId || user.id)
+        if (userReaction) {
+          console.log("[v0] User has existing reaction:", userReaction.type)
+          setReaction(userReaction.type as Reaction)
+        } else {
+          console.log("[v0] User has no existing reaction")
+          setReaction(null)
+        }
+      } catch (error) {
+        console.error("[v0] Error fetching user reaction:", error)
+      }
+    }
 
-      const reactionData = await ReactionService.getReactionCounts(post.id)
+    fetchUserReaction()
+  }, [isAuthenticated, user, post.documentId])
+
+  const handleReaction = async (reactionType: Reaction) => {
+    let previousReaction: Reaction = null // Declare previousReaction variable
+
+    try {
+      // Added loading state at the start
+      setIsReactionLoading(true)
+
+      if (!isAuthenticated) {
+        toast({
+          title: "Login Required",
+          description: "Please login to react to posts",
+          variant: "destructive",
+        })
+        return
+      }
+
+      if (!user) {
+        console.error("[v0] User not found in auth context")
+        toast({
+          title: "Authentication Error",
+          description: "Please refresh the page and try again",
+          variant: "destructive",
+        })
+        return
+      }
+
+      console.log("[v0] Using user from auth context:", user)
+      console.log("[v0] Current reaction:", reaction, "New reaction:", reactionType)
+
+      previousReaction = reaction
+      if (reaction === reactionType) {
+        // Toggling off - removing reaction
+        setReaction(null)
+        console.log("[v0] Toggling off reaction:", reactionType)
+      } else {
+        // Adding new or changing reaction
+        setReaction(reactionType)
+        console.log("[v0] Setting new reaction:", reactionType)
+      }
+
+      await ReactionService.addReaction(
+        post.documentId,
+        reactionType,
+        post.documentId,
+        user.id,
+        user.documentId || user.id,
+      )
+
+      const reactionData = await ReactionService.getReactionCounts(post.documentId)
 
       const transformedReactions = [
         {
@@ -322,111 +360,30 @@ export default function Post({
       ]
 
       setPostReactions(transformedReactions)
-      setReaction(reactionType)
+      setTotalReactionCount(transformedReactions.reduce((acc, reaction) => acc + reaction.count, 0)) // Update total reaction count
     } catch (error) {
       console.error("Error handling reaction:", error)
+      setReaction(previousReaction)
+      toast({
+        title: "Error",
+        description: "Failed to update your reaction. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsReactionLoading(false)
     }
-  }
-
-  // Calculate total reaction count
-  const totalReactionCount = postReactions.reduce((total, reaction) => total + reaction.count, 0)
-
-  // Add a function to properly handle image URLs from different data structures
-  const getImageUrl = () => {
-    // If there are no media items, fall back to post.image or default
-    if (!post || ((!post.mediaItems || post.mediaItems.length === 0) && !post.image)) {
-      return "/intricate-nail-art.png"
-    }
-
-    // If post has direct image property, use it
-    if (post.image) {
-      return post.image
-    }
-
-    // If we have mediaItems, try to extract the URL from the first one
-    if (post.mediaItems && post.mediaItems.length > 0) {
-      const mediaItem = post.mediaItems[0]
-
-      // If the mediaItem has a direct URL property, use it
-      if (mediaItem.url) {
-        return mediaItem.url
-      }
-
-      // If the mediaItem has file with formats, extract the URL
-      if (mediaItem.file && mediaItem.file.formats) {
-        const formats = mediaItem.file.formats
-        const formatUrl = formats.medium?.url || formats.small?.url || formats.thumbnail?.url || formats.large?.url
-
-        if (formatUrl) {
-          const fullUrl = `${API_BASE_URL}${formatUrl}`
-          return fullUrl
-        }
-      }
-
-      // If the mediaItem has a direct file URL
-      if (mediaItem.file && mediaItem.file.url) {
-        const fullUrl = `${API_BASE_URL}${mediaItem.file.url}`
-        return fullUrl
-      }
-
-      // If the mediaItem has attributes with URL
-      if (mediaItem.attributes && mediaItem.attributes.url) {
-        const fullUrl = `${API_BASE_URL}${mediaItem.attributes.url}`
-        return fullUrl
-      }
-
-      // If the mediaItem has attributes with formats
-      if (mediaItem.attributes && mediaItem.attributes.formats) {
-        const formats = mediaItem.attributes.formats
-        const formatUrl = formats.medium?.url || formats.small?.url || formats.thumbnail?.url || formats.large?.url
-
-        if (formatUrl) {
-          const fullUrl = `${API_BASE_URL}${formatUrl}`
-          return fullUrl
-        }
-      }
-
-      // For newly created posts, we might need to construct a URL based on the mediaItem ID
-      if (mediaItem.id) {
-        // This is a fallback approach - the actual URL structure depends on your backend
-        const fallbackUrl = `${API_BASE_URL}/uploads/media-items/${mediaItem.id}.jpg`
-        return fallbackUrl
-      }
-    }
-
-    // If all else fails, return a placeholder
-    return "/intricate-nail-art.png"
-  }
-
-  // Format post description to highlight hashtags
-  const formatDescriptionWithHashtags = () => {
-    if (!post.description) return null
-
-    const parts = post.description.split(/(#\w+)/g)
-    return parts.map((part, index) => {
-      if (part.startsWith("#")) {
-        return (
-          <Link
-            href={`/explore?tag=${part.substring(1)}`}
-            key={index}
-            className="text-pink-500 font-medium hover:underline"
-            onClick={(e) => e.stopPropagation()} // Prevent triggering parent link
-          >
-            {part}
-          </Link>
-        )
-      }
-      return part
-    })
-  }
-
-  // Get the profile URL for the post author
-  const getProfileUrl = () => {
-    // Use username for profile links
-    return `/profile/${post.username}`
   }
 
   const handleLikeClick = async () => {
+    if (!isAuthenticated) {
+      toast({
+        title: "Login Required",
+        description: "Please login to react to posts",
+        variant: "destructive",
+      })
+      return
+    }
+
     // If no reaction is set, show the reaction picker
     // If a reaction is set, toggle it off
     if (!reaction) {
@@ -577,7 +534,7 @@ export default function Post({
   }
 
   // Get the image URL for the post - this is used for the TryOnButton and TryOnModal
-  const postImageUrl = getImageUrl()
+  const postImageUrl = getImageUrl(post)
 
   // Log the image URL for debugging
   useEffect(() => {
@@ -726,7 +683,7 @@ export default function Post({
 
       <div className="p-4">
         <div className="flex items-center justify-between mb-3">
-          <Link href={getProfileUrl()} className="flex items-center group">
+          <Link href={getProfileUrl(post)} className="flex items-center group">
             <EnhancedAvatar
               src={post.userImage}
               alt={post.username}
@@ -778,7 +735,7 @@ export default function Post({
 
         {/* Post description - NOT wrapped in a Link to avoid nesting issues */}
         <div className="mb-3">
-          <p className="text-sm">{formatDescriptionWithHashtags()}</p>
+          <p className="text-sm">{formatDescriptionWithHashtags(post)}</p>
         </div>
 
         {/* Separate clickable area for the post detail */}
@@ -794,7 +751,7 @@ export default function Post({
         {post.contentType === "text-background" && post.background ? (
           <div className={`rounded-lg p-6 mb-3 ${post.background.value} ${post.background.animation || ""}`}>
             <p className={`text-xl font-semibold text-center ${getTextColorForBackground()}`}>
-              {formatDescriptionWithHashtags()}
+              {formatDescriptionWithHashtags(post)}
             </p>
             <Link
               href={getPostUrl()}
@@ -879,22 +836,61 @@ export default function Post({
 
         {/* Action buttons */}
         <div className="flex items-center justify-between py-1 relative">
-          <ReactionButton
-            postId={post.id}
-            postDocumentId={post.documentId || post.id.toString()}
-            onReactionChange={(type) => {
-              // Update local state if needed
-              setReaction(type)
-              // Update like count based on reaction change
-              if (type && !reaction) {
-                setLikeCount(likeCount + 1)
-              } else if (!type && reaction) {
-                setLikeCount(Math.max(0, likeCount - 1))
-              }
-            }}
-            showCount={true}
-            className="flex-1"
-          />
+          <div className="relative flex-1">
+            <button
+              ref={likeButtonRef}
+              className={`flex items-center justify-center w-full py-2 rounded-md hover:bg-gray-100 transition-colors ${
+                reaction ? getReactionColor(reaction) : "text-gray-500"
+              } ${isReactionLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+              onClick={handleLikeClick}
+              disabled={isReactionLoading}
+              aria-label={reaction ? `${getReactionText(reaction)} this post` : "Like this post"}
+            >
+              {isReactionLoading ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-current mr-2"></div>
+                  <span className="text-sm font-medium">Processing...</span>
+                </>
+              ) : reaction ? (
+                <>
+                  <span className="mr-2 text-lg">{getReactionEmoji(reaction)}</span>
+                  <span className="text-sm font-medium hidden md:inline-block">{getReactionText(reaction)}</span>
+                  <span className="text-sm font-medium md:hidden">{getReactionText(reaction)}</span>
+                </>
+              ) : (
+                <>
+                  <Heart className="h-5 w-5 mr-2" />
+                  <span className="text-sm font-medium hidden md:inline-block">Like</span>
+                  <span className="text-sm font-medium md:hidden">Like</span>
+                </>
+              )}
+            </button>
+
+            {/* Reaction picker */}
+            {showReactions && !isReactionLoading && (
+              <div
+                ref={reactionsRef}
+                className="absolute bottom-full left-0 mb-2 bg-white rounded-full shadow-lg border p-2 flex space-x-1 z-10"
+              >
+                {reactionData.map((reactionItem) => (
+                  <button
+                    key={reactionItem.type}
+                    className={`hover:scale-125 transition-transform p-1 rounded-full hover:bg-gray-100 ${
+                      reaction === reactionItem.type ? "bg-blue-100 ring-2 ring-blue-500" : ""
+                    }`}
+                    onClick={() => {
+                      handleReaction(reactionItem.type as Reaction)
+                      setShowReactions(false)
+                    }}
+                    disabled={isReactionLoading}
+                    aria-label={reactionItem.label}
+                  >
+                    <span className="text-xl">{reactionItem.emoji}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <button
             className="flex items-center justify-center flex-1 py-2 rounded-md hover:bg-gray-100 transition-colors text-gray-500"
@@ -986,8 +982,99 @@ export default function Post({
         }}
         reactions={postReactions}
         totalCount={totalReactionCount}
-        postId={post.id}
+        postId={post.documentId} // Use documentId instead of numeric id
       />
     </div>
   )
+}
+
+// Function to properly handle image URLs from different data structures
+function getImageUrl(post: any) {
+  // If there are no media items, fall back to post.image or default
+  if (!post || ((!post.mediaItems || post.mediaItems.length === 0) && !post.image)) {
+    return "/intricate-nail-art.png"
+  }
+
+  // If post has direct image property, use it
+  if (post.image) {
+    return post.image
+  }
+
+  // If we have mediaItems, try to extract the URL from the first one
+  if (post.mediaItems && post.mediaItems.length > 0) {
+    const mediaItem = post.mediaItems[0]
+
+    // If the mediaItem has a direct URL property, use it
+    if (mediaItem.url) {
+      return mediaItem.url
+    }
+
+    // If the mediaItem has file with formats, extract the URL
+    if (mediaItem.file && mediaItem.file.formats) {
+      const formats = mediaItem.file.formats
+      const formatUrl = formats.medium?.url || formats.small?.url || formats.thumbnail?.url || formats.large?.url
+
+      if (formatUrl) {
+        const fullUrl = `${API_BASE_URL}${formatUrl}`
+        return fullUrl
+      }
+    }
+
+    // If the mediaItem has a direct file URL
+    if (mediaItem.file && mediaItem.file.url) {
+      const fullUrl = `${API_BASE_URL}${mediaItem.file.url}`
+      return fullUrl
+    }
+
+    // If the mediaItem has attributes with URL
+    if (mediaItem.attributes && mediaItem.attributes.url) {
+      const fullUrl = `${API_BASE_URL}${mediaItem.attributes.url}`
+      return fullUrl
+    }
+
+    // If the mediaItem has attributes with formats
+    if (mediaItem.attributes && mediaItem.attributes.formats) {
+      const formats = mediaItem.attributes.formats
+      const formatUrl = formats.medium?.url || formats.small?.url || formats.thumbnail?.url || formats.large?.url
+
+      if (formatUrl) {
+        const fullUrl = `${API_BASE_URL}${formatUrl}`
+        return fullUrl
+      }
+    }
+
+    // If all else fails, return a placeholder
+    return "/intricate-nail-art.png"
+  }
+
+  // If all else fails, return a placeholder
+  return "/intricate-nail-art.png"
+}
+
+// Function to format post description to highlight hashtags
+function formatDescriptionWithHashtags(post: any) {
+  if (!post.description) return null
+
+  const parts = post.description.split(/(#\w+)/g)
+  return parts.map((part, index) => {
+    if (part.startsWith("#")) {
+      return (
+        <Link
+          href={`/explore?tag=${part.substring(1)}`}
+          key={index}
+          className="text-pink-500 font-medium hover:underline"
+          onClick={(e) => e.stopPropagation()} // Prevent triggering parent link
+        >
+          {part}
+        </Link>
+      )
+    }
+    return part
+  })
+}
+
+// Function to get the profile URL for the post author
+function getProfileUrl(post: any) {
+  // Use username for profile links
+  return `/profile/${post.username}`
 }

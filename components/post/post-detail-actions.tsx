@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Heart, MessageCircle, Bookmark, MoreHorizontal, Flag, Trash, Edit, Download } from "lucide-react"
+import { MessageCircle, Bookmark, MoreHorizontal, Flag, Trash, Edit, Download } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,6 +13,8 @@ import {
 import { usePostOwnership } from "@/hooks/use-post-ownership"
 import { TryOnButton } from "@/components/try-on/try-on-button"
 import { ShareButton } from "@/components/share-button"
+import { ReactionButton } from "@/components/reaction-button"
+import { ReactionSummary } from "@/components/reaction-summary"
 import { useAuth } from "@/hooks/use-auth"
 
 interface PostDetailActionsProps {
@@ -25,10 +27,22 @@ interface PostDetailActionsProps {
   onReport?: () => void
   // Add additional props to handle different image URL sources
   post?: {
+    id?: number
+    documentId?: string
     imageUrl?: string
     media?: Array<{ url: string }>
     image?: string
     images?: string[]
+    likes?: Array<{
+      id: number
+      documentId: string
+      type: string
+      user?: {
+        id: number
+        documentId: string
+        username: string
+      }
+    }>
   }
 }
 
@@ -42,14 +56,9 @@ export function PostDetailActions({
   onReport,
   post,
 }: PostDetailActionsProps) {
-  const [liked, setLiked] = useState(false)
   const [saved, setSaved] = useState(false)
   const { isOwner } = usePostOwnership(authorId)
-  const { isAuthenticated } = useAuth()
-
-  const handleLike = () => {
-    setLiked(!liked)
-  }
+  const { isAuthenticated, user } = useAuth()
 
   const handleSave = () => {
     setSaved(!saved)
@@ -96,80 +105,94 @@ export function PostDetailActions({
   const finalImageUrl = getValidImageUrl()
 
   return (
-    <div className="flex items-center justify-between py-2">
-      <div className="flex items-center space-x-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleLike}
-          aria-label={liked ? "Unlike" : "Like"}
-          className={liked ? "text-pink-500" : ""}
-        >
-          <Heart className={`h-5 w-5 ${liked ? "fill-current" : ""}`} />
-        </Button>
-
-        <Button variant="ghost" size="icon" aria-label="Comment">
-          <MessageCircle className="h-5 w-5" />
-        </Button>
-
-        <ShareButton url={`/post/${postId}`} title={designTitle} />
+    <div className="px-4 sm:px-6 pb-4 sm:pb-6">
+      <div className="mb-4">
+        <ReactionSummary
+          postId={post?.documentId || postId}
+          showViewButton={true}
+          className="cursor-pointer"
+          likes={post?.likes}
+        />
       </div>
 
-      <div className="flex items-center space-x-2">
-        <TryOnButton designImageUrl={finalImageUrl} designTitle={designTitle} variant="outline" size="sm" />
+      <div className="flex items-center justify-between py-4 border-t border-b">
+        <div className="flex items-center space-x-2 flex-1">
+          <ReactionButton
+            postId={post?.documentId || postId}
+            postDocumentId={post?.documentId || postId}
+            onReactionChange={(type) => {
+              console.log("[v0] Reaction changed to:", type)
+            }}
+            showCount={false}
+            className="flex-1 justify-center"
+          />
 
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleSave}
-          aria-label={saved ? "Unsave" : "Save"}
-          className={saved ? "text-yellow-500" : ""}
-        >
-          <Bookmark className={`h-5 w-5 ${saved ? "fill-current" : ""}`} />
-        </Button>
+          <Button variant="ghost" size="icon" aria-label="Comment" className="flex-1 justify-center">
+            <MessageCircle className="h-5 w-5 mr-2" />
+            <span className="text-sm font-medium hidden md:inline-block">Comment</span>
+          </Button>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label="More options">
-              <MoreHorizontal className="h-5 w-5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {finalImageUrl && !finalImageUrl.includes("placeholder.svg") && (
-              <DropdownMenuItem onClick={handleDownload}>
-                <Download className="h-4 w-4 mr-2" />
-                Download
-              </DropdownMenuItem>
-            )}
+          <div className="flex-1 flex justify-center">
+            <ShareButton url={`/post/${postId}`} title={designTitle} />
+          </div>
+        </div>
 
-            {isOwner && (
-              <>
-                {onEdit && (
-                  <DropdownMenuItem onClick={onEdit}>
-                    <Edit className="h-4 w-4 mr-2" />
-                    Edit
-                  </DropdownMenuItem>
-                )}
+        <div className="flex items-center space-x-2 ml-4">
+          <TryOnButton designImageUrl={finalImageUrl} designTitle={designTitle} variant="outline" size="sm" />
 
-                {onDelete && (
-                  <DropdownMenuItem onClick={onDelete} className="text-red-500">
-                    <Trash className="h-4 w-4 mr-2" />
-                    Delete
-                  </DropdownMenuItem>
-                )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleSave}
+            aria-label={saved ? "Unsave" : "Save"}
+            className={saved ? "text-yellow-500" : ""}
+          >
+            <Bookmark className={`h-5 w-5 ${saved ? "fill-current" : ""}`} />
+          </Button>
 
-                <DropdownMenuSeparator />
-              </>
-            )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="More options">
+                <MoreHorizontal className="h-5 w-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {finalImageUrl && !finalImageUrl.includes("placeholder.svg") && (
+                <DropdownMenuItem onClick={handleDownload}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Download
+                </DropdownMenuItem>
+              )}
 
-            {!isOwner && onReport && (
-              <DropdownMenuItem onClick={onReport}>
-                <Flag className="h-4 w-4 mr-2" />
-                Report
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+              {isOwner && (
+                <>
+                  {onEdit && (
+                    <DropdownMenuItem onClick={onEdit}>
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit
+                    </DropdownMenuItem>
+                  )}
+
+                  {onDelete && (
+                    <DropdownMenuItem onClick={onDelete} className="text-red-500">
+                      <Trash className="h-4 w-4 mr-2" />
+                      Delete
+                    </DropdownMenuItem>
+                  )}
+
+                  <DropdownMenuSeparator />
+                </>
+              )}
+
+              {!isOwner && onReport && (
+                <DropdownMenuItem onClick={onReport}>
+                  <Flag className="h-4 w-4 mr-2" />
+                  Report
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
     </div>
   )

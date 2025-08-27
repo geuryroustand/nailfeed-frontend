@@ -21,6 +21,47 @@ interface EnhancedMediaGalleryProps {
   className?: string
 }
 
+function MediaRenderer({
+  item,
+  className,
+  width,
+  height,
+  showPlaceholder = false,
+}: {
+  item: MediaItem
+  className?: string
+  width?: number
+  height?: number
+  showPlaceholder?: boolean
+}) {
+  if (item.type === "video") {
+    return (
+      <video
+        src={item.url || "/placeholder.svg"}
+        className={className}
+        width={width}
+        height={height}
+        controls
+        preload="metadata"
+        style={{ objectFit: "cover" }}
+      >
+        Your browser does not support the video tag.
+      </video>
+    )
+  }
+
+  return (
+    <SafeImage
+      src={item.url || "/placeholder.svg"}
+      alt={item.alt || "Post image"}
+      className={className}
+      width={width}
+      height={height}
+      showPlaceholder={showPlaceholder}
+    />
+  )
+}
+
 function EnhancedMediaGallery({ mediaItems, layout = "grid", className }: EnhancedMediaGalleryProps) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [lightboxOpen, setLightboxOpen] = useState(false)
@@ -42,9 +83,8 @@ function EnhancedMediaGallery({ mediaItems, layout = "grid", className }: Enhanc
           aria-label="Open image in lightbox"
         >
           <div className="w-full">
-            <SafeImage
-              src={mediaItems[0].url}
-              alt={mediaItems[0].alt || "Post image"}
+            <MediaRenderer
+              item={mediaItems[0]}
               className="w-full h-auto object-cover"
               width={800}
               height={600}
@@ -58,9 +98,8 @@ function EnhancedMediaGallery({ mediaItems, layout = "grid", className }: Enhanc
           <Dialog open={lightboxOpen} onOpenChange={setLightboxOpen}>
             <DialogContent className="max-w-5xl p-0 bg-transparent border-none">
               <div className="relative">
-                <SafeImage
-                  src={mediaItems[0].url}
-                  alt={mediaItems[0].alt || "Post image"}
+                <MediaRenderer
+                  item={mediaItems[0]}
                   className="w-full h-auto max-h-[80vh] object-contain"
                   width={1200}
                   height={900}
@@ -97,9 +136,8 @@ function EnhancedMediaGallery({ mediaItems, layout = "grid", className }: Enhanc
             tabIndex={0}
             aria-label="Open image in lightbox"
           >
-            <SafeImage
-              src={mediaItems[0].url}
-              alt={mediaItems[0].alt || "Post image"}
+            <MediaRenderer
+              item={mediaItems[0]}
               className="w-full h-full object-cover"
               width={400}
               height={400}
@@ -118,9 +156,8 @@ function EnhancedMediaGallery({ mediaItems, layout = "grid", className }: Enhanc
             tabIndex={0}
             aria-label="Open image in lightbox"
           >
-            <SafeImage
-              src={mediaItems[1].url}
-              alt={mediaItems[1].alt || "Post image"}
+            <MediaRenderer
+              item={mediaItems[1]}
               className="w-full h-full object-cover"
               width={400}
               height={200}
@@ -140,9 +177,8 @@ function EnhancedMediaGallery({ mediaItems, layout = "grid", className }: Enhanc
               tabIndex={0}
               aria-label="Open image in lightbox"
             >
-              <SafeImage
-                src={mediaItems[2].url}
-                alt={mediaItems[2].alt || "Post image"}
+              <MediaRenderer
+                item={mediaItems[2]}
                 className="w-full h-full object-cover"
                 width={400}
                 height={200}
@@ -163,9 +199,8 @@ function EnhancedMediaGallery({ mediaItems, layout = "grid", className }: Enhanc
               tabIndex={0}
               aria-label="Open image in lightbox"
             >
-              <SafeImage
-                src={mediaItems[3].url}
-                alt={mediaItems[3].alt || "Post image"}
+              <MediaRenderer
+                item={mediaItems[3]}
                 className="w-full h-full object-cover"
                 width={400}
                 height={200}
@@ -186,9 +221,8 @@ function EnhancedMediaGallery({ mediaItems, layout = "grid", className }: Enhanc
             <DialogContent className="max-w-5xl p-0 bg-transparent border-none">
               <div className="relative">
                 <div className="relative">
-                  <SafeImage
-                    src={mediaItems[currentIndex].url}
-                    alt={mediaItems[currentIndex].alt || "Post image"}
+                  <MediaRenderer
+                    item={mediaItems[currentIndex]}
                     className="w-full h-auto max-h-[80vh] object-contain"
                     width={1200}
                     height={900}
@@ -257,9 +291,8 @@ function EnhancedMediaGallery({ mediaItems, layout = "grid", className }: Enhanc
               tabIndex={0}
               aria-label={`View image ${index + 1}`}
             >
-              <SafeImage
-                src={item.url}
-                alt={item.alt || `Post image ${index + 1}`}
+              <MediaRenderer
+                item={item}
                 className="w-full h-auto object-cover"
                 width={800}
                 height={600}
@@ -283,9 +316,8 @@ function EnhancedMediaGallery({ mediaItems, layout = "grid", className }: Enhanc
             <DialogContent className="max-w-5xl p-0 bg-transparent border-none">
               <div className="relative">
                 <div className="relative">
-                  <SafeImage
-                    src={mediaItems[currentIndex].url}
-                    alt={mediaItems[currentIndex].alt || "Post image"}
+                  <MediaRenderer
+                    item={mediaItems[currentIndex]}
                     className="w-full h-auto max-h-[80vh] object-contain"
                     width={1200}
                     height={900}
@@ -351,9 +383,8 @@ function EnhancedMediaGallery({ mediaItems, layout = "grid", className }: Enhanc
         tabIndex={0}
         aria-label="Open image in lightbox"
       >
-        <SafeImage
-          src={mediaItems[0].url}
-          alt={mediaItems[0].alt || "Featured image"}
+        <MediaRenderer
+          item={mediaItems[0]}
           className="w-full h-auto object-cover"
           width={800}
           height={500}
@@ -375,9 +406,8 @@ function EnhancedMediaGallery({ mediaItems, layout = "grid", className }: Enhanc
             tabIndex={0}
             aria-label={`Open image ${index + 2} in lightbox`}
           >
-            <SafeImage
-              src={item.url}
-              alt={item.alt || `Thumbnail ${index + 1}`}
+            <MediaRenderer
+              item={item}
               className="w-full h-auto object-cover aspect-square"
               width={200}
               height={200}
@@ -393,9 +423,8 @@ function EnhancedMediaGallery({ mediaItems, layout = "grid", className }: Enhanc
           <DialogContent className="max-w-5xl p-0 bg-transparent border-none">
             <div className="relative">
               <div className="relative">
-                <SafeImage
-                  src={mediaItems[currentIndex].url}
-                  alt={mediaItems[currentIndex].alt || "Post image"}
+                <MediaRenderer
+                  item={mediaItems[currentIndex]}
                   className="w-full h-auto max-h-[80vh] object-contain"
                   width={1200}
                   height={900}

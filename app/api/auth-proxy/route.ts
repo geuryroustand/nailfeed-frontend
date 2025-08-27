@@ -144,16 +144,34 @@ export async function POST(request: NextRequest) {
     const contentType = resp.headers.get("content-type") || ""
     const status = resp.status
 
-    if (contentType.includes("application/json")) {
-      const json = await resp.json()
-      return NextResponse.json(json, { status })
+    // Check if the response should have no body
+    if (status === 204 || status === 205 || (status >= 100 && status < 200)) {
+      return new NextResponse(null, { status })
     }
 
-    const text = await resp.text()
-    return new NextResponse(text, {
-      status,
-      headers: { "content-type": contentType || "text/plain" },
-    })
+    if (contentType.includes("application/json")) {
+      try {
+        const json = await resp.json()
+        return NextResponse.json(json, { status })
+      } catch (error) {
+        console.log("[v0] Failed to parse JSON response, returning empty response")
+        return new NextResponse(null, { status })
+      }
+    }
+
+    try {
+      const text = await resp.text()
+      if (!text && (status === 200 || status === 201)) {
+        return new NextResponse(null, { status })
+      }
+      return new NextResponse(text, {
+        status,
+        headers: { "content-type": contentType || "text/plain" },
+      })
+    } catch (error) {
+      console.log("[v0] Failed to read response text, returning empty response")
+      return new NextResponse(null, { status })
+    }
   } catch (error) {
     console.error("API proxy error:", error)
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })

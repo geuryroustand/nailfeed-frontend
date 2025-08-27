@@ -71,8 +71,15 @@ export function MediaItem({
       return
     }
 
+    if (type === "video" && src.startsWith("http")) {
+      if (isMounted.current) {
+        setAbsoluteSrc(src)
+      }
+      return
+    }
+
     try {
-      // Get the absolute URL for the image
+      // Get the absolute URL for images only
       const absolute = getAbsoluteImageUrl(src)
       if (isMounted.current) {
         setAbsoluteSrc(absolute)
@@ -82,11 +89,15 @@ export function MediaItem({
         setHasError(true)
       }
     }
-  }, [src])
+  }, [src, type]) // Added type as dependency
 
   // Handle image error
   const handleImageError = () => {
     if (!isMounted.current) return
+
+    if (type === "video") {
+      return
+    }
 
     // Don't try to fix blob URLs
     if (src.startsWith("blob:")) {
