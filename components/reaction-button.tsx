@@ -330,13 +330,32 @@ export function ReactionButton({
             setUserReactionId(null)
           }
 
-          if (result && result.id && isAddingNewReaction && postAuthorId && postAuthorId !== user.id) {
+          if (result && result.id && postAuthorId && postAuthorId !== user.id) {
             const postAuthorName = user.displayName || user.username || "Someone"
-            createReactionNotification(String(postId), postAuthorId, String(user.id), postAuthorName, type).catch(
-              (error) => {
-                console.error("Failed to send reaction notification:", error)
-              },
-            )
+            console.log("[v0] Sending reaction notification:", {
+              postId: String(postId),
+              postAuthorId,
+              userId: String(user.id),
+              userName: postAuthorName,
+              reactionType: type,
+              isAddingNewReaction,
+              isChangingReaction,
+            })
+            createReactionNotification(String(postId), postAuthorId, String(user.id), postAuthorName, type)
+              .then(() => {
+                console.log("[v0] Reaction notification sent successfully")
+              })
+              .catch((error) => {
+                console.error("[v0] Failed to send reaction notification:", error)
+              })
+          } else {
+            console.log("[v0] Skipping reaction notification:", {
+              hasResult: !!(result && result.id),
+              hasPostAuthorId: !!postAuthorId,
+              isDifferentUser: postAuthorId !== user.id,
+              postAuthorId,
+              userId: user.id,
+            })
           }
 
           // Show appropriate toast message
