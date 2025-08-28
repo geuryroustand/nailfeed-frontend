@@ -123,8 +123,12 @@ export async function subscribeToPushNotifications(userId: string, subscription:
  */
 export async function getUserPushSubscriptions(userId: string) {
   try {
+    console.log("[v0] getUserPushSubscriptions (server action) - Fetching for user:", userId)
+
     const url = `${API_BASE_URL}/api/notifications?filters[user][id][$eq]=${userId}&filters[type][$eq]=push_subscription`
     const headers = getAuthHeaders()
+
+    console.log("[v0] getUserPushSubscriptions (server action) - API URL:", url)
 
     const response = await fetch(url, {
       method: "GET",
@@ -132,26 +136,34 @@ export async function getUserPushSubscriptions(userId: string) {
     })
 
     if (!response.ok) {
+      console.error("[v0] getUserPushSubscriptions (server action) - API error:", response.status, response.statusText)
       throw new Error(`Failed to get push subscriptions: ${response.status}`)
     }
 
     const data = await response.json()
+    console.log("[v0] getUserPushSubscriptions (server action) - Raw API response:", data)
 
-    return (
-      data.data?.map((item: any) => {
-        const subscriptionData = item.attributes.metadata
-        return {
-          id: item.id,
-          attributes: {
-            endpoint: subscriptionData.endpoint,
-            p256dh: subscriptionData.keys.p256dh,
-            auth: subscriptionData.keys.auth,
-          },
-        }
-      }) || []
-    )
+    const subscriptions =
+      data.data
+        ?.map((item: any) => {
+          const subscriptionData = item.attributes?.metadata || item.metadata
+          console.log("[v0] getUserPushSubscriptions (server action) - Processing subscription:", subscriptionData)
+
+          return {
+            id: item.id,
+            attributes: {
+              endpoint: subscriptionData?.endpoint,
+              p256dh: subscriptionData?.keys?.p256dh,
+              auth: subscriptionData?.keys?.auth,
+            },
+          }
+        })
+        .filter((sub: any) => sub.attributes.endpoint) || []
+
+    console.log("[v0] getUserPushSubscriptions (server action) - Processed subscriptions:", subscriptions)
+    return subscriptions
   } catch (error) {
-    console.error("Error getting push subscriptions:", error)
+    console.error("[v0] getUserPushSubscriptions (server action) - Error:", error)
     return []
   }
 }
@@ -171,14 +183,32 @@ export async function sendPushNotification(
   },
 ) {
   try {
+    console.log("[v0] sendPushNotification - Starting with subscription:", {
+      endpoint: subscription.endpoint,
+      hasKeys: !!(subscription.keys?.p256dh && subscription.keys?.auth),
+    })
+    console.log("[v0] sendPushNotification - Payload:", payload)
+
+    const vapidSubject = process.env.VAPID_SUBJECT || "mailto:support@nailfeed.com"
+    const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+    const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY
+
+    console.log("[v0] sendPushNotification - VAPID config:", {
+      hasSubject: !!vapidSubject,
+      hasPublicKey: !!vapidPublicKey,
+      hasPrivateKey: !!vapidPrivateKey,
+      subject: vapidSubject,
+    })
+
+    if (!vapidPublicKey || !vapidPrivateKey) {
+      console.error("[v0] sendPushNotification - Missing VAPID keys")
+      return { success: false, error: "VAPID keys not configured" }
+    }
+
     const webpush = await import("web-push")
 
     // Configure web-push with VAPID keys
-    webpush.setVapidDetails(
-      process.env.VAPID_SUBJECT || "mailto:support@nailfeed.com",
-      process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-      process.env.VAPID_PRIVATE_KEY!,
-    )
+    webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey)
 
     const notificationPayload = JSON.stringify({
       title: payload.title,
@@ -195,10 +225,13 @@ export async function sendPushNotification(
       ],
     })
 
+    console.log("[v0] sendPushNotification - Sending notification with payload:", notificationPayload)
+
     await webpush.sendNotification(subscription, notificationPayload)
+    console.log("[v0] sendPushNotification - Successfully sent notification")
     return { success: true }
   } catch (error) {
-    console.error("Error sending push notification:", error)
+    console.error("[v0] sendPushNotification - Error:", error)
     return { success: false, error: error instanceof Error ? error.message : "Unknown error" }
   }
 }
