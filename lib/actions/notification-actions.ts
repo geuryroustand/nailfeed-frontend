@@ -7,13 +7,14 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backen
 const SERVER_API_TOKEN = process.env.API_TOKEN || ""
 
 export interface NotificationData {
-  type: "like" | "comment" | "follow" | "mention" | "collection" | "mood"
+  type: "like" | "comment" | "follow" | "mention" | "collection" | "mood" | "push_subscription"
   userId: string
   relatedUserId?: string
   relatedPostId?: string
   relatedCommentId?: string
   message: string
   title: string
+  metadata?: PushSubscription
 }
 
 export interface PushSubscription {
@@ -62,6 +63,7 @@ export async function createNotification(data: NotificationData) {
           relatedUser: data.relatedUserId,
           relatedPost: data.relatedPostId,
           relatedComment: data.relatedCommentId,
+          metadata: data.metadata,
         },
       }),
     })
@@ -86,27 +88,23 @@ export async function subscribeToPushNotifications(userId: string, subscription:
     const url = `${API_BASE_URL}/api/notifications`
     const headers = getAuthHeaders()
 
-    // Store push subscription as a special notification type
     const response = await fetch(url, {
       method: "POST",
       headers,
       body: JSON.stringify({
         data: {
-          type: "push_subscription", // Special type for push subscriptions
+          type: "push_subscription", // Use the correct enum value we added to Strapi
           read: true, // Mark as read since it's not a user-facing notification
           user: userId,
-          // Store subscription data in a custom field or use existing fields creatively
-          metadata: {
-            endpoint: subscription.endpoint,
-            p256dh: subscription.keys.p256dh,
-            auth: subscription.keys.auth,
-          },
+          metadata: subscription, // Store subscription data in metadata field
         },
       }),
     })
 
     if (!response.ok) {
-      throw new Error(`Failed to save push subscription: ${response.status}`)
+      const errorText = await response.text()
+      console.error("Strapi error response:", errorText)
+      throw new Error(`Failed to save push subscription: ${response.status} - ${errorText}`)
     }
 
     return { success: true, message: "Successfully subscribed to notifications" }
@@ -139,16 +137,18 @@ export async function getUserPushSubscriptions(userId: string) {
 
     const data = await response.json()
 
-    // Transform the data to match expected format
     return (
-      data.data?.map((item: any) => ({
-        id: item.id,
-        attributes: {
-          endpoint: item.attributes.metadata?.endpoint,
-          p256dh: item.attributes.metadata?.p256dh,
-          auth: item.attributes.metadata?.auth,
-        },
-      })) || []
+      data.data?.map((item: any) => {
+        const subscriptionData = item.attributes.metadata
+        return {
+          id: item.id,
+          attributes: {
+            endpoint: subscriptionData.endpoint,
+            p256dh: subscriptionData.keys.p256dh,
+            auth: subscriptionData.keys.auth,
+          },
+        }
+      }) || []
     )
   } catch (error) {
     console.error("Error getting push subscriptions:", error)
@@ -265,6 +265,75 @@ export async function createCommentNotification(
     return { success: true, message: "Comment notification sent" }
   } catch (error) {
     console.error("Error creating comment notification:", error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to send notification",
+    }
+  }
+}
+
+/**
+ * Server action to create and send reaction notification
+ */
+export async function createReactionNotification(
+  postId: string,
+  postAuthorId: string,
+  reactionAuthorId: string,
+  reactionAuthorName: string,
+  reactionType: string,
+) {
+  try {
+    // Don't send notification if user is reacting to their own post
+    if (postAuthorId === reactionAuthorId) {
+      return { success: true, message: "No notification needed for own post" }
+    }
+
+    // Create notification in database
+    const notificationData: NotificationData = {
+      type: "like", // Use "like" type for all reactions since it's in the Strapi enum
+      userId: postAuthorId,
+      relatedUserId: reactionAuthorId,
+      relatedPostId: postId,
+      message: `${reactionAuthorName} reacted to your post with ${reactionType}`,
+      title: "New Reaction",
+    }
+
+    await createNotification(notificationData)
+
+    // Get user's push subscriptions
+    const subscriptions = await getUserPushSubscriptions(postAuthorId)
+
+    // Send push notifications to all user's devices
+    const pushPromises = subscriptions.map(async (sub: any) => {
+      const subscription: PushSubscription = {
+        endpoint: sub.attributes.endpoint,
+        keys: {
+          p256dh: sub.attributes.p256dh,
+          auth: sub.attributes.auth,
+        },
+      }
+
+      return sendPushNotification(subscription, {
+        title: "New Reaction on Your Post",
+        body: `${reactionAuthorName} reacted with ${reactionType} to your post`,
+        icon: "/icon-192x192.png",
+        data: {
+          type: "reaction",
+          postId,
+          url: `/post/${postId}`,
+        },
+      })
+    })
+
+    await Promise.all(pushPromises)
+
+    // Revalidate relevant paths
+    revalidatePath("/notifications")
+    revalidatePath(`/post/${postId}`)
+
+    return { success: true, message: "Reaction notification sent" }
+  } catch (error) {
+    console.error("Error creating reaction notification:", error)
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to send notification",

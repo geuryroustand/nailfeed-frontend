@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast"
 import type { ReactionType } from "@/lib/services/reaction-service"
 import { cn } from "@/lib/utils"
 import { ReactionSummary } from "./reaction-summary"
+import { createReactionNotification } from "@/lib/actions/notification-actions"
 
 interface ReactionButtonProps {
   postId: string | number
@@ -19,6 +20,7 @@ interface ReactionButtonProps {
   initialReactionCounts?: Record<ReactionType, number>
   initialTotalCount?: number
   initialUserReaction?: { id: string; type: ReactionType } | null
+  postAuthorId?: string
 }
 
 export function ReactionButton({
@@ -30,6 +32,7 @@ export function ReactionButton({
   initialReactionCounts,
   initialTotalCount,
   initialUserReaction,
+  postAuthorId,
 }: ReactionButtonProps) {
   const [showReactions, setShowReactions] = useState(false)
   const [currentReaction, setCurrentReaction] = useState<ReactionType | null>(null)
@@ -325,6 +328,15 @@ export function ReactionButton({
             setUserReactionId(result.id)
           } else if (isRemovingReaction) {
             setUserReactionId(null)
+          }
+
+          if (result && result.id && isAddingNewReaction && postAuthorId && postAuthorId !== user.id) {
+            const postAuthorName = user.displayName || user.username || "Someone"
+            createReactionNotification(String(postId), postAuthorId, String(user.id), postAuthorName, type).catch(
+              (error) => {
+                console.error("Failed to send reaction notification:", error)
+              },
+            )
           }
 
           // Show appropriate toast message
