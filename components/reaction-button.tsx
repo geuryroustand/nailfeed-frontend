@@ -325,16 +325,25 @@ export function ReactionButton({
         onReactionChange(newReaction)
       }
 
-      console.log("[v0] ReactionButton: Calling server action with params:", {
-        postId,
+      console.log("[v0] ReactionButton: About to call server action with params:", {
+        postId: String(postId),
         type,
-        postDocumentId,
-        postAuthorId,
+        postDocumentId: String(postDocumentId),
+        postAuthorId: String(postAuthorId || ""),
       })
 
-      const result = await addReactionServerAction(postId, type, postDocumentId, postAuthorId)
+      if (!postAuthorId) {
+        console.warn("[v0] ReactionButton: postAuthorId is missing - notifications may not work")
+      }
 
-      console.log("[v0] ReactionButton: Server action result:", result)
+      const result = await addReactionServerAction(
+        String(postId),
+        type,
+        String(postDocumentId),
+        String(postAuthorId || ""),
+      )
+
+      console.log("[v0] ReactionButton: Server action completed with result:", result)
 
       if (result.success && result.reaction) {
         setUserReactionId(result.reaction.id)
