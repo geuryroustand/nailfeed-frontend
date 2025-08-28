@@ -283,8 +283,17 @@ export async function createReactionNotification(
   reactionType: string,
 ) {
   try {
+    console.log("[v0] createReactionNotification called with:", {
+      postId,
+      postAuthorId,
+      reactionAuthorId,
+      reactionAuthorName,
+      reactionType,
+    })
+
     // Don't send notification if user is reacting to their own post
     if (postAuthorId === reactionAuthorId) {
+      console.log("[v0] Skipping notification - user reacting to own post")
       return { success: true, message: "No notification needed for own post" }
     }
 
@@ -298,10 +307,18 @@ export async function createReactionNotification(
       title: "New Reaction",
     }
 
+    console.log("[v0] Creating notification in database:", notificationData)
     await createNotification(notificationData)
 
     // Get user's push subscriptions
+    console.log("[v0] Getting push subscriptions for user:", postAuthorId)
     const subscriptions = await getUserPushSubscriptions(postAuthorId)
+    console.log("[v0] Found push subscriptions:", subscriptions.length)
+
+    if (subscriptions.length === 0) {
+      console.log("[v0] No push subscriptions found for user")
+      return { success: true, message: "Notification created but no push subscriptions found" }
+    }
 
     // Send push notifications to all user's devices
     const pushPromises = subscriptions.map(async (sub: any) => {
@@ -313,6 +330,7 @@ export async function createReactionNotification(
         },
       }
 
+      console.log("[v0] Sending push notification to:", subscription.endpoint)
       return sendPushNotification(subscription, {
         title: "New Reaction on Your Post",
         body: `${reactionAuthorName} reacted with ${reactionType} to your post`,
@@ -325,7 +343,8 @@ export async function createReactionNotification(
       })
     })
 
-    await Promise.all(pushPromises)
+    const results = await Promise.all(pushPromises)
+    console.log("[v0] Push notification results:", results)
 
     // Revalidate relevant paths
     revalidatePath("/notifications")
@@ -333,7 +352,7 @@ export async function createReactionNotification(
 
     return { success: true, message: "Reaction notification sent" }
   } catch (error) {
-    console.error("Error creating reaction notification:", error)
+    console.error("[v0] Error creating reaction notification:", error)
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to send notification",
