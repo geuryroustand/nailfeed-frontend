@@ -58,16 +58,26 @@ export async function addReaction(
   try {
     const user = await getCurrentUser()
     if (!user) {
+      console.log("[v0] addReaction: User not authenticated")
       return { success: false, error: "User not authenticated" }
     }
 
-    console.log("[v0] addReaction called:", { postId, type, postAuthorId, userId: user.id })
+    console.log("[v0] addReaction: Starting with params:", {
+      postId,
+      type,
+      postDocumentId,
+      postAuthorId,
+      userId: user.id,
+      userDocumentId: user.documentId,
+    })
 
     // Check if user already has a reaction
     const existingReaction = await getUserReaction(postId)
+    console.log("[v0] addReaction: Existing reaction check:", existingReaction)
 
     // If removing the same reaction (toggle off)
     if (existingReaction && existingReaction.type === type) {
+      console.log("[v0] addReaction: Removing existing reaction (toggle off)")
       const removed = await removeReaction(existingReaction.id)
       if (removed.success) {
         revalidatePath("/")
@@ -79,6 +89,7 @@ export async function addReaction(
 
     // If user already has a reaction but wants to change it
     if (existingReaction) {
+      console.log("[v0] addReaction: Changing existing reaction")
       // Remove the existing reaction first
       await removeReaction(existingReaction.id)
     }
@@ -92,7 +103,7 @@ export async function addReaction(
       },
     }
 
-    console.log("[v0] Creating reaction with payload:", payload)
+    console.log("[v0] addReaction: Creating reaction with payload:", payload)
 
     const response = await fetch(`${API_URL}/api/likes`, {
       method: "POST",
@@ -105,27 +116,37 @@ export async function addReaction(
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error(`Failed to create reaction: ${response.status}`, errorText)
+      console.error(`[v0] addReaction: Failed to create reaction: ${response.status}`, errorText)
       return { success: false, error: `Failed to create reaction: ${response.status}` }
     }
 
     const data = await response.json()
+    console.log("[v0] addReaction: Strapi response:", data)
 
     if (data.data) {
-      console.log("[v0] Reaction created successfully:", data.data.id)
+      console.log("[v0] addReaction: Reaction created successfully:", data.data.id)
 
       if (postAuthorId && postAuthorId !== user.id && postAuthorId !== user.documentId) {
-        console.log("[v0] Creating reaction notification for author:", postAuthorId)
+        console.log("[v0] addReaction: Creating reaction notification for author:", {
+          postAuthorId,
+          reactingUserId: user.id,
+          postId: postDocumentId || postId.toString(),
+          reactionType: type,
+        })
+
         try {
           await createReactionNotification(postAuthorId, user.id, postDocumentId || postId.toString(), type)
-          console.log("[v0] Reaction notification created successfully")
+          console.log("[v0] addReaction: Reaction notification created successfully")
         } catch (notificationError) {
-          console.error("[v0] Failed to create reaction notification:", notificationError)
+          console.error("[v0] addReaction: Failed to create reaction notification:", notificationError)
           // Don't fail the reaction if notification fails
         }
       } else {
-        console.log("[v0] Skipping notification:", {
+        console.log("[v0] addReaction: Skipping notification creation:", {
           hasPostAuthorId: !!postAuthorId,
+          postAuthorId,
+          userId: user.id,
+          userDocumentId: user.documentId,
           isSameUser: postAuthorId === user.id || postAuthorId === user.documentId,
         })
       }
@@ -140,9 +161,10 @@ export async function addReaction(
       }
     }
 
+    console.log("[v0] addReaction: Invalid response from API - no data field")
     return { success: false, error: "Invalid response from API" }
   } catch (error) {
-    console.error("Error adding reaction:", error)
+    console.error("[v0] addReaction: Unexpected error:", error)
     return { success: false, error: error instanceof Error ? error.message : "Unknown error" }
   }
 }

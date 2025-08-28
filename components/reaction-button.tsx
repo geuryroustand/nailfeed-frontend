@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast"
 import type { ReactionType } from "@/lib/services/reaction-service"
 import { cn } from "@/lib/utils"
 import { ReactionSummary } from "./reaction-summary"
-import { addReaction as addReactionAction } from "@/app/actions/reaction-actions"
+import { addReaction as addReactionServerAction } from "@/app/actions/reaction-actions"
 
 interface ReactionButtonProps {
   postId: string | number
@@ -287,14 +287,17 @@ export function ReactionButton({
       const isChangingReaction = currentReaction && currentReaction !== type
       const isAddingNewReaction = !currentReaction
 
-      console.log("[v0] Reaction changed to:", type)
-      console.log("[v0] Current reaction state:", {
+      console.log("[v0] ReactionButton: Starting reaction process:", {
+        type,
         currentReaction,
         isRemovingReaction,
         isChangingReaction,
         isAddingNewReaction,
+        postId,
+        postDocumentId,
         postAuthorId,
         userId: user.id,
+        userDocumentId: user.documentId,
       })
 
       // Update UI optimistically
@@ -322,8 +325,16 @@ export function ReactionButton({
         onReactionChange(newReaction)
       }
 
-      const result = await addReactionAction(postId, type, postDocumentId, postAuthorId)
-      console.log("[v0] addReactionAction result:", result)
+      console.log("[v0] ReactionButton: Calling server action with params:", {
+        postId,
+        type,
+        postDocumentId,
+        postAuthorId,
+      })
+
+      const result = await addReactionServerAction(postId, type, postDocumentId, postAuthorId)
+
+      console.log("[v0] ReactionButton: Server action result:", result)
 
       if (result.success && result.reaction) {
         setUserReactionId(result.reaction.id)
@@ -352,10 +363,12 @@ export function ReactionButton({
           description: "Your reaction has been removed",
         })
       } else {
+        console.error("[v0] ReactionButton: Server action failed:", result.error)
         throw new Error(result.error || "Failed to process reaction")
       }
 
       // Refresh counts from server to ensure accuracy
+      console.log("[v0] ReactionButton: Refreshing reaction counts from server")
       const updatedCounts = await getReactionCounts(postId)
       if (updatedCounts) {
         setReactionCounts({
@@ -376,7 +389,7 @@ export function ReactionButton({
 
       // Refresh user reaction state to ensure UI shows correct current reaction
       const updatedUserReaction = await getUserReaction(postId)
-      console.log("[v0] Refreshed user reaction after operation:", updatedUserReaction)
+      console.log("[v0] ReactionButton: Refreshed user reaction after operation:", updatedUserReaction)
 
       if (updatedUserReaction) {
         setCurrentReaction(updatedUserReaction.type as ReactionType)
@@ -398,7 +411,7 @@ export function ReactionButton({
         }),
       )
     } catch (error) {
-      console.error("ReactionButton: Error from API call:", error)
+      console.error("[v0] ReactionButton: Error from server action:", error)
 
       toast({
         title: "Error",
