@@ -19,6 +19,8 @@ import PWAInstaller from "@/components/pwa-installer"
 import PWAUpdatePrompt from "@/components/pwa-update-prompt"
 import Script from "next/script"
 import FirstTimeVisitorNotification from "@/components/first-time-visitor-notification"
+import NotificationPermissionPrompt from "@/components/notification-permission-prompt"
+import NotificationHandler from "@/components/notification-handler"
 
 // Initialize configuration
 config.initialize()
@@ -98,6 +100,8 @@ export default function RootLayout({
                     <PWAInstaller />
                     <PWAUpdatePrompt />
                     <FirstTimeVisitorNotification />
+                    <NotificationPermissionPrompt />
+                    <NotificationHandler />
                   </MoodProvider>
                 </CollectionsProvider>
               </ProfileProvider>
