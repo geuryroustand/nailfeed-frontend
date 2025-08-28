@@ -120,6 +120,7 @@ export function PostDetailActions({
           <ReactionButton
             postId={post?.documentId || postId}
             postDocumentId={post?.documentId || postId}
+            postAuthorId={authorId}
             onReactionChange={(type) => {
               console.log("[v0] Reaction changed to:", type)
             }}

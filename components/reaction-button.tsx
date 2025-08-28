@@ -342,8 +342,13 @@ export function ReactionButton({
               isChangingReaction,
             })
             createReactionNotification(String(postId), postAuthorId, String(user.id), postAuthorName, type)
-              .then(() => {
-                console.log("[v0] Reaction notification sent successfully")
+              .then((notificationResult) => {
+                console.log("[v0] Reaction notification result:", notificationResult)
+                if (notificationResult.success) {
+                  console.log("[v0] Reaction notification sent successfully")
+                } else {
+                  console.error("[v0] Reaction notification failed:", notificationResult.error)
+                }
               })
               .catch((error) => {
                 console.error("[v0] Failed to send reaction notification:", error)
