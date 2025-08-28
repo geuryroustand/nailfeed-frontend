@@ -53,34 +53,51 @@ export default function NotificationPermissionPrompt() {
     setIsSubscribing(true)
 
     try {
+      console.log("[v0] NotificationPermissionPrompt - Requesting permission for user:", user.id)
+
       // Request notification permission
       const permission = await Notification.requestPermission()
       setPermission(permission)
+      console.log("[v0] NotificationPermissionPrompt - Permission result:", permission)
 
       if (permission === "granted") {
         // Register service worker
+        console.log("[v0] NotificationPermissionPrompt - Registering service worker")
         const registration = await navigator.serviceWorker.register("/sw.js")
         await navigator.serviceWorker.ready
+        console.log("[v0] NotificationPermissionPrompt - Service worker registered")
 
         const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+        console.log("[v0] NotificationPermissionPrompt - VAPID public key available:", !!vapidPublicKey)
+
         if (!vapidPublicKey) {
           throw new Error("VAPID public key not configured")
         }
 
         // Subscribe to push notifications
+        console.log("[v0] NotificationPermissionPrompt - Subscribing to push notifications")
         const subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
         })
 
+        console.log("[v0] NotificationPermissionPrompt - Push subscription created:", {
+          endpoint: subscription.endpoint,
+          hasKeys: !!(subscription.getKey("p256dh") && subscription.getKey("auth")),
+        })
+
         // Save subscription to server
-        const result = await subscribeToPushNotifications(user.id, {
+        const subscriptionData = {
           endpoint: subscription.endpoint,
           keys: {
             p256dh: btoa(String.fromCharCode(...new Uint8Array(subscription.getKey("p256dh")!))),
             auth: btoa(String.fromCharCode(...new Uint8Array(subscription.getKey("auth")!))),
           },
-        })
+        }
+
+        console.log("[v0] NotificationPermissionPrompt - Saving subscription to server:", subscriptionData)
+        const result = await subscribeToPushNotifications(user.id, subscriptionData)
+        console.log("[v0] NotificationPermissionPrompt - Save result:", result)
 
         if (result.success) {
           toast({
@@ -92,6 +109,7 @@ export default function NotificationPermissionPrompt() {
           throw new Error(result.error)
         }
       } else {
+        console.log("[v0] NotificationPermissionPrompt - Permission denied")
         toast({
           title: "Notifications blocked",
           description: "You can enable notifications in your browser settings",
@@ -99,7 +117,7 @@ export default function NotificationPermissionPrompt() {
         })
       }
     } catch (error) {
-      console.error("Error setting up notifications:", error)
+      console.error("[v0] NotificationPermissionPrompt - Error:", error)
       toast({
         title: "Error setting up notifications",
         description: error instanceof Error ? error.message : "Please try again",

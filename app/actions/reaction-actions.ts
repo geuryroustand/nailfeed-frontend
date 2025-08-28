@@ -1,6 +1,7 @@
 "use server"
 
 import { getCurrentUser } from "./auth-actions"
+import { createReactionNotification } from "@/lib/actions/notification-actions"
 import { revalidatePath } from "next/cache"
 
 const API_URL =
@@ -52,12 +53,15 @@ export async function addReaction(
   postId: string | number,
   type: ReactionType,
   postDocumentId?: string,
+  postAuthorId?: string, // Added postAuthorId parameter for notifications
 ): Promise<{ success: boolean; reaction?: { id: string; type: ReactionType }; error?: string }> {
   try {
     const user = await getCurrentUser()
     if (!user) {
       return { success: false, error: "User not authenticated" }
     }
+
+    console.log("[v0] addReaction called:", { postId, type, postAuthorId, userId: user.id })
 
     // Check if user already has a reaction
     const existingReaction = await getUserReaction(postId)
@@ -88,6 +92,8 @@ export async function addReaction(
       },
     }
 
+    console.log("[v0] Creating reaction with payload:", payload)
+
     const response = await fetch(`${API_URL}/api/likes`, {
       method: "POST",
       headers: {
@@ -106,6 +112,24 @@ export async function addReaction(
     const data = await response.json()
 
     if (data.data) {
+      console.log("[v0] Reaction created successfully:", data.data.id)
+
+      if (postAuthorId && postAuthorId !== user.id && postAuthorId !== user.documentId) {
+        console.log("[v0] Creating reaction notification for author:", postAuthorId)
+        try {
+          await createReactionNotification(postAuthorId, user.id, postDocumentId || postId.toString(), type)
+          console.log("[v0] Reaction notification created successfully")
+        } catch (notificationError) {
+          console.error("[v0] Failed to create reaction notification:", notificationError)
+          // Don't fail the reaction if notification fails
+        }
+      } else {
+        console.log("[v0] Skipping notification:", {
+          hasPostAuthorId: !!postAuthorId,
+          isSameUser: postAuthorId === user.id || postAuthorId === user.documentId,
+        })
+      }
+
       revalidatePath("/")
       return {
         success: true,

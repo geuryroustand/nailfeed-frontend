@@ -120,6 +120,7 @@ export default function PostDetailClientWrapperOptimized({ post, relatedPosts }:
           <ReactionButton
             postId={post.id}
             postDocumentId={post.documentId || post.id.toString()}
+            postAuthorId={post.authorId || post.userId || post.user?.id?.toString()}
             onReactionChange={(type) => {
               setCurrentReaction(type)
             }}
