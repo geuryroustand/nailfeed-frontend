@@ -4,10 +4,18 @@ import type React from "react"
 import { createContext, useContext, useState, useCallback } from "react"
 import { useAuth } from "@/context/auth-context"
 import { ReactionService, type ReactionType } from "@/lib/services/reaction-service"
+import { createReactionNotification } from "@/lib/actions/notification-actions"
 
 interface ReactionContextType {
   getUserReaction: (postId: number | string) => Promise<{ id: string; type: ReactionType } | null>
-  addReaction: (postId: number | string, type: ReactionType, documentId?: string) => Promise<any>
+  addReaction: (
+    postId: number | string,
+    type: ReactionType,
+    documentId?: string,
+    userId?: string,
+    userDocumentId?: string,
+    postAuthorId?: string | number,
+  ) => Promise<any>
   getReactionCounts: (postId: number | string) => Promise<any>
   getDetailedReactions: (postId: number | string) => Promise<any>
 }
@@ -36,13 +44,56 @@ export function ReactionProvider({ children }: { children: React.ReactNode }) {
   )
 
   const addReaction = useCallback(
-    async (postId: number | string, type: ReactionType, documentId?: string) => {
+    async (
+      postId: number | string,
+      type: ReactionType,
+      documentId?: string,
+      userId?: string,
+      userDocumentId?: string,
+      postAuthorId?: string | number,
+    ) => {
       try {
         if (!isAuthenticated || !user?.id) {
           throw new Error("User not authenticated")
         }
 
-        const result = await ReactionService.addReaction(postId, type, documentId, user.id, user.documentId)
+        const existingReaction = await ReactionService.getUserReaction(postId, userId || user.id)
+        const isNewReaction = !existingReaction
+
+        console.log("[v0] Adding reaction - isNewReaction:", isNewReaction, "postAuthorId:", postAuthorId)
+
+        const result = await ReactionService.addReaction(
+          postId,
+          type,
+          documentId,
+          userId || user.id,
+          userDocumentId || user.documentId,
+        )
+
+        if (isNewReaction && result && postAuthorId && postAuthorId.toString() !== (userId || user.id).toString()) {
+          console.log("[v0] Creating notification record for post author:", postAuthorId)
+          try {
+            await createReactionNotification(
+              postId.toString(),
+              postAuthorId.toString(),
+              (userId || user.id).toString(),
+              user.displayName || user.username || "Someone",
+              type,
+            )
+            console.log("[v0] Notification record created successfully (no push notification sent)")
+          } catch (notificationError) {
+            console.error("[v0] Failed to create notification record:", notificationError)
+          }
+        } else {
+          console.log(
+            "[v0] Skipping notification - isNewReaction:",
+            isNewReaction,
+            "postAuthorId:",
+            postAuthorId,
+            "isSelfReaction:",
+            postAuthorId?.toString() === (userId || user.id).toString(),
+          )
+        }
 
         setCache((prev) => {
           const newCache = { ...prev }
@@ -65,7 +116,6 @@ export function ReactionProvider({ children }: { children: React.ReactNode }) {
     async (postId: number | string) => {
       const cacheKey = `counts-${postId}`
 
-      // Check cache first
       if (cache[cacheKey]) {
         return cache[cacheKey]
       }
@@ -73,7 +123,6 @@ export function ReactionProvider({ children }: { children: React.ReactNode }) {
       try {
         const counts = await ReactionService.getReactionCounts(postId)
 
-        // Cache the result
         setCache((prev) => ({
           ...prev,
           [cacheKey]: counts,
@@ -99,7 +148,6 @@ export function ReactionProvider({ children }: { children: React.ReactNode }) {
     async (postId: number | string) => {
       const cacheKey = `detailed-${postId}`
 
-      // Check cache first
       if (cache[cacheKey]) {
         return cache[cacheKey]
       }
@@ -107,7 +155,6 @@ export function ReactionProvider({ children }: { children: React.ReactNode }) {
       try {
         const detailed = await ReactionService.getReactionCounts(postId)
 
-        // Cache the result
         setCache((prev) => ({
           ...prev,
           [cacheKey]: { reactions: detailed },

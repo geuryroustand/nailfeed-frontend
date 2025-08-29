@@ -7,14 +7,13 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backen
 const SERVER_API_TOKEN = process.env.API_TOKEN || ""
 
 export interface NotificationData {
-  type: "like" | "comment" | "follow" | "mention" | "collection" | "mood" | "push_subscription"
+  type: "like" | "comment" | "follow" | "mention" | "collection" | "mood"
   userId: string
   relatedUserId?: string
   relatedPostId?: string
   relatedCommentId?: string
   message: string
   title: string
-  metadata?: PushSubscription
 }
 
 export interface PushSubscription {
@@ -45,7 +44,7 @@ function getAuthHeaders(): HeadersInit {
 }
 
 /**
- * Server action to create a notification in Strapi
+ * Server action to create a notification in Strapi (without sending push notification)
  */
 export async function createNotification(data: NotificationData) {
   try {
@@ -63,7 +62,6 @@ export async function createNotification(data: NotificationData) {
           relatedUser: data.relatedUserId,
           relatedPost: data.relatedPostId,
           relatedComment: data.relatedCommentId,
-          metadata: data.metadata,
         },
       }),
     })
@@ -85,29 +83,30 @@ export async function createNotification(data: NotificationData) {
  */
 export async function subscribeToPushNotifications(userId: string, subscription: PushSubscription) {
   try {
-    const url = `${API_BASE_URL}/api/notifications`
-    const headers = getAuthHeaders()
-
-    const response = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        data: {
-          type: "push_subscription", // Use the correct enum value we added to Strapi
-          read: true, // Mark as read since it's not a user-facing notification
-          user: userId,
-          metadata: subscription, // Store subscription data in metadata field
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/push-subscriptions`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      }),
-    })
+        body: JSON.stringify({
+          userId,
+          endpoint: subscription.endpoint,
+          p256dh: subscription.keys.p256dh,
+          auth: subscription.keys.auth,
+          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "Server",
+        }),
+      },
+    )
 
     if (!response.ok) {
-      const errorText = await response.text()
-      console.error("Strapi error response:", errorText)
-      throw new Error(`Failed to save push subscription: ${response.status} - ${errorText}`)
+      const errorData = await response.json()
+      throw new Error(errorData.error || `Failed to save push subscription: ${response.status}`)
     }
 
-    return { success: true, message: "Successfully subscribed to notifications" }
+    const data = await response.json()
+    return { success: true, message: "Successfully subscribed to notifications", data: data.data }
   } catch (error) {
     console.error("Error subscribing to push notifications:", error)
     return {
@@ -123,32 +122,33 @@ export async function subscribeToPushNotifications(userId: string, subscription:
  */
 export async function getUserPushSubscriptions(userId: string) {
   try {
-    const url = `${API_BASE_URL}/api/notifications?filters[user][id][$eq]=${userId}&filters[type][$eq]=push_subscription`
-    const headers = getAuthHeaders()
-
-    const response = await fetch(url, {
-      method: "GET",
-      headers,
-    })
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/push-subscriptions?userId=${userId}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      },
+    )
 
     if (!response.ok) {
       throw new Error(`Failed to get push subscriptions: ${response.status}`)
     }
 
-    const data = await response.json()
+    const result = await response.json()
 
     return (
-      data.data?.map((item: any) => {
-        const subscriptionData = item.attributes.metadata
-        return {
-          id: item.id,
-          attributes: {
-            endpoint: subscriptionData.endpoint,
-            p256dh: subscriptionData.keys.p256dh,
-            auth: subscriptionData.keys.auth,
-          },
-        }
-      }) || []
+      result.data?.map((item: any) => ({
+        id: item.id,
+        attributes: {
+          endpoint: item.attributes.endpoint,
+          p256dh: item.attributes.p256dh,
+          auth: item.attributes.auth,
+          userAgent: item.attributes.userAgent,
+          isActive: item.attributes.isActive,
+        },
+      })) || []
     )
   } catch (error) {
     console.error("Error getting push subscriptions:", error)
@@ -157,54 +157,7 @@ export async function getUserPushSubscriptions(userId: string) {
 }
 
 /**
- * Server action to send push notification
- * Move push notification sending logic to server action
- */
-export async function sendPushNotification(
-  subscription: PushSubscription,
-  payload: {
-    title: string
-    body: string
-    icon?: string
-    badge?: string
-    data?: any
-  },
-) {
-  try {
-    const webpush = await import("web-push")
-
-    // Configure web-push with VAPID keys
-    webpush.setVapidDetails(
-      process.env.VAPID_SUBJECT || "mailto:support@nailfeed.com",
-      process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-      process.env.VAPID_PRIVATE_KEY!,
-    )
-
-    const notificationPayload = JSON.stringify({
-      title: payload.title,
-      body: payload.body,
-      icon: payload.icon || "/icon-192x192.png",
-      badge: payload.badge || "/icon-192x192.png",
-      data: payload.data || {},
-      actions: [
-        {
-          action: "view",
-          title: "View",
-          icon: "/icon-192x192.png",
-        },
-      ],
-    })
-
-    await webpush.sendNotification(subscription, notificationPayload)
-    return { success: true }
-  } catch (error) {
-    console.error("Error sending push notification:", error)
-    return { success: false, error: error instanceof Error ? error.message : "Unknown error" }
-  }
-}
-
-/**
- * Server action to create and send comment notification
+ * Server action to create comment notification (without sending push notification)
  */
 export async function createCommentNotification(
   postId: string,
@@ -214,12 +167,12 @@ export async function createCommentNotification(
   commentContent: string,
 ) {
   try {
-    // Don't send notification if user is commenting on their own post
+    // Don't create notification if user is commenting on their own post
     if (postAuthorId === commentAuthorId) {
       return { success: true, message: "No notification needed for own post" }
     }
 
-    // Create notification in database
+    // Create notification in database only (no push notification)
     const notificationData: NotificationData = {
       type: "comment",
       userId: postAuthorId,
@@ -231,49 +184,22 @@ export async function createCommentNotification(
 
     await createNotification(notificationData)
 
-    // Get user's push subscriptions
-    const subscriptions = await getUserPushSubscriptions(postAuthorId)
-
-    // Send push notifications to all user's devices
-    const pushPromises = subscriptions.map(async (sub: any) => {
-      const subscription: PushSubscription = {
-        endpoint: sub.attributes.endpoint,
-        keys: {
-          p256dh: sub.attributes.p256dh,
-          auth: sub.attributes.auth,
-        },
-      }
-
-      return sendPushNotification(subscription, {
-        title: "New Comment on Your Post",
-        body: `${commentAuthorName}: ${commentContent.substring(0, 100)}${commentContent.length > 100 ? "..." : ""}`,
-        icon: "/icon-192x192.png",
-        data: {
-          type: "comment",
-          postId,
-          url: `/post/${postId}`,
-        },
-      })
-    })
-
-    await Promise.all(pushPromises)
-
     // Revalidate relevant paths
     revalidatePath("/notifications")
     revalidatePath(`/post/${postId}`)
 
-    return { success: true, message: "Comment notification sent" }
+    return { success: true, message: "Comment notification created (no push notification sent)" }
   } catch (error) {
     console.error("Error creating comment notification:", error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to send notification",
+      error: error instanceof Error ? error.message : "Failed to create notification",
     }
   }
 }
 
 /**
- * Server action to create and send reaction notification
+ * Server action to create reaction notification (without sending push notification)
  */
 export async function createReactionNotification(
   postId: string,
@@ -283,12 +209,12 @@ export async function createReactionNotification(
   reactionType: string,
 ) {
   try {
-    // Don't send notification if user is reacting to their own post
+    // Don't create notification if user is reacting to their own post
     if (postAuthorId === reactionAuthorId) {
       return { success: true, message: "No notification needed for own post" }
     }
 
-    // Create notification in database
+    // Create notification in database only (no push notification)
     const notificationData: NotificationData = {
       type: "like", // Use "like" type for all reactions since it's in the Strapi enum
       userId: postAuthorId,
@@ -300,43 +226,16 @@ export async function createReactionNotification(
 
     await createNotification(notificationData)
 
-    // Get user's push subscriptions
-    const subscriptions = await getUserPushSubscriptions(postAuthorId)
-
-    // Send push notifications to all user's devices
-    const pushPromises = subscriptions.map(async (sub: any) => {
-      const subscription: PushSubscription = {
-        endpoint: sub.attributes.endpoint,
-        keys: {
-          p256dh: sub.attributes.p256dh,
-          auth: sub.attributes.auth,
-        },
-      }
-
-      return sendPushNotification(subscription, {
-        title: "New Reaction on Your Post",
-        body: `${reactionAuthorName} reacted with ${reactionType} to your post`,
-        icon: "/icon-192x192.png",
-        data: {
-          type: "reaction",
-          postId,
-          url: `/post/${postId}`,
-        },
-      })
-    })
-
-    await Promise.all(pushPromises)
-
     // Revalidate relevant paths
     revalidatePath("/notifications")
     revalidatePath(`/post/${postId}`)
 
-    return { success: true, message: "Reaction notification sent" }
+    return { success: true, message: "Reaction notification created (no push notification sent)" }
   } catch (error) {
     console.error("Error creating reaction notification:", error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to send notification",
+      error: error instanceof Error ? error.message : "Failed to create notification",
     }
   }
 }
@@ -346,7 +245,7 @@ export async function createReactionNotification(
  */
 export async function getUserNotifications(userId: string, page = 1, pageSize = 20) {
   try {
-    const url = `${API_BASE_URL}/api/notifications?filters[user][id][$eq]=${userId}&filters[type][$ne]=push_subscription&sort=createdAt:desc&pagination[page]=${page}&pagination[pageSize]=${pageSize}&populate=*`
+    const url = `${API_BASE_URL}/api/notifications?filters[user][id][$eq]=${userId}&sort=createdAt:desc&pagination[page]=${page}&pagination[pageSize]=${pageSize}&populate=*`
     const headers = getAuthHeaders()
 
     const response = await fetch(url, {

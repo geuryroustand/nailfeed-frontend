@@ -265,6 +265,7 @@ export default function PostDetailClientWrapper({ post, relatedPosts }: PostDeta
               <ReactionButton
                 postId={post.id}
                 postDocumentId={post.documentId || post.id.toString()}
+                postAuthorId={post.userId || post.authorId || post.user?.id || post.user?.documentId}
                 onReactionChange={(type) => {
                   setCurrentReaction(type)
                 }}
