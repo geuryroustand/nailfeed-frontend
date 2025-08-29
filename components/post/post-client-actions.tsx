@@ -94,13 +94,7 @@ export default function PostClientActions({ post }: PostClientActionsProps) {
       <div className="flex items-center justify-between py-4 border-t border-b">
         {/* Replace the like button with ReactionButton */}
         {post.documentId ? (
-          <ReactionButton
-            postId={post.id}
-            postDocumentId={post.documentId}
-            className="flex-1"
-            showCount={false}
-            postAuthorId={post.userId?.toString() || post.user?.id?.toString() || post.user?.documentId}
-          />
+          <ReactionButton postId={post.id} postDocumentId={post.documentId} className="flex-1" showCount={false} />
         ) : (
           <Button
             variant="ghost"

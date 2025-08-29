@@ -9,52 +9,48 @@
 
 // Public base URL for the API (safe to expose). Falls back to production backend if not set.
 export const API_URL: string =
-  (process.env.NEXT_PUBLIC_API_URL?.trim() as string) || "https://nailfeed-backend-production.up.railway.app"
+  (process.env.NEXT_PUBLIC_API_URL?.trim() as string) ||
+  "https://nailfeed-backend-production.up.railway.app";
 
 // Basic request throttling configuration used by client services.
 export type RequestConfig = {
-  minRequestInterval: number
-}
+  minRequestInterval: number;
+};
 
 export const REQUEST_CONFIG: RequestConfig = {
   // 250ms between requests by default to reduce bursty client traffic
   minRequestInterval: 250,
-}
-
-export const POLLING_CONFIG = {
-  ENABLE_POLLING: true,
-  REACTION_POLLING_INTERVAL: 5000, // 5 seconds
-  COMMENT_POLLING_INTERVAL: 10000, // 10 seconds
-  POST_POLLING_INTERVAL: 30000, // 30 seconds
-}
+};
 
 // Server-only token (not exposed to client)
-const API_TOKEN = process.env.API_TOKEN || ""
+const API_TOKEN = process.env.API_TOKEN || "";
 
 // Feature flags
 export const FEATURES = {
   enableDetailedLogging: true,
   useFallbackData: false,
-}
+};
 
 export const getServerApiToken = (): string | null => {
-  if (typeof window !== "undefined") return null
-  return API_TOKEN || null
-}
+  if (typeof window !== "undefined") return null;
+  return API_TOKEN || null;
+};
 
 const config = {
   api: {
     API_URL,
     // Get full API URL for a path
     getFullApiUrl: (path: string): string => {
-      const normalizedBase = API_URL.endsWith("/") ? API_URL.slice(0, -1) : API_URL
-      const normalizedPath = path.startsWith("/") ? path.substring(1) : path
-      return `${normalizedBase}/${normalizedPath}`
+      const normalizedBase = API_URL.endsWith("/")
+        ? API_URL.slice(0, -1)
+        : API_URL;
+      const normalizedPath = path.startsWith("/") ? path.substring(1) : path;
+      return `${normalizedBase}/${normalizedPath}`;
     },
 
     // Server-only token getter
     getApiToken: (): string | null => {
-      return getServerApiToken()
+      return getServerApiToken();
     },
 
     // Never use sample data here
@@ -62,16 +58,23 @@ const config = {
   },
 
   app: {
-    APP_URL: process.env.NEXT_PUBLIC_APP_URL || (typeof window !== "undefined" ? window.location.origin : ""),
+    APP_URL:
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (typeof window !== "undefined" ? window.location.origin : ""),
     getFullUrl: (path: string): string => {
-      const baseUrl = config.app.APP_URL
-      const normalizedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl
-      const normalizedPath = path.startsWith("/") ? path.substring(1) : path
-      return `${normalizedBase}/${normalizedPath}`
+      const baseUrl = config.app.APP_URL;
+      const normalizedBase = baseUrl.endsWith("/")
+        ? baseUrl.slice(0, -1)
+        : baseUrl;
+      const normalizedPath = path.startsWith("/") ? path.substring(1) : path;
+      return `${normalizedBase}/${normalizedPath}`;
     },
-    getPostShareUrl: (postId: number | string): string => config.app.getFullUrl(`post/${postId}`),
-    getProfileUrl: (username: string): string => config.app.getFullUrl(`profile/${username}`),
-    getCollectionUrl: (collectionId: number | string): string => config.app.getFullUrl(`collections/${collectionId}`),
+    getPostShareUrl: (postId: number | string): string =>
+      config.app.getFullUrl(`post/${postId}`),
+    getProfileUrl: (username: string): string =>
+      config.app.getFullUrl(`profile/${username}`),
+    getCollectionUrl: (collectionId: number | string): string =>
+      config.app.getFullUrl(`collections/${collectionId}`),
   },
 
   features: {
@@ -84,23 +87,23 @@ const config = {
 
   isInitialized: false,
   initialize: () => {
-    if (config.isInitialized) return
+    if (config.isInitialized) return;
     if (process.env.NODE_ENV === "development") {
       console.log("🔧 App Configuration:", {
         API_URL: config.api.API_URL,
         APP_URL: config.app.APP_URL,
         HAS_SERVER_API_TOKEN: !!API_TOKEN,
         FEATURES: config.features,
-      })
+      });
     }
-    config.isInitialized = true
+    config.isInitialized = true;
   },
-}
+};
 
-config.initialize()
+config.initialize();
 
 export function useSampleData(): boolean {
-  return false
+  return false;
 }
 
-export default config
+export default config;

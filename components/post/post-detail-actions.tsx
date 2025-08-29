@@ -43,11 +43,6 @@ interface PostDetailActionsProps {
         username: string
       }
     }>
-    userId?: number
-    user?: {
-      id?: number
-      documentId?: string
-    }
   }
 }
 
@@ -130,7 +125,6 @@ export function PostDetailActions({
             }}
             showCount={false}
             className="flex-1 justify-center"
-            postAuthorId={authorId || post?.userId?.toString() || post?.user?.id?.toString() || post?.user?.documentId}
           />
 
           <Button variant="ghost" size="icon" aria-label="Comment" className="flex-1 justify-center">

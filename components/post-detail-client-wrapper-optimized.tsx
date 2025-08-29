@@ -124,7 +124,6 @@ export default function PostDetailClientWrapperOptimized({ post, relatedPosts }:
               setCurrentReaction(type)
             }}
             className="flex-1"
-            postAuthorId={post.userId?.toString() || post.user?.id?.toString() || post.user?.documentId}
           />
 
           <Button

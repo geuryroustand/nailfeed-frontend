@@ -5,7 +5,6 @@ import { cn } from "@/lib/utils"
 import { ReactionModal } from "./reaction-modal"
 import { ReactionService, type ReactionType } from "@/lib/services/reaction-service"
 import { useToast } from "@/components/ui/use-toast"
-import { POLLING_CONFIG } from "@/lib/config"
 
 interface ReactionUser {
   id: string | number
@@ -54,7 +53,6 @@ export function ReactionSummary({
   const [isLoading, setIsLoading] = useState(!initialReactions && !likes)
   const [error, setError] = useState<string | null>(null)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
-  const [isPolling, setIsPolling] = useState(false)
   const { toast } = useToast()
 
   console.log("[v0] ReactionSummary render:", {
@@ -66,7 +64,6 @@ export function ReactionSummary({
     hasLikesData: !!likes,
     likesCount: likes?.length || 0,
     refreshTrigger,
-    isPolling,
   })
 
   // Map reaction types to emojis and labels
@@ -187,51 +184,6 @@ export function ReactionSummary({
       setIsLoading(false)
     }
   }
-
-  useEffect(() => {
-    if (!postId || !POLLING_CONFIG.ENABLE_POLLING) return
-
-    // Start polling when component mounts
-    setIsPolling(true)
-
-    const pollInterval = setInterval(async () => {
-      try {
-        const reactionData = await ReactionService.getReactionCounts(String(postId))
-
-        // Transform the reaction data
-        const formattedReactions = Object.entries(reactionData)
-          .filter(([_, data]) => data.count > 0)
-          .map(([type, data]) => {
-            const reactionType = type as ReactionType
-            return {
-              emoji: reactionEmojis[reactionType] || "👍",
-              label: reactionLabels[reactionType] || "Like",
-              count: data.count,
-              users: data.users || [],
-            }
-          })
-
-        const total = Object.values(reactionData).reduce((sum, data) => sum + data.count, 0)
-
-        // Only update if data has changed to avoid unnecessary re-renders
-        const currentTotal = reactions.reduce((sum, r) => sum + r.count, 0)
-        if (total !== currentTotal) {
-          console.log("[v0] ReactionSummary polling detected changes:", { oldTotal: currentTotal, newTotal: total })
-          setReactions(formattedReactions)
-          setTotalCount(total)
-        }
-      } catch (error) {
-        console.error("[v0] ReactionSummary polling error:", error)
-        // Don't show errors for polling failures to avoid spam
-      }
-    }, POLLING_CONFIG.REACTION_POLLING_INTERVAL)
-
-    // Cleanup interval on unmount
-    return () => {
-      clearInterval(pollInterval)
-      setIsPolling(false)
-    }
-  }, [postId, reactions])
 
   useEffect(() => {
     const handleReactionUpdate = (event: CustomEvent) => {

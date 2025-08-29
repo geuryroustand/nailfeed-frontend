@@ -324,33 +324,13 @@ export function ReactionButton({
         .then((result) => {
           console.log("[v0] addReaction result:", result)
 
-          if (result && result.data && result.data.id) {
-            setUserReactionId(result.data.id)
+          if (result && result.id) {
+            setUserReactionId(result.id)
           } else if (isRemovingReaction) {
             setUserReactionId(null)
           }
 
-          console.log("[v0] Checking notification conditions:", {
-            hasResult: !!(result && result.data && result.data.id),
-            hasPostAuthorId: !!postAuthorId,
-            postAuthorId,
-            userId: user.id,
-            userDocumentId: user.documentId,
-            isDifferentUser: postAuthorId !== user.id && postAuthorId !== user.documentId,
-            isAddingNewReaction,
-            isChangingReaction,
-            isRemovingReaction,
-          })
-
-          if (
-            result &&
-            result.data &&
-            result.data.id &&
-            postAuthorId &&
-            postAuthorId !== user.id &&
-            postAuthorId !== user.documentId &&
-            !isRemovingReaction
-          ) {
+          if (result && result.id && postAuthorId && postAuthorId !== user.id) {
             const postAuthorName = user.displayName || user.username || "Someone"
             console.log("[v0] Sending reaction notification:", {
               postId: String(postId),
@@ -370,13 +350,11 @@ export function ReactionButton({
               })
           } else {
             console.log("[v0] Skipping reaction notification:", {
-              hasResult: !!(result && result.data && result.data.id),
+              hasResult: !!(result && result.id),
               hasPostAuthorId: !!postAuthorId,
-              isDifferentUser: postAuthorId !== user.id && postAuthorId !== user.documentId,
+              isDifferentUser: postAuthorId !== user.id,
               postAuthorId,
               userId: user.id,
-              userDocumentId: user.documentId,
-              isRemovingReaction,
             })
           }
 
