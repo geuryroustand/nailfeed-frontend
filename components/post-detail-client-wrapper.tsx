@@ -265,11 +265,11 @@ export default function PostDetailClientWrapper({ post, relatedPosts }: PostDeta
               <ReactionButton
                 postId={post.id}
                 postDocumentId={post.documentId || post.id.toString()}
-                postAuthorId={post.authorId || post.userId || post.user?.id?.toString()}
                 onReactionChange={(type) => {
                   setCurrentReaction(type)
                 }}
                 className="flex-1"
+                postAuthorId={post.userId?.toString() || post.user?.id?.toString() || post.user?.documentId}
               />
 
               <Button

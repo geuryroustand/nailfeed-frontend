@@ -43,6 +43,11 @@ interface PostDetailActionsProps {
         username: string
       }
     }>
+    userId?: number
+    user?: {
+      id?: number
+      documentId?: string
+    }
   }
 }
 
@@ -120,12 +125,12 @@ export function PostDetailActions({
           <ReactionButton
             postId={post?.documentId || postId}
             postDocumentId={post?.documentId || postId}
-            postAuthorId={authorId}
             onReactionChange={(type) => {
               console.log("[v0] Reaction changed to:", type)
             }}
             showCount={false}
             className="flex-1 justify-center"
+            postAuthorId={authorId || post?.userId?.toString() || post?.user?.id?.toString() || post?.user?.documentId}
           />
 
           <Button variant="ghost" size="icon" aria-label="Comment" className="flex-1 justify-center">

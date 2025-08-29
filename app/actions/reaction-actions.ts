@@ -1,7 +1,6 @@
 "use server"
 
 import { getCurrentUser } from "./auth-actions"
-import { createReactionNotification } from "@/lib/actions/notification-actions"
 import { revalidatePath } from "next/cache"
 
 const API_URL =
@@ -53,52 +52,29 @@ export async function addReaction(
   postId: string | number,
   type: ReactionType,
   postDocumentId?: string,
-  postAuthorId?: string, // Added postAuthorId parameter for notifications
 ): Promise<{ success: boolean; reaction?: { id: string; type: ReactionType }; error?: string }> {
-  console.log("[v0] ===== SERVER ACTION CALLED =====")
-  console.log("[v0] addReaction SERVER ACTION: Starting execution")
-  console.log("[v0] addReaction SERVER ACTION: Input parameters:", {
-    postId,
-    type,
-    postDocumentId,
-    postAuthorId,
-    timestamp: new Date().toISOString(),
-  })
-
   try {
     const user = await getCurrentUser()
     if (!user) {
-      console.log("[v0] addReaction SERVER ACTION: User not authenticated")
       return { success: false, error: "User not authenticated" }
     }
 
-    console.log("[v0] addReaction SERVER ACTION: User authenticated:", {
-      userId: user.id,
-      userDocumentId: user.documentId,
-      username: user.username,
-    })
-
     // Check if user already has a reaction
     const existingReaction = await getUserReaction(postId)
-    console.log("[v0] addReaction SERVER ACTION: Existing reaction check:", existingReaction)
 
     // If removing the same reaction (toggle off)
     if (existingReaction && existingReaction.type === type) {
-      console.log("[v0] addReaction SERVER ACTION: Removing existing reaction (toggle off)")
       const removed = await removeReaction(existingReaction.id)
       if (removed.success) {
         revalidatePath("/")
-        console.log("[v0] addReaction SERVER ACTION: Successfully removed reaction")
         return { success: true }
       } else {
-        console.log("[v0] addReaction SERVER ACTION: Failed to remove reaction")
         return { success: false, error: "Failed to remove reaction" }
       }
     }
 
     // If user already has a reaction but wants to change it
     if (existingReaction) {
-      console.log("[v0] addReaction SERVER ACTION: Changing existing reaction")
       // Remove the existing reaction first
       await removeReaction(existingReaction.id)
     }
@@ -112,8 +88,6 @@ export async function addReaction(
       },
     }
 
-    console.log("[v0] addReaction SERVER ACTION: Creating reaction with payload:", payload)
-
     const response = await fetch(`${API_URL}/api/likes`, {
       method: "POST",
       headers: {
@@ -125,54 +99,14 @@ export async function addReaction(
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error(`[v0] addReaction SERVER ACTION: Failed to create reaction: ${response.status}`, errorText)
+      console.error(`Failed to create reaction: ${response.status}`, errorText)
       return { success: false, error: `Failed to create reaction: ${response.status}` }
     }
 
     const data = await response.json()
-    console.log("[v0] addReaction SERVER ACTION: Strapi response:", data)
 
     if (data.data) {
-      console.log("[v0] addReaction SERVER ACTION: Reaction created successfully:", data.data.id)
-
-      if (postAuthorId && postAuthorId !== user.id && postAuthorId !== user.documentId) {
-        console.log("[v0] addReaction SERVER ACTION: Creating reaction notification for author:", {
-          postAuthorId,
-          reactingUserId: user.id,
-          postId: postDocumentId || postId.toString(),
-          reactionType: type,
-          timestamp: new Date().toISOString(),
-        })
-
-        try {
-          const notificationResult = await createReactionNotification(
-            postAuthorId,
-            user.id,
-            postDocumentId || postId.toString(),
-            type,
-          )
-          console.log("[v0] addReaction SERVER ACTION: Reaction notification created successfully:", notificationResult)
-        } catch (notificationError) {
-          console.error("[v0] addReaction SERVER ACTION: Failed to create reaction notification:", notificationError)
-          // Don't fail the reaction if notification fails
-        }
-      } else {
-        console.log("[v0] addReaction SERVER ACTION: Skipping notification creation:", {
-          hasPostAuthorId: !!postAuthorId,
-          postAuthorId,
-          userId: user.id,
-          userDocumentId: user.documentId,
-          isSameUser: postAuthorId === user.id || postAuthorId === user.documentId,
-          reason: !postAuthorId
-            ? "No postAuthorId provided"
-            : postAuthorId === user.id || postAuthorId === user.documentId
-              ? "User reacting to own post"
-              : "Unknown",
-        })
-      }
-
       revalidatePath("/")
-      console.log("[v0] addReaction SERVER ACTION: Successfully completed")
       return {
         success: true,
         reaction: {
@@ -182,13 +116,10 @@ export async function addReaction(
       }
     }
 
-    console.log("[v0] addReaction SERVER ACTION: Invalid response from API - no data field")
     return { success: false, error: "Invalid response from API" }
   } catch (error) {
-    console.error("[v0] addReaction SERVER ACTION: Unexpected error:", error)
+    console.error("Error adding reaction:", error)
     return { success: false, error: error instanceof Error ? error.message : "Unknown error" }
-  } finally {
-    console.log("[v0] ===== SERVER ACTION COMPLETED =====")
   }
 }
 

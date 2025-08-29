@@ -296,27 +296,52 @@ export default function Post({
         return
       }
 
-      console.log("[v0] Using user from auth context:", user)
-      console.log("[v0] Current reaction:", reaction, "New reaction:", reactionType)
-
       previousReaction = reaction
+      const isRemovingReaction = reaction === reactionType
+      const isAddingNewReaction = !reaction
+      const isChangingReaction = reaction && reaction !== reactionType
+
       if (reaction === reactionType) {
         // Toggling off - removing reaction
         setReaction(null)
-        console.log("[v0] Toggling off reaction:", reactionType)
       } else {
         // Adding new or changing reaction
         setReaction(reactionType)
-        console.log("[v0] Setting new reaction:", reactionType)
       }
 
-      await ReactionService.addReaction(
+      const result = await ReactionService.addReaction(
         post.documentId,
         reactionType,
         post.documentId,
         user.id,
         user.documentId || user.id,
       )
+
+      // Send notification if reaction was successfully created and it's not the post author reacting to their own post
+      const postAuthorId = post.userId?.toString() || post.user?.id?.toString() || post.user?.documentId
+
+      if (
+        result &&
+        postAuthorId &&
+        postAuthorId !== user.id.toString() &&
+        postAuthorId !== user.documentId &&
+        !isRemovingReaction
+      ) {
+        const postAuthorName = user.displayName || user.username || "Someone"
+
+        // Import the notification function at the top of the file
+        const { createReactionNotification } = await import("@/lib/actions/notification-actions")
+
+        createReactionNotification(
+          String(post.documentId),
+          postAuthorId,
+          String(user.id),
+          postAuthorName,
+          reactionType,
+        ).catch((error) => {
+          console.error("[v0] Post component - Failed to send reaction notification:", error)
+        })
+      }
 
       const reactionData = await ReactionService.getReactionCounts(post.documentId)
 

@@ -119,11 +119,19 @@ export async function sendPushNotification(
  */
 export async function getUserPushSubscriptions(userId: string) {
   try {
-    const url = `${API_BASE_URL}/api/notifications?filters[user][id][$eq]=${userId}&filters[type][$eq]=push_subscription`
-    const headers = getAuthHeaders()
+    const url = `${API_BASE_URL}/api/push-subscriptions?filters[user][id][$eq]=${userId}`
 
-    console.log("[v0] getUserPushSubscriptions - Fetching subscriptions for user:", userId)
-    console.log("[v0] getUserPushSubscriptions - API URL:", url)
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
+    }
+
+    const cookieStore = cookies()
+    const jwt = cookieStore.get("jwt")?.value
+    if (jwt) {
+      headers["Authorization"] = `Bearer ${jwt}`
+    } else if (SERVER_API_TOKEN) {
+      headers["Authorization"] = `Bearer ${SERVER_API_TOKEN}`
+    }
 
     const response = await fetch(url, {
       method: "GET",
@@ -131,34 +139,13 @@ export async function getUserPushSubscriptions(userId: string) {
     })
 
     if (!response.ok) {
-      console.error("[v0] getUserPushSubscriptions - API error:", response.status, response.statusText)
       throw new Error(`Failed to get push subscriptions: ${response.status}`)
     }
 
     const data = await response.json()
-    console.log("[v0] getUserPushSubscriptions - Raw API response:", data)
-
-    const subscriptions =
-      data.data
-        ?.map((item: any) => {
-          const subscriptionData = item.attributes?.metadata || item.metadata
-          console.log("[v0] getUserPushSubscriptions - Processing subscription:", subscriptionData)
-
-          return {
-            id: item.id,
-            attributes: {
-              endpoint: subscriptionData?.endpoint,
-              p256dh: subscriptionData?.keys?.p256dh,
-              auth: subscriptionData?.keys?.auth,
-            },
-          }
-        })
-        .filter((sub: any) => sub.attributes.endpoint) || []
-
-    console.log("[v0] getUserPushSubscriptions - Processed subscriptions:", subscriptions)
-    return subscriptions
+    return data.data || []
   } catch (error) {
-    console.error("[v0] getUserPushSubscriptions - Error:", error)
+    console.error("Error getting push subscriptions:", error)
     return []
   }
 }
@@ -204,20 +191,4 @@ export async function savePushSubscription(userId: string, subscription: PushSub
     console.error("Error saving push subscription:", error)
     throw error
   }
-}
-
-function getAuthHeaders() {
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  }
-
-  const cookieStore = cookies()
-  const jwt = cookieStore.get("jwt")?.value
-  if (jwt) {
-    headers["Authorization"] = `Bearer ${jwt}`
-  } else if (SERVER_API_TOKEN) {
-    headers["Authorization"] = `Bearer ${SERVER_API_TOKEN}`
-  }
-
-  return headers
 }

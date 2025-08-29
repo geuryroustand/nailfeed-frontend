@@ -97,9 +97,9 @@ export default function PostClientActions({ post }: PostClientActionsProps) {
           <ReactionButton
             postId={post.id}
             postDocumentId={post.documentId}
-            postAuthorId={post.authorId || post.userId || post.user?.id?.toString()}
             className="flex-1"
             showCount={false}
+            postAuthorId={post.userId?.toString() || post.user?.id?.toString() || post.user?.documentId}
           />
         ) : (
           <Button

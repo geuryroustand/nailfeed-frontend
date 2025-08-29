@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast"
 import type { ReactionType } from "@/lib/services/reaction-service"
 import { cn } from "@/lib/utils"
 import { ReactionSummary } from "./reaction-summary"
-import { addReaction as addReactionServerAction } from "@/app/actions/reaction-actions"
+import { createReactionNotification } from "@/lib/actions/notification-actions"
 
 interface ReactionButtonProps {
   postId: string | number
@@ -47,7 +47,7 @@ export function ReactionButton({
   })
   const [totalCount, setTotalCount] = useState(0)
   const [isProcessingReaction, setIsProcessingReaction] = useState(false)
-  const { getUserReaction, getReactionCounts } = useReactions()
+  const { getUserReaction, addReaction, getReactionCounts } = useReactions()
   const { isAuthenticated, user } = useAuth()
   const { toast } = useToast()
   const reactionsRef = useRef<HTMLDivElement>(null)
@@ -278,132 +278,204 @@ export function ReactionButton({
 
     setIsProcessingReaction(true)
 
-    const previousReaction = currentReaction
-    const previousCounts = { ...reactionCounts }
-    const previousReactionId = userReactionId
-
     try {
+      const previousReaction = currentReaction
+      const previousCounts = { ...reactionCounts }
+      const previousReactionId = userReactionId
+
       const isRemovingReaction = currentReaction === type
       const isChangingReaction = currentReaction && currentReaction !== type
       const isAddingNewReaction = !currentReaction
 
-      console.log("[v0] ReactionButton: Starting reaction process:", {
-        type,
+      console.log("[v0] Reaction changed to:", type)
+      console.log("[v0] Current reaction state:", {
         currentReaction,
         isRemovingReaction,
         isChangingReaction,
         isAddingNewReaction,
-        postId,
-        postDocumentId,
-        postAuthorId,
-        userId: user.id,
-        userDocumentId: user.documentId,
       })
+
+      // Update UI optimistically
+      const newReaction = isRemovingReaction ? null : type
+      setCurrentReaction(newReaction)
+
+      const newCounts = { ...reactionCounts }
+
+      // Remove count from previous reaction if exists
+      if (currentReaction) {
+        newCounts[currentReaction] = Math.max(0, newCounts[currentReaction] - 1)
+      }
+
+      // Add count to new reaction if not removing
+      if (newReaction) {
+        newCounts[newReaction] = newCounts[newReaction] + 1
+      }
+
+      setReactionCounts(newCounts)
+      setTotalCount(Object.values(newCounts).reduce((sum, count) => sum + count, 0))
 
       setShowReactions(false)
 
-      console.log("[v0] ReactionButton: ===== CALLING SERVER ACTION =====")
-      console.log("[v0] ReactionButton: About to call addReactionServerAction with params:", {
-        postId: String(postId),
-        type,
-        postDocumentId: String(postDocumentId),
-        postAuthorId: String(postAuthorId || ""),
-        timestamp: new Date().toISOString(),
-      })
-
-      if (!postAuthorId) {
-        console.warn("[v0] ReactionButton: postAuthorId is missing - notifications may not work")
+      if (onReactionChange) {
+        onReactionChange(newReaction)
       }
 
-      console.log("[v0] ReactionButton: Executing addReactionServerAction now...")
-      const result = await addReactionServerAction(
-        String(postId),
-        type,
-        String(postDocumentId),
-        String(postAuthorId || ""),
-      )
-      console.log("[v0] ReactionButton: ===== SERVER ACTION COMPLETED =====")
-      console.log("[v0] ReactionButton: Server action result:", result)
+      addReaction(postId, type, postDocumentId, user.id, user.documentId)
+        .then((result) => {
+          console.log("[v0] addReaction result:", result)
 
-      if (result.success) {
-        if (result.reaction) {
-          setCurrentReaction(result.reaction.type as ReactionType)
-          setUserReactionId(result.reaction.id)
-          if (onReactionChange) {
-            onReactionChange(result.reaction.type as ReactionType)
+          if (result && result.data && result.data.id) {
+            setUserReactionId(result.data.id)
+          } else if (isRemovingReaction) {
+            setUserReactionId(null)
           }
-        } else {
-          setCurrentReaction(null)
-          setUserReactionId(null)
-          if (onReactionChange) {
-            onReactionChange(null)
-          }
-        }
 
-        console.log("[v0] ReactionButton: Refreshing reaction counts from server")
-        const updatedCounts = await getReactionCounts(postId)
-        if (updatedCounts) {
-          setReactionCounts({
-            like: updatedCounts.like?.count || 0,
-            love: updatedCounts.love?.count || 0,
-            haha: updatedCounts.haha?.count || 0,
-            wow: updatedCounts.wow?.count || 0,
-            sad: updatedCounts.sad?.count || 0,
-            angry: updatedCounts.angry?.count || 0,
+          console.log("[v0] Checking notification conditions:", {
+            hasResult: !!(result && result.data && result.data.id),
+            hasPostAuthorId: !!postAuthorId,
+            postAuthorId,
+            userId: user.id,
+            userDocumentId: user.documentId,
+            isDifferentUser: postAuthorId !== user.id && postAuthorId !== user.documentId,
+            isAddingNewReaction,
+            isChangingReaction,
+            isRemovingReaction,
           })
 
-          const total = Object.values(updatedCounts).reduce(
-            (sum, reactionData: any) => sum + (reactionData?.count || 0),
-            0,
+          if (
+            result &&
+            result.data &&
+            result.data.id &&
+            postAuthorId &&
+            postAuthorId !== user.id &&
+            postAuthorId !== user.documentId &&
+            !isRemovingReaction
+          ) {
+            const postAuthorName = user.displayName || user.username || "Someone"
+            console.log("[v0] Sending reaction notification:", {
+              postId: String(postId),
+              postAuthorId,
+              userId: String(user.id),
+              userName: postAuthorName,
+              reactionType: type,
+              isAddingNewReaction,
+              isChangingReaction,
+            })
+            createReactionNotification(String(postId), postAuthorId, String(user.id), postAuthorName, type)
+              .then(() => {
+                console.log("[v0] Reaction notification sent successfully")
+              })
+              .catch((error) => {
+                console.error("[v0] Failed to send reaction notification:", error)
+              })
+          } else {
+            console.log("[v0] Skipping reaction notification:", {
+              hasResult: !!(result && result.data && result.data.id),
+              hasPostAuthorId: !!postAuthorId,
+              isDifferentUser: postAuthorId !== user.id && postAuthorId !== user.documentId,
+              postAuthorId,
+              userId: user.id,
+              userDocumentId: user.documentId,
+              isRemovingReaction,
+            })
+          }
+
+          // Show appropriate toast message
+          if (isRemovingReaction) {
+            toast({
+              title: "Reaction removed",
+              description: "Your reaction has been removed",
+            })
+          } else if (isChangingReaction) {
+            toast({
+              title: "Reaction changed",
+              description: `Changed your reaction to ${type}`,
+            })
+          } else {
+            toast({
+              title: "Reaction added",
+              description: `You reacted with ${type} to this post`,
+            })
+          }
+
+          // Refresh counts from server to ensure accuracy
+          return getReactionCounts(postId)
+        })
+        .then((updatedCounts) => {
+          if (updatedCounts) {
+            setReactionCounts({
+              like: updatedCounts.like?.count || 0,
+              love: updatedCounts.love?.count || 0,
+              haha: updatedCounts.haha?.count || 0,
+              wow: updatedCounts.wow?.count || 0,
+              sad: updatedCounts.sad?.count || 0,
+              angry: updatedCounts.angry?.count || 0,
+            })
+
+            const total = Object.values(updatedCounts).reduce(
+              (sum, reactionData: any) => sum + (reactionData?.count || 0),
+              0,
+            )
+            setTotalCount(total)
+          }
+
+          // Refresh user reaction state to ensure UI shows correct current reaction
+          return getUserReaction(postId)
+        })
+        .then((updatedUserReaction) => {
+          console.log("[v0] Refreshed user reaction after operation:", updatedUserReaction)
+
+          if (updatedUserReaction) {
+            setCurrentReaction(updatedUserReaction.type as ReactionType)
+            setUserReactionId(updatedUserReaction.id)
+            if (onReactionChange) {
+              onReactionChange(updatedUserReaction.type as ReactionType)
+            }
+          } else {
+            setCurrentReaction(null)
+            setUserReactionId(null)
+            if (onReactionChange) {
+              onReactionChange(null)
+            }
+          }
+
+          window.dispatchEvent(
+            new CustomEvent("reactionUpdated", {
+              detail: { postId: String(postId) },
+            }),
           )
-          setTotalCount(total)
-        }
+        })
+        .catch((error) => {
+          console.error("ReactionButton: Error from API call:", error)
 
-        if (isRemovingReaction) {
           toast({
-            title: "Reaction removed",
-            description: "Your reaction has been removed",
+            title: "Error",
+            description: "Failed to update your reaction. Reverting to previous state.",
+            variant: "destructive",
           })
-        } else if (isChangingReaction) {
-          toast({
-            title: "Reaction changed",
-            description: `Changed your reaction to ${type}`,
-          })
-        } else {
-          toast({
-            title: "Reaction added",
-            description: `You reacted with ${type} to this post`,
-          })
-        }
 
-        window.dispatchEvent(
-          new CustomEvent("reactionUpdated", {
-            detail: { postId: String(postId) },
-          }),
-        )
-      } else {
-        console.error("[v0] ReactionButton: Server action failed:", result.error)
-        throw new Error(result.error || "Failed to process reaction")
-      }
+          // Revert to previous state on error
+          setCurrentReaction(previousReaction)
+          setReactionCounts(previousCounts)
+          setTotalCount(Object.values(previousCounts).reduce((sum, count) => sum + count, 0))
+          setUserReactionId(previousReactionId)
+
+          if (onReactionChange) {
+            onReactionChange(previousReaction)
+          }
+        })
+        .finally(() => {
+          setIsProcessingReaction(false)
+        })
     } catch (error) {
-      console.error("[v0] ReactionButton: Error from server action:", error)
+      console.error("ReactionButton: Error in reaction handler:", error)
+      setIsProcessingReaction(false)
 
       toast({
         title: "Error",
-        description: "Failed to update your reaction. Please try again.",
+        description: "Failed to process your reaction",
         variant: "destructive",
       })
-
-      setCurrentReaction(previousReaction)
-      setReactionCounts(previousCounts)
-      setTotalCount(Object.values(previousCounts).reduce((sum, count) => sum + count, 0))
-      setUserReactionId(previousReactionId)
-
-      if (onReactionChange) {
-        onReactionChange(previousReaction)
-      }
-    } finally {
-      setIsProcessingReaction(false)
     }
   }
 

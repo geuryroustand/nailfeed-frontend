@@ -123,12 +123,8 @@ export async function subscribeToPushNotifications(userId: string, subscription:
  */
 export async function getUserPushSubscriptions(userId: string) {
   try {
-    console.log("[v0] getUserPushSubscriptions (server action) - Fetching for user:", userId)
-
     const url = `${API_BASE_URL}/api/notifications?filters[user][id][$eq]=${userId}&filters[type][$eq]=push_subscription`
     const headers = getAuthHeaders()
-
-    console.log("[v0] getUserPushSubscriptions (server action) - API URL:", url)
 
     const response = await fetch(url, {
       method: "GET",
@@ -136,34 +132,26 @@ export async function getUserPushSubscriptions(userId: string) {
     })
 
     if (!response.ok) {
-      console.error("[v0] getUserPushSubscriptions (server action) - API error:", response.status, response.statusText)
       throw new Error(`Failed to get push subscriptions: ${response.status}`)
     }
 
     const data = await response.json()
-    console.log("[v0] getUserPushSubscriptions (server action) - Raw API response:", data)
 
-    const subscriptions =
-      data.data
-        ?.map((item: any) => {
-          const subscriptionData = item.attributes?.metadata || item.metadata
-          console.log("[v0] getUserPushSubscriptions (server action) - Processing subscription:", subscriptionData)
-
-          return {
-            id: item.id,
-            attributes: {
-              endpoint: subscriptionData?.endpoint,
-              p256dh: subscriptionData?.keys?.p256dh,
-              auth: subscriptionData?.keys?.auth,
-            },
-          }
-        })
-        .filter((sub: any) => sub.attributes.endpoint) || []
-
-    console.log("[v0] getUserPushSubscriptions (server action) - Processed subscriptions:", subscriptions)
-    return subscriptions
+    return (
+      data.data?.map((item: any) => {
+        const subscriptionData = item.attributes.metadata
+        return {
+          id: item.id,
+          attributes: {
+            endpoint: subscriptionData.endpoint,
+            p256dh: subscriptionData.keys.p256dh,
+            auth: subscriptionData.keys.auth,
+          },
+        }
+      }) || []
+    )
   } catch (error) {
-    console.error("[v0] getUserPushSubscriptions (server action) - Error:", error)
+    console.error("Error getting push subscriptions:", error)
     return []
   }
 }
@@ -183,32 +171,14 @@ export async function sendPushNotification(
   },
 ) {
   try {
-    console.log("[v0] sendPushNotification - Starting with subscription:", {
-      endpoint: subscription.endpoint,
-      hasKeys: !!(subscription.keys?.p256dh && subscription.keys?.auth),
-    })
-    console.log("[v0] sendPushNotification - Payload:", payload)
-
-    const vapidSubject = process.env.VAPID_SUBJECT || "mailto:support@nailfeed.com"
-    const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
-    const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY
-
-    console.log("[v0] sendPushNotification - VAPID config:", {
-      hasSubject: !!vapidSubject,
-      hasPublicKey: !!vapidPublicKey,
-      hasPrivateKey: !!vapidPrivateKey,
-      subject: vapidSubject,
-    })
-
-    if (!vapidPublicKey || !vapidPrivateKey) {
-      console.error("[v0] sendPushNotification - Missing VAPID keys")
-      return { success: false, error: "VAPID keys not configured" }
-    }
-
     const webpush = await import("web-push")
 
     // Configure web-push with VAPID keys
-    webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey)
+    webpush.setVapidDetails(
+      process.env.VAPID_SUBJECT || "mailto:support@nailfeed.com",
+      process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+      process.env.VAPID_PRIVATE_KEY!,
+    )
 
     const notificationPayload = JSON.stringify({
       title: payload.title,
@@ -225,13 +195,10 @@ export async function sendPushNotification(
       ],
     })
 
-    console.log("[v0] sendPushNotification - Sending notification with payload:", notificationPayload)
-
     await webpush.sendNotification(subscription, notificationPayload)
-    console.log("[v0] sendPushNotification - Successfully sent notification")
     return { success: true }
   } catch (error) {
-    console.error("[v0] sendPushNotification - Error:", error)
+    console.error("Error sending push notification:", error)
     return { success: false, error: error instanceof Error ? error.message : "Unknown error" }
   }
 }
@@ -316,17 +283,8 @@ export async function createReactionNotification(
   reactionType: string,
 ) {
   try {
-    console.log("[v0] createReactionNotification called with:", {
-      postId,
-      postAuthorId,
-      reactionAuthorId,
-      reactionAuthorName,
-      reactionType,
-    })
-
     // Don't send notification if user is reacting to their own post
     if (postAuthorId === reactionAuthorId) {
-      console.log("[v0] Skipping notification - user reacting to own post")
       return { success: true, message: "No notification needed for own post" }
     }
 
@@ -340,18 +298,10 @@ export async function createReactionNotification(
       title: "New Reaction",
     }
 
-    console.log("[v0] Creating notification in database:", notificationData)
     await createNotification(notificationData)
 
     // Get user's push subscriptions
-    console.log("[v0] Getting push subscriptions for user:", postAuthorId)
     const subscriptions = await getUserPushSubscriptions(postAuthorId)
-    console.log("[v0] Found push subscriptions:", subscriptions.length)
-
-    if (subscriptions.length === 0) {
-      console.log("[v0] No push subscriptions found for user")
-      return { success: true, message: "Notification created but no push subscriptions found" }
-    }
 
     // Send push notifications to all user's devices
     const pushPromises = subscriptions.map(async (sub: any) => {
@@ -363,7 +313,6 @@ export async function createReactionNotification(
         },
       }
 
-      console.log("[v0] Sending push notification to:", subscription.endpoint)
       return sendPushNotification(subscription, {
         title: "New Reaction on Your Post",
         body: `${reactionAuthorName} reacted with ${reactionType} to your post`,
@@ -376,8 +325,7 @@ export async function createReactionNotification(
       })
     })
 
-    const results = await Promise.all(pushPromises)
-    console.log("[v0] Push notification results:", results)
+    await Promise.all(pushPromises)
 
     // Revalidate relevant paths
     revalidatePath("/notifications")
@@ -385,7 +333,7 @@ export async function createReactionNotification(
 
     return { success: true, message: "Reaction notification sent" }
   } catch (error) {
-    console.error("[v0] Error creating reaction notification:", error)
+    console.error("Error creating reaction notification:", error)
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to send notification",
