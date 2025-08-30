@@ -1,46 +1,48 @@
-"use server"
+"use server";
 
-import { cookies } from "next/headers"
-import { revalidatePath } from "next/cache"
+import { cookies } from "next/headers";
+import { revalidatePath } from "next/cache";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
-const SERVER_API_TOKEN = process.env.API_TOKEN || ""
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  "https://nailfeed-backend-production.up.railway.app";
+const SERVER_API_TOKEN = process.env.API_TOKEN || "";
 
 export interface NotificationData {
-  type: "like" | "comment" | "follow" | "mention" | "collection" | "mood"
-  userId: string
-  relatedUserId?: string
-  relatedPostId?: string
-  relatedCommentId?: string
-  message: string
-  title: string
+  type: "like" | "comment" | "follow" | "mention" | "collection" | "mood";
+  userId: string;
+  relatedUserId?: string;
+  relatedPostId?: string;
+  relatedCommentId?: string;
+  message: string;
+  title: string;
 }
 
 export interface PushSubscription {
-  endpoint: string
+  endpoint: string;
   keys: {
-    p256dh: string
-    auth: string
-  }
+    p256dh: string;
+    auth: string;
+  };
 }
 
 /**
  * Get authentication headers for Strapi requests
  */
-function getAuthHeaders(): HeadersInit {
+async function getAuthHeaders(): Promise<HeadersInit> {
   const headers: HeadersInit = {
     "Content-Type": "application/json",
-  }
+  };
 
-  const cookieStore = cookies()
-  const jwt = cookieStore.get("jwt")?.value
+  const cookieStore = await cookies();
+  const jwt = cookieStore.get("jwt")?.value;
   if (jwt) {
-    headers["Authorization"] = `Bearer ${jwt}`
+    headers["Authorization"] = `Bearer ${jwt}`;
   } else if (SERVER_API_TOKEN) {
-    headers["Authorization"] = `Bearer ${SERVER_API_TOKEN}`
+    headers["Authorization"] = `Bearer ${SERVER_API_TOKEN}`;
   }
 
-  return headers
+  return headers;
 }
 
 /**
@@ -48,8 +50,8 @@ function getAuthHeaders(): HeadersInit {
  */
 export async function createNotification(data: NotificationData) {
   try {
-    const url = `${API_BASE_URL}/api/notifications`
-    const headers = getAuthHeaders()
+    const url = `${API_BASE_URL}/api/notifications`;
+    const headers = await getAuthHeaders();
 
     const response = await fetch(url, {
       method: "POST",
@@ -64,16 +66,16 @@ export async function createNotification(data: NotificationData) {
           relatedComment: data.relatedCommentId,
         },
       }),
-    })
+    });
 
     if (!response.ok) {
-      throw new Error(`Failed to create notification: ${response.status}`)
+      throw new Error(`Failed to create notification: ${response.status}`);
     }
 
-    return await response.json()
+    return await response.json();
   } catch (error) {
-    console.error("Error creating notification:", error)
-    throw error
+    console.error("Error creating notification:", error);
+    throw error;
   }
 }
 
@@ -81,10 +83,13 @@ export async function createNotification(data: NotificationData) {
  * Server action to save push subscription to Strapi
  * Store push subscription data in notifications with special type
  */
-export async function subscribeToPushNotifications(userId: string, subscription: PushSubscription) {
+export async function subscribeToPushNotifications(
+  userId: string,
+  subscription: PushSubscription
+) {
   try {
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/push-subscriptions`,
+      `${process.env.NEXT_PUBLIC_API_URL}/api/push-subscriptions`,
       {
         method: "POST",
         headers: {
@@ -95,24 +100,38 @@ export async function subscribeToPushNotifications(userId: string, subscription:
           endpoint: subscription.endpoint,
           p256dh: subscription.keys.p256dh,
           auth: subscription.keys.auth,
-          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "Server",
+          userAgent:
+            typeof navigator !== "undefined" ? navigator.userAgent : "Server",
         }),
-      },
-    )
+      }
+    );
 
     if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || `Failed to save push subscription: ${response.status}`)
+      const errorData = await response.json();
+      console.error("Full error response:", JSON.stringify(errorData, null, 2));
+
+      // Handle different possible error structures
+      const errorMessage =
+        errorData.error?.message ||
+        errorData.message ||
+        errorData.error ||
+        `Failed to save push subscription: ${response.status}`;
+
+      throw new Error(errorMessage);
     }
 
-    const data = await response.json()
-    return { success: true, message: "Successfully subscribed to notifications", data: data.data }
+    const data = await response.json();
+    return {
+      success: true,
+      message: "Successfully subscribed to notifications",
+      data: data.data,
+    };
   } catch (error) {
-    console.error("Error subscribing to push notifications:", error)
+    console.error("Error subscribing to push notifications:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to subscribe",
-    }
+    };
   }
 }
 
@@ -123,20 +142,22 @@ export async function subscribeToPushNotifications(userId: string, subscription:
 export async function getUserPushSubscriptions(userId: string) {
   try {
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/push-subscriptions?userId=${userId}`,
+      `${
+        process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+      }/api/push-subscriptions?userId=${userId}`,
       {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
         },
-      },
-    )
+      }
+    );
 
     if (!response.ok) {
-      throw new Error(`Failed to get push subscriptions: ${response.status}`)
+      throw new Error(`Failed to get push subscriptions: ${response.status}`);
     }
 
-    const result = await response.json()
+    const result = await response.json();
 
     return (
       result.data?.map((item: any) => ({
@@ -149,10 +170,10 @@ export async function getUserPushSubscriptions(userId: string) {
           isActive: item.attributes.isActive,
         },
       })) || []
-    )
+    );
   } catch (error) {
-    console.error("Error getting push subscriptions:", error)
-    return []
+    console.error("Error getting push subscriptions:", error);
+    return [];
   }
 }
 
@@ -164,12 +185,12 @@ export async function createCommentNotification(
   postAuthorId: string,
   commentAuthorId: string,
   commentAuthorName: string,
-  commentContent: string,
+  commentContent: string
 ) {
   try {
     // Don't create notification if user is commenting on their own post
     if (postAuthorId === commentAuthorId) {
-      return { success: true, message: "No notification needed for own post" }
+      return { success: true, message: "No notification needed for own post" };
     }
 
     // Create notification in database only (no push notification)
@@ -180,21 +201,27 @@ export async function createCommentNotification(
       relatedPostId: postId,
       message: `${commentAuthorName} commented on your post`,
       title: "New Comment",
-    }
+    };
 
-    await createNotification(notificationData)
+    await createNotification(notificationData);
 
     // Revalidate relevant paths
-    revalidatePath("/notifications")
-    revalidatePath(`/post/${postId}`)
+    revalidatePath("/notifications");
+    revalidatePath(`/post/${postId}`);
 
-    return { success: true, message: "Comment notification created (no push notification sent)" }
+    return {
+      success: true,
+      message: "Comment notification created (no push notification sent)",
+    };
   } catch (error) {
-    console.error("Error creating comment notification:", error)
+    console.error("Error creating comment notification:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to create notification",
-    }
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to create notification",
+    };
   }
 }
 
@@ -206,12 +233,12 @@ export async function createReactionNotification(
   postAuthorId: string,
   reactionAuthorId: string,
   reactionAuthorName: string,
-  reactionType: string,
+  reactionType: string
 ) {
   try {
     // Don't create notification if user is reacting to their own post
     if (postAuthorId === reactionAuthorId) {
-      return { success: true, message: "No notification needed for own post" }
+      return { success: true, message: "No notification needed for own post" };
     }
 
     // Create notification in database only (no push notification)
@@ -222,45 +249,65 @@ export async function createReactionNotification(
       relatedPostId: postId,
       message: `${reactionAuthorName} reacted to your post with ${reactionType}`,
       title: "New Reaction",
-    }
+    };
 
-    await createNotification(notificationData)
+    await createNotification(notificationData);
 
     // Revalidate relevant paths
-    revalidatePath("/notifications")
-    revalidatePath(`/post/${postId}`)
+    revalidatePath("/notifications");
+    revalidatePath(`/post/${postId}`);
 
-    return { success: true, message: "Reaction notification created (no push notification sent)" }
+    return {
+      success: true,
+      message: "Reaction notification created (no push notification sent)",
+    };
   } catch (error) {
-    console.error("Error creating reaction notification:", error)
+    console.error("Error creating reaction notification:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to create notification",
-    }
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to create notification",
+    };
   }
 }
 
 /**
  * Server action to get user notifications
  */
-export async function getUserNotifications(userId: string, page = 1, pageSize = 20) {
+export async function getUserNotifications(
+  userId: string,
+  page = 1,
+  pageSize = 20
+) {
   try {
-    const url = `${API_BASE_URL}/api/notifications?filters[user][id][$eq]=${userId}&sort=createdAt:desc&pagination[page]=${page}&pagination[pageSize]=${pageSize}&populate=*`
-    const headers = getAuthHeaders()
+    const url = `${API_BASE_URL}/api/notifications?filters[user][id][$eq]=${userId}&sort=createdAt:desc&pagination[page]=${page}&pagination[pageSize]=${pageSize}&populate=*`;
+    const headers = await getAuthHeaders();
 
     const response = await fetch(url, {
       headers,
-    })
+    });
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch notifications: ${response.status}`)
+      throw new Error(`Failed to fetch notifications: ${response.status}`);
     }
 
-    const data = await response.json()
-    return { success: true, data: data.data, pagination: data.meta?.pagination }
+    const data = await response.json();
+    return {
+      success: true,
+      data: data.data,
+      pagination: data.meta?.pagination,
+    };
   } catch (error) {
-    console.error("Error fetching notifications:", error)
-    return { success: false, error: error instanceof Error ? error.message : "Failed to fetch notifications" }
+    console.error("Error fetching notifications:", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to fetch notifications",
+    };
   }
 }
 
@@ -269,8 +316,8 @@ export async function getUserNotifications(userId: string, page = 1, pageSize = 
  */
 export async function markNotificationAsRead(notificationId: string) {
   try {
-    const url = `${API_BASE_URL}/api/notifications/${notificationId}`
-    const headers = getAuthHeaders()
+    const url = `${API_BASE_URL}/api/notifications/${notificationId}`;
+    const headers = await getAuthHeaders();
 
     const response = await fetch(url, {
       method: "PUT",
@@ -278,16 +325,21 @@ export async function markNotificationAsRead(notificationId: string) {
       body: JSON.stringify({
         data: { read: true },
       }),
-    })
+    });
 
     if (!response.ok) {
-      throw new Error(`Failed to mark notification as read: ${response.status}`)
+      throw new Error(
+        `Failed to mark notification as read: ${response.status}`
+      );
     }
 
-    revalidatePath("/notifications")
-    return { success: true }
+    revalidatePath("/notifications");
+    return { success: true };
   } catch (error) {
-    console.error("Error marking notification as read:", error)
-    return { success: false, error: error instanceof Error ? error.message : "Failed to mark as read" }
+    console.error("Error marking notification as read:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to mark as read",
+    };
   }
 }
