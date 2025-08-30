@@ -16,7 +16,7 @@ export async function getUserReaction(postId: string | number): Promise<{ id: st
     }
 
     const response = await fetch(
-      `${API_URL}/api/likes?filters[$or][0][post][id][$eq]=${postId}&filters[$or][1][post][documentId][$eq]=${postId}&filters[user][id][$eq]=${user.id}`,
+      `${API_URL}/api/likes?filters[post][documentId][$eq]=${postId}&filters[user][documentId][$eq]=${user.documentId}`,
       {
         method: "GET",
         headers: {
@@ -79,12 +79,15 @@ export async function addReaction(
       await removeReaction(existingReaction.id)
     }
 
-    // Create a new reaction
     const payload = {
       data: {
         type,
-        user: user.documentId || user.id,
-        post: postDocumentId || postId,
+        user: {
+          connect: [{ documentId: user.documentId }],
+        },
+        post: {
+          connect: [{ documentId: postDocumentId || postId }],
+        },
       },
     }
 
@@ -155,16 +158,13 @@ export async function getReactionCounts(
   postId: string | number,
 ): Promise<Record<ReactionType, { count: number; users: any[] }>> {
   try {
-    const response = await fetch(
-      `${API_URL}/api/likes?filters[$or][0][post][id][$eq]=${postId}&filters[$or][1][post][documentId][$eq]=${postId}&populate=user`,
-      {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.API_TOKEN}`,
-        },
+    const response = await fetch(`${API_URL}/api/likes?filters[post][documentId][$eq]=${postId}&populate=user`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.API_TOKEN}`,
       },
-    )
+    })
 
     if (!response.ok) {
       console.error(`Failed to get reaction counts: ${response.status}`)

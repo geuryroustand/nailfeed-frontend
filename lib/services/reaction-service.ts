@@ -324,12 +324,15 @@ export class ReactionService {
     postDocumentId: string,
     type: ReactionType,
   ): Promise<{ id: string; type: ReactionType } | null> {
-    // Following Strapi v5 documentation for creating records
     const payload = {
       data: {
         type,
-        user: userDocumentId,
-        post: postDocumentId,
+        user: {
+          connect: [{ documentId: userDocumentId }],
+        },
+        post: {
+          connect: [{ documentId: postDocumentId }],
+        },
       },
     }
 
