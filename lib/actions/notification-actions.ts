@@ -8,8 +8,8 @@ const SERVER_API_TOKEN = process.env.API_TOKEN || ""
 
 export interface NotificationData {
   type: "like" | "comment" | "follow" | "mention" | "collection" | "mood"
-  userId: string
-  relatedUserId?: string
+  userDocumentId: string // Changed from userId to userDocumentId
+  relatedUserDocumentId?: string // Changed from relatedUserId to relatedUserDocumentId
   relatedPostId?: string
   relatedCommentId?: string
   message: string
@@ -58,8 +58,10 @@ export async function createNotification(data: NotificationData) {
         data: {
           type: data.type,
           read: false,
-          user: data.userId,
-          relatedUser: data.relatedUserId,
+          user: { connect: [{ documentId: data.userDocumentId }] },
+          relatedUser: data.relatedUserDocumentId
+            ? { connect: [{ documentId: data.relatedUserDocumentId }] }
+            : undefined,
           relatedPost: data.relatedPostId,
           relatedComment: data.relatedCommentId,
         },
@@ -80,7 +82,8 @@ export async function createNotification(data: NotificationData) {
 /**
  * Server action to save push subscription directly to Strapi
  */
-export async function subscribeToPushNotifications(userId: string, subscription: PushSubscription) {
+export async function subscribeToPushNotifications(userDocumentId: string, subscription: PushSubscription) {
+  // Parameter renamed from userId to userDocumentId
   try {
     const headers = await getAuthHeaders()
 
@@ -115,7 +118,7 @@ export async function subscribeToPushNotifications(userId: string, subscription:
           auth: subscription.keys.auth,
           userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "Server",
           isActive: true,
-          user: { connect: [{ documentId: userId }] }, // Using Strapi 5 documentId syntax
+          user: { connect: [{ documentId: userDocumentId }] },
         },
       }),
     })
@@ -151,11 +154,12 @@ export async function subscribeToPushNotifications(userId: string, subscription:
 /**
  * Server action to get user's push subscriptions directly from Strapi
  */
-export async function getUserPushSubscriptions(userId: string) {
+export async function getUserPushSubscriptions(userDocumentId: string) {
+  // Parameter renamed from userId to userDocumentId
   try {
     const headers = await getAuthHeaders()
     const response = await fetch(
-      `${API_BASE_URL}/api/push-subscriptions?filters[user][documentId][$eq]=${userId}&populate=user`,
+      `${API_BASE_URL}/api/push-subscriptions?filters[user][documentId][$eq]=${userDocumentId}&populate=user`,
       {
         method: "GET",
         headers,
@@ -192,22 +196,22 @@ export async function getUserPushSubscriptions(userId: string) {
  */
 export async function createCommentNotification(
   postId: string,
-  postAuthorId: string,
-  commentAuthorId: string,
+  postAuthorDocumentId: string, // Parameter renamed to indicate documentId
+  commentAuthorDocumentId: string, // Parameter renamed to indicate documentId
   commentAuthorName: string,
   commentContent: string,
 ) {
   try {
     // Don't create notification if user is commenting on their own post
-    if (postAuthorId === commentAuthorId) {
+    if (postAuthorDocumentId === commentAuthorDocumentId) {
       return { success: true, message: "No notification needed for own post" }
     }
 
     // Create notification in database only (no push notification)
     const notificationData: NotificationData = {
       type: "comment",
-      userId: postAuthorId,
-      relatedUserId: commentAuthorId,
+      userDocumentId: postAuthorDocumentId, // Using documentId
+      relatedUserDocumentId: commentAuthorDocumentId, // Using documentId
       relatedPostId: postId,
       message: `${commentAuthorName} commented on your post`,
       title: "New Comment",
@@ -237,22 +241,22 @@ export async function createCommentNotification(
  */
 export async function createReactionNotification(
   postId: string,
-  postAuthorId: string,
-  reactionAuthorId: string,
+  postAuthorDocumentId: string, // Parameter renamed to indicate documentId
+  reactionAuthorDocumentId: string, // Parameter renamed to indicate documentId
   reactionAuthorName: string,
   reactionType: string,
 ) {
   try {
     // Don't create notification if user is reacting to their own post
-    if (postAuthorId === reactionAuthorId) {
+    if (postAuthorDocumentId === reactionAuthorDocumentId) {
       return { success: true, message: "No notification needed for own post" }
     }
 
     // Create notification in database only (no push notification)
     const notificationData: NotificationData = {
       type: "like", // Use "like" type for all reactions since it's in the Strapi enum
-      userId: postAuthorId,
-      relatedUserId: reactionAuthorId,
+      userDocumentId: postAuthorDocumentId, // Using documentId
+      relatedUserDocumentId: reactionAuthorDocumentId, // Using documentId
       relatedPostId: postId,
       message: `${reactionAuthorName} reacted to your post with ${reactionType}`,
       title: "New Reaction",
@@ -280,9 +284,10 @@ export async function createReactionNotification(
 /**
  * Server action to get user notifications
  */
-export async function getUserNotifications(userId: string, page = 1, pageSize = 20) {
+export async function getUserNotifications(userDocumentId: string, page = 1, pageSize = 20) {
+  // Parameter renamed to indicate documentId
   try {
-    const url = `${API_BASE_URL}/api/notifications?filters[user][id][$eq]=${userId}&sort=createdAt:desc&pagination[page]=${page}&pagination[pageSize]=${pageSize}&populate=*`
+    const url = `${API_BASE_URL}/api/notifications?filters[user][documentId][$eq]=${userDocumentId}&sort=createdAt:desc&pagination[page]=${page}&pagination[pageSize]=${pageSize}&populate=*`
     const headers = await getAuthHeaders()
 
     const response = await fetch(url, {
