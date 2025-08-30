@@ -41,6 +41,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const upperMethod = String(method).toUpperCase()
+    const needsUserIdentity =
+      /\/api\/(likes|comments|push-subscriptions)(\/|$)/.test(endpoint) &&
+      !["GET", "HEAD", "OPTIONS"].includes(upperMethod)
+
     const url = joinUrl(API_BASE_URL, endpoint)
 
     // Start with safe defaults. Whitelist a small set of headers from the client.
@@ -74,7 +79,11 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const jwt = jwtCookie?.value ?? authTokenCookie?.value ?? auth_tokenCookie?.value
+    const jwt = jwtCookie?.value ?? authTokenCookie?.value ?? auth_tokenCookie?.value ?? null
+
+    if (needsUserIdentity && !jwt) {
+      return NextResponse.json({ error: { code: "unauthorized", message: "User JWT required" } }, { status: 401 })
+    }
 
     if (jwt) {
       headers["Authorization"] = `Bearer ${jwt}`
@@ -86,7 +95,7 @@ export async function POST(request: NextRequest) {
       if (endpoint && endpoint.includes("/comments/")) {
         console.log("[v0] Using authorization override for comment request")
       }
-    } else if (SERVER_API_TOKEN) {
+    } else if (!needsUserIdentity && SERVER_API_TOKEN) {
       headers["Authorization"] = `Bearer ${SERVER_API_TOKEN}`
       if (endpoint && endpoint.includes("/comments/")) {
         console.log("[v0] Using server API token for comment request")
