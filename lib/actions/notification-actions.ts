@@ -78,33 +78,52 @@ export async function createNotification(data: NotificationData) {
 }
 
 /**
- * Server action to save push subscription to Strapi
- * Store push subscription data in notifications with special type
+ * Server action to save push subscription directly to Strapi
  */
 export async function subscribeToPushNotifications(userId: string, subscription: PushSubscription) {
   try {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/push-subscriptions`,
+    const headers = await getAuthHeaders()
+
+    // First check if subscription already exists
+    const existingResponse = await fetch(
+      `${API_BASE_URL}/api/push-subscriptions?filters[endpoint][$eq]=${encodeURIComponent(subscription.endpoint)}`,
       {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          userId,
+        method: "GET",
+        headers,
+      },
+    )
+
+    if (existingResponse.ok) {
+      const existingData = await existingResponse.json()
+      if (existingData.data && existingData.data.length > 0) {
+        return {
+          success: true,
+          message: "Subscription already exists",
+          data: existingData.data[0],
+        }
+      }
+    }
+
+    // Create new subscription with Strapi 5 documentId relation syntax
+    const response = await fetch(`${API_BASE_URL}/api/push-subscriptions`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        data: {
           endpoint: subscription.endpoint,
           p256dh: subscription.keys.p256dh,
           auth: subscription.keys.auth,
           userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "Server",
-        }),
-      },
-    )
+          isActive: true,
+          user: { connect: [{ documentId: userId }] }, // Using Strapi 5 documentId syntax
+        },
+      }),
+    })
 
     if (!response.ok) {
       const errorData = await response.json()
       console.error("Full error response:", JSON.stringify(errorData, null, 2))
 
-      // Handle different possible error structures
       const errorMessage =
         errorData.error?.message ||
         errorData.message ||
@@ -130,18 +149,16 @@ export async function subscribeToPushNotifications(userId: string, subscription:
 }
 
 /**
- * Server action to get user's push subscriptions from Strapi
- * Retrieve push subscriptions from notifications with special type
+ * Server action to get user's push subscriptions directly from Strapi
  */
 export async function getUserPushSubscriptions(userId: string) {
   try {
+    const headers = await getAuthHeaders()
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/push-subscriptions?userId=${userId}`,
+      `${API_BASE_URL}/api/push-subscriptions?filters[user][documentId][$eq]=${userId}&populate=user`,
       {
         method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers,
       },
     )
 
@@ -154,12 +171,13 @@ export async function getUserPushSubscriptions(userId: string) {
     return (
       result.data?.map((item: any) => ({
         id: item.id,
+        documentId: item.documentId,
         attributes: {
-          endpoint: item.attributes.endpoint,
-          p256dh: item.attributes.p256dh,
-          auth: item.attributes.auth,
-          userAgent: item.attributes.userAgent,
-          isActive: item.attributes.isActive,
+          endpoint: item.endpoint,
+          p256dh: item.p256dh,
+          auth: item.auth,
+          userAgent: item.userAgent,
+          isActive: item.isActive,
         },
       })) || []
     )
