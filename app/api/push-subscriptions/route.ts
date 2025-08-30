@@ -5,12 +5,12 @@ const API_BASE_URL =
   process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
 const SERVER_API_TOKEN = process.env.API_TOKEN || ""
 
-function getAuthHeaders(): HeadersInit {
+async function getAuthHeaders(): Promise<HeadersInit> {
   const headers: HeadersInit = {
     "Content-Type": "application/json",
   }
 
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   const jwt = cookieStore.get("jwt")?.value
   if (jwt) {
     headers["Authorization"] = `Bearer ${jwt}`
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing required fields: userId, endpoint, p256dh, auth" }, { status: 400 })
     }
 
-    const headers = getAuthHeaders()
+    const headers = await getAuthHeaders()
     const url = `${API_BASE_URL}/api/push-subscriptions`
 
     const response = await fetch(url, {
@@ -38,7 +38,9 @@ export async function POST(request: NextRequest) {
       headers,
       body: JSON.stringify({
         data: {
-          user: userId,
+          user: {
+            connect: [userId], // Use Strapi 5 connect method for relations
+          },
           endpoint,
           p256dh,
           auth,
@@ -74,7 +76,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Missing userId parameter" }, { status: 400 })
     }
 
-    const headers = getAuthHeaders()
+    const headers = await getAuthHeaders()
     const url = `${API_BASE_URL}/api/push-subscriptions?filters[user][id][$eq]=${userId}&filters[isActive][$eq]=true`
 
     const response = await fetch(url, {
