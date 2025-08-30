@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         data: {
           user: {
-            connect: [userId], // Use Strapi 5 connect method for relations
+            connect: [{ documentId: userId }], // Use documentId instead of id for Strapi 5 relations
           },
           endpoint,
           p256dh,
@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
     }
 
     const headers = await getAuthHeaders()
-    const url = `${API_BASE_URL}/api/push-subscriptions?filters[user][id][$eq]=${userId}&filters[isActive][$eq]=true`
+    const url = `${API_BASE_URL}/api/push-subscriptions?filters[user][documentId][$eq]=${userId}&filters[isActive][$eq]=true`
 
     const response = await fetch(url, {
       method: "GET",
