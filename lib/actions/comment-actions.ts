@@ -60,6 +60,14 @@ export async function addComment(
   author?: { id: string; name: string; email: string; avatar?: string },
 ) {
   try {
+    console.log("[v0] Adding comment:", {
+      postId,
+      documentId,
+      content: content.substring(0, 50),
+      threadOf,
+      authorId: author?.id,
+    })
+
     const identifier = documentId
     const endpoint = `/api/comments/api::post.post:${identifier}`
     const url = `${API_BASE_URL}${API_BASE_URL.endsWith("/") ? "" : "/"}${
@@ -94,11 +102,12 @@ export async function addComment(
     }
 
     const data = await response.json()
+    console.log("[v0] Comment created successfully:", data.data?.id)
 
     try {
       if (threadOf) {
         // This is a reply - notify the parent comment author
-        console.log("[v0] Processing reply notification...")
+        console.log("[v0] Processing reply notification for threadOf:", threadOf)
 
         // Get parent comment details to find the comment author
         const parentCommentResponse = await fetch(`${API_BASE_URL}/api/comments/${threadOf}?populate=*`, {
@@ -114,7 +123,9 @@ export async function addComment(
           const replyAuthorId = author?.id
           const replyAuthorName = author?.name
 
-          if (commentAuthorId && replyAuthorId && replyAuthorName) {
+          console.log("[v0] Parent comment data:", { commentAuthorId, replyAuthorId, replyAuthorName })
+
+          if (commentAuthorId && replyAuthorId && replyAuthorName && commentAuthorId !== replyAuthorId) {
             console.log("[v0] Sending reply notification to comment author:", commentAuthorId)
             createReplyNotification(
               postId.toString(),
@@ -124,45 +135,68 @@ export async function addComment(
               replyAuthorName,
               content,
             ).catch((error) => {
-              console.error("Failed to send reply notification:", error)
+              console.error("[v0] Failed to send reply notification:", error)
             })
+          } else {
+            console.log("[v0] Skipping reply notification - same user or missing data")
           }
+        } else {
+          console.error("[v0] Failed to fetch parent comment:", parentCommentResponse.status)
         }
       } else {
         // This is a direct comment on post - notify the post author
-        console.log("[v0] Processing comment notification...")
+        console.log("[v0] Processing comment notification for post:", postId)
 
-        // Get post details to find the post author
-        const postResponse = await fetch(`${API_BASE_URL}/api/posts/${postId}?populate=*`, {
-          headers: {
-            Authorization: `Bearer ${SERVER_API_TOKEN}`,
-            "Content-Type": "application/json",
+        const postIdentifier = documentId || postId
+        const postResponse = await fetch(
+          `${API_BASE_URL}/api/posts?filters[documentId][$eq]=${postIdentifier}&populate=user`,
+          {
+            headers: {
+              Authorization: `Bearer ${SERVER_API_TOKEN}`,
+              "Content-Type": "application/json",
+            },
           },
-        })
+        )
 
         if (postResponse.ok) {
           const postData = await postResponse.json()
-          const postAuthorId = postData.data?.attributes?.user?.data?.id
-          const commentAuthorId = author?.id
-          const commentAuthorName = author?.name
+          console.log("[v0] Post lookup response:", {
+            found: postData.data?.length || 0,
+            postId: postIdentifier,
+          })
 
-          if (postAuthorId && commentAuthorId && commentAuthorName) {
-            console.log("[v0] Sending comment notification to post author:", postAuthorId)
-            createCommentNotification(
-              postId.toString(),
-              postAuthorId.toString(),
-              commentAuthorId,
-              commentAuthorName,
-              content,
-            ).catch((error) => {
-              console.error("Failed to send comment notification:", error)
-            })
+          if (postData.data && postData.data.length > 0) {
+            const post = postData.data[0]
+            const postAuthorId = post.user?.id
+            const commentAuthorId = author?.id
+            const commentAuthorName = author?.name
+
+            console.log("[v0] Post author data:", { postAuthorId, commentAuthorId, commentAuthorName })
+
+            if (postAuthorId && commentAuthorId && commentAuthorName && postAuthorId.toString() !== commentAuthorId) {
+              console.log("[v0] Sending comment notification to post author:", postAuthorId)
+              createCommentNotification(
+                postId.toString(),
+                postAuthorId.toString(),
+                commentAuthorId,
+                commentAuthorName,
+                content,
+              ).catch((error) => {
+                console.error("[v0] Failed to send comment notification:", error)
+              })
+            } else {
+              console.log("[v0] Skipping comment notification - same user or missing data")
+            }
+          } else {
+            console.error("[v0] Post not found with documentId:", postIdentifier)
           }
+        } else {
+          console.error("[v0] Failed to fetch post:", postResponse.status)
         }
       }
     } catch (notificationError) {
       // Log but don't fail the comment creation
-      console.error("Error sending notification:", notificationError)
+      console.error("[v0] Error sending notification:", notificationError)
     }
 
     revalidatePath(`/post/${postId}`)
