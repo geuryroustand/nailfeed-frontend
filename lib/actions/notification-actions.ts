@@ -2,6 +2,7 @@
 
 import { cookies } from "next/headers"
 import { revalidatePath } from "next/cache"
+import webpush from "web-push"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
 const SERVER_API_TOKEN = process.env.API_TOKEN || ""
@@ -253,7 +254,7 @@ export async function createCommentNotification(
 }
 
 /**
- * Server action to create reaction notification (without sending push notification)
+ * Server action to create reaction notification with push notification
  */
 export async function createReactionNotification(
   postId: string,
@@ -268,7 +269,9 @@ export async function createReactionNotification(
       return { success: true, message: "No notification needed for own post" }
     }
 
-    // Create notification in database only (no push notification)
+    console.log("[v0] Creating reaction notification for post:", postId, "author:", postAuthorId)
+
+    // Create notification in database
     const notificationData: NotificationData = {
       type: "like", // Use "like" type for all reactions since it's in the Strapi enum
       userId: postAuthorId,
@@ -279,6 +282,75 @@ export async function createReactionNotification(
     }
 
     await createNotification(notificationData)
+    console.log("[v0] Notification record created in database")
+
+    // Send push notifications to all active subscriptions
+    try {
+      // Get post author's push subscriptions
+      const subscriptions = await getUserPushSubscriptions(postAuthorId)
+      console.log("[v0] Found", subscriptions.length, "push subscriptions for user:", postAuthorId)
+
+      if (subscriptions.length > 0) {
+        // Configure VAPID keys
+        webpush.setVapidDetails(
+          process.env.VAPID_SUBJECT || "mailto:your-email@example.com",
+          process.env.VAPID_PUBLIC_KEY || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "",
+          process.env.VAPID_PRIVATE_KEY || "",
+        )
+
+        const payload = JSON.stringify({
+          title: "New Reaction",
+          body: `${reactionAuthorName} reacted to your post with ${reactionType}`,
+          icon: "/icon-192x192.png",
+          badge: "/icon-192x192.png",
+          data: {
+            postId,
+            type: "reaction",
+            url: `/post/${postId}`,
+          },
+        })
+
+        const invalidSubscriptions: string[] = []
+
+        // Send to all subscriptions
+        const sendPromises = subscriptions.map(async (sub) => {
+          try {
+            const pushSubscription = {
+              endpoint: sub.attributes.endpoint,
+              keys: {
+                p256dh: sub.attributes.p256dh,
+                auth: sub.attributes.auth,
+              },
+            }
+
+            await webpush.sendNotification(pushSubscription, payload)
+            console.log("[v0] Push notification sent successfully to subscription:", sub.id)
+          } catch (error: any) {
+            console.error("[v0] Failed to send push notification to subscription:", sub.id, error)
+
+            // Mark invalid subscriptions for cleanup (410 Gone or 404 Not Found)
+            if (error.statusCode === 410 || error.statusCode === 404) {
+              invalidSubscriptions.push(sub.documentId)
+            }
+          }
+        })
+
+        await Promise.allSettled(sendPromises)
+
+        // Clean up invalid subscriptions
+        if (invalidSubscriptions.length > 0) {
+          console.log("[v0] Cleaning up", invalidSubscriptions.length, "invalid subscriptions")
+          await cleanupInvalidSubscriptions(invalidSubscriptions)
+        }
+
+        console.log("[v0] Push notifications sent to", subscriptions.length, "devices")
+      } else {
+        console.log("[v0] No push subscriptions found for user:", postAuthorId)
+      }
+    } catch (pushError) {
+      console.error("[v0] Error sending push notifications:", pushError)
+      // Don't fail the entire operation if push notifications fail
+    }
 
     // Revalidate relevant paths
     revalidatePath("/notifications")
@@ -286,7 +358,7 @@ export async function createReactionNotification(
 
     return {
       success: true,
-      message: "Reaction notification created (no push notification sent)",
+      message: "Reaction notification created and push notifications sent",
     }
   } catch (error) {
     console.error("Error creating reaction notification:", error)
@@ -294,6 +366,36 @@ export async function createReactionNotification(
       success: false,
       error: error instanceof Error ? error.message : "Failed to create notification",
     }
+  }
+}
+
+/**
+ * Helper function to clean up invalid push subscriptions
+ */
+async function cleanupInvalidSubscriptions(subscriptionIds: string[]) {
+  try {
+    const headers = await getAuthHeaders()
+
+    const deletePromises = subscriptionIds.map(async (subscriptionId) => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/push-subscriptions/${subscriptionId}`, {
+          method: "DELETE",
+          headers,
+        })
+
+        if (response.ok) {
+          console.log("[v0] Deleted invalid subscription:", subscriptionId)
+        } else {
+          console.error("[v0] Failed to delete subscription:", subscriptionId, response.status)
+        }
+      } catch (error) {
+        console.error("[v0] Error deleting subscription:", subscriptionId, error)
+      }
+    })
+
+    await Promise.allSettled(deletePromises)
+  } catch (error) {
+    console.error("[v0] Error in cleanup process:", error)
   }
 }
 
