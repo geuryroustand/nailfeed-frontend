@@ -11,14 +11,9 @@ export class ReactionService {
     try {
       console.log("[v0] ReactionService.getReactionCounts called with postId:", postId)
 
-      // Build query using documentId for Strapi v5
       const query = {
         filters: {
-          post: {
-            documentId: {
-              $eq: postId,
-            },
-          },
+          post: { $eq: postId },
         },
         populate: {
           user: {
@@ -34,7 +29,7 @@ export class ReactionService {
         sort: ["createdAt:desc"],
         pagination: {
           page: 1,
-          pageSize: 10, // reduced from 20 to 10 for better performance
+          pageSize: 10,
         },
       }
 
@@ -82,10 +77,14 @@ export class ReactionService {
             return
           }
 
-          const type = reaction.type as ReactionType
-          const userData = reaction.user
+          const type = (reaction.attributes?.type ?? reaction.type) as ReactionType
+          const userNode = reaction.attributes?.user?.data ?? reaction.user ?? null
+          const userData = userNode?.attributes ?? userNode ?? null
 
-          console.log("[v0] Processing reaction:", { type, hasUser: !!userData })
+          console.log("[v0] Processing reaction:", {
+            type,
+            hasUser: !!userData,
+          })
 
           if (type && reactionData[type] !== undefined) {
             reactionData[type].count++
@@ -152,19 +151,10 @@ export class ReactionService {
         }
       }
 
-      // Build query using documentId for Strapi v5
       const query = {
         filters: {
-          post: {
-            documentId: {
-              $eq: postId,
-            },
-          },
-          user: {
-            id: {
-              $eq: userId,
-            },
-          },
+          post: { $eq: postId },
+          user: { id: { $eq: userId } },
         },
       }
 
@@ -195,11 +185,15 @@ export class ReactionService {
       if (data && Array.isArray(data.data) && data.data.length > 0) {
         const reaction = data.data[0]
 
-        const type = reaction.type as ReactionType
+        const type = (reaction.attributes?.type ?? reaction.type) as ReactionType
         const id = reaction.id.toString()
         const documentId = reaction.documentId
 
-        console.log("[v0] User has existing reaction:", { id, documentId, type })
+        console.log("[v0] User has existing reaction:", {
+          id,
+          documentId,
+          type,
+        })
         return { id, documentId, type }
       }
 
@@ -324,14 +318,16 @@ export class ReactionService {
     postDocumentId: string,
     type: ReactionType,
   ): Promise<{ id: string; type: ReactionType } | null> {
-    // Following Strapi v5 documentation for creating records
     const payload = {
       data: {
         type,
-        user: userDocumentId,
-        post: postDocumentId,
+        post: {
+          connect: [{ documentId: postDocumentId }],
+        },
       },
     }
+
+    console.log("[v0] Creating reaction with payload:", payload)
 
     try {
       console.log("[v0] Creating reaction with payload:", payload)
@@ -359,9 +355,10 @@ export class ReactionService {
       console.log("[v0] Create reaction response:", data)
 
       if (data && data.data) {
+        const responseType = data.data.attributes?.type ?? data.data.type ?? type
         return {
           id: data.data.id.toString(),
-          type: data.data.type || type,
+          type: responseType,
         }
       }
 
@@ -422,14 +419,9 @@ export class ReactionService {
     try {
       console.log("[v0] ReactionService.getDetailedReactions called with postId:", postId)
 
-      // Build endpoint for detailed reactions using documentId
       const query = {
         filters: {
-          post: {
-            documentId: {
-              $eq: postId,
-            },
-          },
+          post: { $eq: postId },
         },
         populate: {
           user: {
@@ -483,8 +475,9 @@ export class ReactionService {
       // Process the likes data
       if (data.data && Array.isArray(data.data)) {
         data.data.forEach((like: any) => {
-          const type = like.type || "like"
-          const user = like.user || {}
+          const type = like.attributes?.type ?? like.type ?? "like"
+          const userNode = like.attributes?.user?.data ?? like.user ?? {}
+          const user = userNode?.attributes ?? userNode ?? {}
 
           if (!reactions[type]) {
             reactions[type] = { count: 0, users: [] }
@@ -492,7 +485,7 @@ export class ReactionService {
 
           reactions[type].count++
           reactions[type].users.push({
-            id: like.user?.id,
+            id: user.id,
             username: user.username,
             displayName: user.displayName || user.username,
             avatar: user.profileImage?.url || null,
