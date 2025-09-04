@@ -53,11 +53,15 @@ export default function NotificationPermissionPrompt() {
     setIsSubscribing(true)
 
     try {
+      console.log("[v0] 🔔 Requesting notification permission for user:", user.id, user.documentId)
+
       // Request notification permission
       const permission = await Notification.requestPermission()
       setPermission(permission)
 
       if (permission === "granted") {
+        console.log("[v0] ✅ Notification permission granted, setting up push subscription...")
+
         // Register service worker
         const registration = await navigator.serviceWorker.register("/sw.js")
         await navigator.serviceWorker.ready
@@ -66,6 +70,8 @@ export default function NotificationPermissionPrompt() {
         if (!vapidPublicKey) {
           throw new Error("VAPID public key not configured")
         }
+
+        console.log("[v0] 📱 Subscribing to push notifications...")
 
         // Subscribe to push notifications
         const subscription = await registration.pushManager.subscribe({
@@ -79,6 +85,8 @@ export default function NotificationPermissionPrompt() {
           throw new Error("User identifier not available")
         }
 
+        console.log("[v0] 💾 Saving push subscription to Strapi for user:", userIdentifier)
+
         const result = await subscribeToPushNotifications(userIdentifier, {
           endpoint: subscription.endpoint,
           keys: {
@@ -88,6 +96,7 @@ export default function NotificationPermissionPrompt() {
         })
 
         if (result.success) {
+          console.log("[v0] 🎉 Push subscription saved successfully!")
           toast({
             title: "Notifications enabled",
             description: "You'll now receive notifications for comments and interactions",
@@ -97,6 +106,7 @@ export default function NotificationPermissionPrompt() {
           throw new Error(result.error)
         }
       } else {
+        console.log("[v0] ❌ Notification permission denied or dismissed")
         toast({
           title: "Notifications blocked",
           description: "You can enable notifications in your browser settings",
@@ -104,7 +114,7 @@ export default function NotificationPermissionPrompt() {
         })
       }
     } catch (error) {
-      console.error("Error setting up notifications:", error)
+      console.error("[v0] Error setting up notifications:", error)
       toast({
         title: "Error setting up notifications",
         description: error instanceof Error ? error.message : "Please try again",

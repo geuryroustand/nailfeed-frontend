@@ -392,6 +392,7 @@ export async function createReactionNotification(
     console.log("[v0] Found", subscriptions.length, "push subscriptions")
 
     if (subscriptions.length > 0) {
+      console.log("[v0] Active subscriptions found, sending push notifications...")
       const pushPayload = {
         title: "New Reaction",
         body: `${reactionAuthorName} reacted to your post with ${reactionType}`,
@@ -424,6 +425,12 @@ export async function createReactionNotification(
       const successCount = pushResults.filter((result) => result.status === "fulfilled" && result.value.success).length
 
       console.log("[v0] Push notifications sent:", successCount, "of", subscriptions.length)
+    } else {
+      console.log("[v0] ⚠️  No push subscriptions found for user", postAuthorId)
+      console.log(
+        "[v0] 💡 The post author needs to enable notifications in their browser to receive push notifications",
+      )
+      console.log("[v0] 📱 They can do this by clicking 'Enable' on the notification permission prompt")
     }
 
     // Revalidate relevant paths
@@ -432,7 +439,10 @@ export async function createReactionNotification(
 
     return {
       success: true,
-      message: "Reaction notification created and push notifications sent",
+      message:
+        subscriptions.length > 0
+          ? "Reaction notification created and push notifications sent"
+          : "Reaction notification created (post author has no active push subscriptions)",
     }
   } catch (error) {
     console.error("[v0] Error creating reaction notification:", error)
