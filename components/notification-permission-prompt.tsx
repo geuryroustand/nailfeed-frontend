@@ -73,8 +73,13 @@ export default function NotificationPermissionPrompt() {
           applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
         })
 
-        // Save subscription to server
-        const result = await subscribeToPushNotifications(user.id, {
+        // Save subscription to server - use documentId if available, fallback to id
+        const userIdentifier = user.documentId || user.id?.toString()
+        if (!userIdentifier) {
+          throw new Error("User identifier not available")
+        }
+
+        const result = await subscribeToPushNotifications(userIdentifier, {
           endpoint: subscription.endpoint,
           keys: {
             p256dh: btoa(String.fromCharCode(...new Uint8Array(subscription.getKey("p256dh")!))),

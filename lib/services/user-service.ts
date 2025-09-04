@@ -1,111 +1,108 @@
-import config from "@/lib/config";
-import qs from "qs";
+import config from "@/lib/config"
+import qs from "qs"
 
 export type UserProfileResponse = {
-  id: number;
-  documentId?: string;
-  username: string;
-  email: string;
-  displayName?: string;
-  bio?: string;
-  location?: string;
-  website?: string;
+  id: number
+  documentId?: string
+  username: string
+  email: string
+  displayName?: string
+  bio?: string
+  location?: string
+  website?: string
   profileImage?: {
-    id: number;
-    url: string;
+    id: number
+    url: string
     formats?: {
-      thumbnail?: { url: string };
-      small?: { url: string };
-      medium?: { url: string };
-      large?: { url: string };
-    };
-  };
+      thumbnail?: { url: string }
+      small?: { url: string }
+      medium?: { url: string }
+      large?: { url: string }
+    }
+  }
   coverImage?: {
-    id: number;
-    url: string;
+    id: number
+    url: string
     formats?: {
-      thumbnail?: { url: string };
-      small?: { url: string };
-      medium?: { url: string };
-      large?: { url: string };
-    };
-  };
-  isVerified: boolean;
-  followersCount: number;
-  followingCount: number;
-  postsCount: number;
+      thumbnail?: { url: string }
+      small?: { url: string }
+      medium?: { url: string }
+      large?: { url: string }
+    }
+  }
+  isVerified: boolean
+  followersCount: number
+  followingCount: number
+  postsCount: number
   engagement?: {
-    likes: number;
-    comments: number;
-    saves: number;
-  };
-  confirmed?: boolean;
+    likes: number
+    comments: number
+    saves: number
+  }
+  confirmed?: boolean
   posts?: Array<{
-    id: number;
-    documentId: string;
-    description: string;
-    contentType: string;
-    galleryLayout: string;
-    publishedAt: string;
-    likesCount: number;
-    commentsCount: number;
+    id: number
+    documentId: string
+    description: string
+    contentType: string
+    galleryLayout: string
+    publishedAt: string
+    likesCount: number
+    commentsCount: number
     mediaItems: Array<{
-      id: number | string;
-      type: string;
-      order: number;
+      id: number | string
+      type: string
+      order: number
       file: {
-        url: string;
+        url: string
         formats?: {
-          thumbnail?: { url: string };
-          small?: { url: string };
-          medium?: { url: string };
-          large?: { url: string };
-        };
-      };
-    }>;
-  }>;
-};
+          thumbnail?: { url: string }
+          small?: { url: string }
+          medium?: { url: string }
+          large?: { url: string }
+        }
+      }
+    }>
+  }>
+}
 
 export type UserUpdateInput = {
-  displayName?: string;
-  bio?: string;
-  location?: string;
-  website?: string;
-  profileImage?: number;
-  coverImage?: number;
-};
+  displayName?: string
+  bio?: string
+  location?: string
+  website?: string
+  profileImage?: number
+  coverImage?: number
+}
 
 export type UserServiceError = {
-  status: number;
-  message: string;
-};
+  status: number
+  message: string
+}
 
 // Get the API URL with fallback
 const getApiUrl = () => {
-  return (
-    process.env.NEXT_PUBLIC_API_URL ||
-    "https://nailfeed-backend-production.up.railway.app"
-  );
-};
+  return process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
+}
 
 // Helper function to safely make API requests with proper error handling
 async function safeApiRequest(url: string, options: RequestInit) {
   try {
-    console.log(`Making API request to: ${url}`);
-    console.log(`Request headers:`, JSON.stringify(options.headers, null, 2));
+    console.log(`Making API request to: ${url}`)
+    console.log(`Request headers:`, JSON.stringify(options.headers, null, 2))
 
-    const response = await fetch(url, options);
+    const response = await fetch(url, options)
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`API error (${response.status}): ${errorText}`);
-      throw new Error(`API error (${response.status}): ${errorText}`);
+      const errorText = await response.text()
+      console.error(`API error (${response.status}): ${errorText}`)
+      throw new Error(`API error (${response.status}): ${errorText}`)
     }
 
-    return response;
+    return response
   } catch (error) {
-    console.error(`Request failed for ${url}:`, error);
-    throw error;
+    console.error(`Request failed for ${url}:`, error)
+    throw error
   }
 }
 
@@ -113,13 +110,9 @@ export class UserService {
   /**
    * Get the current user's profile with all necessary data
    */
-  static async getCurrentUser(
-    token: string
-  ): Promise<UserProfileResponse | null> {
+  static async getCurrentUser(token: string): Promise<UserProfileResponse | null> {
     try {
-      console.log(
-        `Fetching user profile with token: ${token.substring(0, 10)}...`
-      );
+      console.log(`Fetching user profile with token: ${token.substring(0, 10)}...`)
 
       // Build a comprehensive query using qs
       const query = qs.stringify(
@@ -174,11 +167,11 @@ export class UserService {
         },
         {
           encodeValuesOnly: true,
-        }
-      );
+        },
+      )
 
-      const apiUrl = getApiUrl();
-      console.log(`Making request to: ${apiUrl}/api/users/me?${query}`);
+      const apiUrl = getApiUrl()
+      console.log(`Making request to: ${apiUrl}/api/users/me?${query}`)
 
       // Use cache: 'no-store' to ensure we get fresh data
       const response = await fetch(`${apiUrl}/api/users/me?${query}`, {
@@ -188,52 +181,47 @@ export class UserService {
           "Content-Type": "application/json",
         },
         cache: "no-store",
-      });
+      })
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`API error (${response.status}): ${errorText}`);
-        throw new Error(`API error (${response.status}): ${errorText}`);
+        const errorText = await response.text()
+        console.error(`API error (${response.status}): ${errorText}`)
+        throw new Error(`API error (${response.status}): ${errorText}`)
       }
 
-      const responseData = await response.json();
-      console.log("Response data structure:", Object.keys(responseData));
+      const responseData = await response.json()
+      console.log("Response data structure:", Object.keys(responseData))
 
       // Handle Strapi v5 response structure
-      const userData = responseData.data || responseData;
+      const userData = responseData.data || responseData
 
       // Process the data to ensure all URLs are absolute
-      return UserService.processUserData(userData, apiUrl);
+      return UserService.processUserData(userData, apiUrl)
     } catch (error) {
-      console.error("Error fetching current user:", error);
-      return null;
+      console.error("Error fetching current user:", error)
+      return null
     }
   }
 
   /**
    * Get a user's profile by username with all necessary data
    */
-  static async getUserByUsername(
-    username: string,
-    token?: string
-  ): Promise<UserProfileResponse | null> {
+  static async getUserByUsername(username: string, token?: string): Promise<UserProfileResponse | null> {
     try {
-      console.log(`Fetching user ${username} from API`);
+      console.log(`Fetching user ${username} from API`)
 
       const headers: HeadersInit = {
         "Content-Type": "application/json",
-      };
+      }
 
       // If no token provided, use the API token from config (server-only; client receives null)
-      const authToken = token || config.api.getApiToken();
+      const authToken = token || config.api.getApiToken()
 
       if (authToken) {
-        headers["Authorization"] = `Bearer ${authToken}`;
-        console.log(
-          `Using token for API request: ${authToken.substring(0, 10)}...`
-        );
+        headers["Authorization"] = `Bearer ${authToken}`
+        console.log(`Using token for API request: ${authToken.substring(0, 10)}...`)
       } else {
-        console.log("No token available for API request");
+        console.log("No token available for API request")
       }
 
       // Build a comprehensive query using qs
@@ -294,59 +282,178 @@ export class UserService {
         },
         {
           encodeValuesOnly: true,
-        }
-      );
+        },
+      )
 
-      const apiUrl = getApiUrl();
-      console.log(`Making request to: ${apiUrl}/api/users?${query}`);
+      const apiUrl = getApiUrl()
+      console.log(`Making request to: ${apiUrl}/api/users?${query}`)
 
       // Use cache: 'no-store' to ensure we get fresh data
       const response = await fetch(`${apiUrl}/api/users?${query}`, {
         method: "GET",
         headers,
         cache: "no-store",
-      });
+      })
 
-      console.log(`Response status for ${username}: ${response.status}`);
+      console.log(`Response status for ${username}: ${response.status}`)
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`API error (${response.status}): ${errorText}`);
-        throw new Error(`API error (${response.status}): ${errorText}`);
+        const errorText = await response.text()
+        console.error(`API error (${response.status}): ${errorText}`)
+        throw new Error(`API error (${response.status}): ${errorText}`)
       }
 
-      const responseData = await response.json();
-      console.log("Response data structure:", Object.keys(responseData));
+      const responseData = await response.json()
+      console.log("Response data structure:", Object.keys(responseData))
 
       // Handle Strapi v5 response structure
-      let userData = null;
+      let userData = null
 
-      if (
-        responseData.data &&
-        Array.isArray(responseData.data) &&
-        responseData.data.length > 0
-      ) {
-        userData = responseData.data[0];
-      } else if (
-        responseData.results &&
-        Array.isArray(responseData.results) &&
-        responseData.results.length > 0
-      ) {
-        userData = responseData.results[0];
+      if (responseData.data && Array.isArray(responseData.data) && responseData.data.length > 0) {
+        userData = responseData.data[0]
+      } else if (responseData.results && Array.isArray(responseData.results) && responseData.results.length > 0) {
+        userData = responseData.results[0]
       } else if (Array.isArray(responseData) && responseData.length > 0) {
-        userData = responseData[0];
+        userData = responseData[0]
       }
 
       if (!userData) {
-        console.log(`No user found with username: ${username}`);
-        return null;
+        console.log(`No user found with username: ${username}`)
+        return null
       }
 
       // Process the data to ensure all URLs are absolute
-      return UserService.processUserData(userData, apiUrl);
+      return UserService.processUserData(userData, apiUrl)
     } catch (error) {
-      console.error(`Error fetching user ${username}:`, error);
-      return null;
+      console.error(`Error fetching user ${username}:`, error)
+      return null
+    }
+  }
+
+  /**
+   * Get a user's profile by documentId with all necessary data
+   */
+  static async getUserByDocumentId(documentId: string, token?: string): Promise<UserProfileResponse | null> {
+    try {
+      console.log(`Fetching user by documentId: ${documentId}`)
+
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      }
+
+      // If no token provided, use the API token from config (server-only; client receives null)
+      const authToken = token || config.api.getApiToken()
+
+      if (authToken) {
+        headers["Authorization"] = `Bearer ${authToken}`
+        console.log(`Using token for API request: ${authToken.substring(0, 10)}...`)
+      } else {
+        console.log("No token available for API request")
+      }
+
+      // Build a comprehensive query using qs to filter by documentId
+      const query = qs.stringify(
+        {
+          filters: {
+            documentId: {
+              $eq: documentId,
+            },
+          },
+          fields: [
+            "id",
+            "documentId",
+            "username",
+            "email",
+            "displayName",
+            "bio",
+            "location",
+            "website",
+            "followersCount",
+            "followingCount",
+            "postsCount",
+            "engagement",
+            "isVerified",
+            "confirmed",
+          ],
+          populate: {
+            profileImage: {
+              fields: ["url", "formats"],
+            },
+            coverImage: {
+              fields: ["url", "formats"],
+            },
+            posts: {
+              sort: ["publishedAt:desc"],
+              populate: {
+                mediaItems: {
+                  populate: {
+                    file: {
+                      fields: ["url", "formats"],
+                    },
+                  },
+                  fields: ["id", "type", "order"],
+                },
+              },
+              fields: [
+                "id",
+                "documentId",
+                "description",
+                "contentType",
+                "galleryLayout",
+                "publishedAt",
+                "likesCount",
+                "commentsCount",
+              ],
+            },
+          },
+        },
+        {
+          encodeValuesOnly: true,
+        },
+      )
+
+      const apiUrl = getApiUrl()
+      console.log(`Making request to: ${apiUrl}/api/users?${query}`)
+
+      // Use cache: 'no-store' to ensure we get fresh data
+      const response = await fetch(`${apiUrl}/api/users?${query}`, {
+        method: "GET",
+        headers,
+        cache: "no-store",
+      })
+
+      console.log(`Response status for documentId ${documentId}: ${response.status}`)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error(`API error (${response.status}): ${errorText}`)
+        throw new Error(`API error (${response.status}): ${errorText}`)
+      }
+
+      const responseData = await response.json()
+      console.log("Response data structure:", Object.keys(responseData))
+
+      // Handle Strapi v5 response structure
+      let userData = null
+
+      if (responseData.data && Array.isArray(responseData.data) && responseData.data.length > 0) {
+        userData = responseData.data[0]
+      } else if (responseData.results && Array.isArray(responseData.results) && responseData.results.length > 0) {
+        userData = responseData.results[0]
+      } else if (Array.isArray(responseData) && responseData.length > 0) {
+        userData = responseData[0]
+      }
+
+      if (!userData) {
+        console.log(`No user found with documentId: ${documentId}`)
+        return null
+      }
+
+      // Process the data to ensure all URLs are absolute
+      return UserService.processUserData(userData, apiUrl)
+    } catch (error) {
+      console.error(`Error fetching user by documentId ${documentId}:`, error)
+      return null
     }
   }
 
@@ -356,29 +463,26 @@ export class UserService {
   static async updateProfile(
     token: string,
     userId: number,
-    userData: UserUpdateInput
+    userData: UserUpdateInput,
   ): Promise<UserProfileResponse | null> {
     try {
-      console.log(
-        `Updating user profile for user ID ${userId} with data:`,
-        JSON.stringify(userData, null, 2)
-      );
-      console.log("Using token:", token.substring(0, 10) + "...");
+      console.log(`Updating user profile for user ID ${userId} with data:`, JSON.stringify(userData, null, 2))
+      console.log("Using token:", token.substring(0, 10) + "...")
 
-      const apiUrl = getApiUrl();
+      const apiUrl = getApiUrl()
 
       // Use the correct endpoint structure with the user ID
-      const url = `${apiUrl}/api/users/${userId}`;
-      console.log(`Making PUT request to: ${url}`);
+      const url = `${apiUrl}/api/users/${userId}`
+      console.log(`Making PUT request to: ${url}`)
 
       // Create headers with the token
       const headers = {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
-      };
+      }
 
-      console.log("Request headers:", JSON.stringify(headers, null, 2));
-      console.log("Request body:", JSON.stringify(userData, null, 2));
+      console.log("Request headers:", JSON.stringify(headers, null, 2))
+      console.log("Request body:", JSON.stringify(userData, null, 2))
 
       // Make the request with no caching
       const response = await fetch(url, {
@@ -387,46 +491,39 @@ export class UserService {
         body: JSON.stringify(userData),
         cache: "no-store",
         next: { revalidate: 0 },
-      });
+      })
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`API error (${response.status}): ${errorText}`);
-        throw new Error(`API error (${response.status}): ${errorText}`);
+        const errorText = await response.text()
+        console.error(`API error (${response.status}): ${errorText}`)
+        throw new Error(`API error (${response.status}): ${errorText}`)
       }
 
-      const responseData = await response.json();
-      console.log(
-        "Profile update response:",
-        JSON.stringify(responseData, null, 2)
-      );
+      const responseData = await response.json()
+      console.log("Profile update response:", JSON.stringify(responseData, null, 2))
 
       // Handle Strapi v5 response structure
-      const updatedUserData = responseData.data || responseData;
+      const updatedUserData = responseData.data || responseData
 
       // Process the data to ensure all URLs are absolute
-      return UserService.processUserData(updatedUserData, apiUrl);
+      return UserService.processUserData(updatedUserData, apiUrl)
     } catch (error) {
-      console.error("Error updating user profile:", error);
-      throw error;
+      console.error("Error updating user profile:", error)
+      throw error
     }
   }
 
   /**
    * Upload a profile image
    */
-  static async uploadProfileImage(
-    token: string,
-    userId: number,
-    file: File
-  ): Promise<boolean> {
+  static async uploadProfileImage(token: string, userId: number, file: File): Promise<boolean> {
     try {
-      console.log(`Uploading profile image for user ${userId}`);
-      console.log("Using token:", token.substring(0, 10) + "...");
+      console.log(`Uploading profile image for user ${userId}`)
+      console.log("Using token:", token.substring(0, 10) + "...")
 
-      const apiUrl = getApiUrl();
-      const formData = new FormData();
-      formData.append("files", file);
+      const apiUrl = getApiUrl()
+      const formData = new FormData()
+      formData.append("files", file)
 
       // First, upload the file to get the file ID
       const uploadResponse = await fetch(`${apiUrl}/api/upload`, {
@@ -436,22 +533,22 @@ export class UserService {
         },
         body: formData,
         cache: "no-store",
-      });
+      })
 
       if (!uploadResponse.ok) {
-        const errorText = await uploadResponse.text();
-        console.error(`API error (${uploadResponse.status}): ${errorText}`);
-        throw new Error(`API error (${uploadResponse.status}): ${errorText}`);
+        const errorText = await uploadResponse.text()
+        console.error(`API error (${uploadResponse.status}): ${errorText}`)
+        throw new Error(`API error (${uploadResponse.status}): ${errorText}`)
       }
 
-      const uploadData = await uploadResponse.json();
-      console.log("File upload response:", JSON.stringify(uploadData, null, 2));
+      const uploadData = await uploadResponse.json()
+      console.log("File upload response:", JSON.stringify(uploadData, null, 2))
 
       if (!Array.isArray(uploadData) || uploadData.length === 0) {
-        throw new Error("Failed to upload file: Invalid response");
+        throw new Error("Failed to upload file: Invalid response")
       }
 
-      const fileId = uploadData[0].id;
+      const fileId = uploadData[0].id
 
       // Now update the user profile with the new profile image ID
       const updateResponse = await fetch(`${apiUrl}/api/users/${userId}`, {
@@ -464,36 +561,32 @@ export class UserService {
           profileImage: fileId,
         }),
         cache: "no-store",
-      });
+      })
 
       if (!updateResponse.ok) {
-        const errorText = await updateResponse.text();
-        console.error(`API error (${updateResponse.status}): ${errorText}`);
-        throw new Error(`API error (${updateResponse.status}): ${errorText}`);
+        const errorText = await updateResponse.text()
+        console.error(`API error (${updateResponse.status}): ${errorText}`)
+        throw new Error(`API error (${updateResponse.status}): ${errorText}`)
       }
 
-      return true;
+      return true
     } catch (error) {
-      console.error("Error uploading profile image:", error);
-      throw error;
+      console.error("Error uploading profile image:", error)
+      throw error
     }
   }
 
   /**
    * Upload a cover image
    */
-  static async uploadCoverImage(
-    token: string,
-    userId: number,
-    file: File
-  ): Promise<boolean> {
+  static async uploadCoverImage(token: string, userId: number, file: File): Promise<boolean> {
     try {
-      console.log(`Uploading cover image for user ${userId}`);
-      console.log("Using token:", token.substring(0, 10) + "...");
+      console.log(`Uploading cover image for user ${userId}`)
+      console.log("Using token:", token.substring(0, 10) + "...")
 
-      const apiUrl = getApiUrl();
-      const formData = new FormData();
-      formData.append("files", file);
+      const apiUrl = getApiUrl()
+      const formData = new FormData()
+      formData.append("files", file)
 
       // First, upload the file to get the file ID
       const uploadResponse = await fetch(`${apiUrl}/api/upload`, {
@@ -503,22 +596,22 @@ export class UserService {
         },
         body: formData,
         cache: "no-store",
-      });
+      })
 
       if (!uploadResponse.ok) {
-        const errorText = await uploadResponse.text();
-        console.error(`API error (${uploadResponse.status}): ${errorText}`);
-        throw new Error(`API error (${uploadResponse.status}): ${errorText}`);
+        const errorText = await uploadResponse.text()
+        console.error(`API error (${uploadResponse.status}): ${errorText}`)
+        throw new Error(`API error (${uploadResponse.status}): ${errorText}`)
       }
 
-      const uploadData = await uploadResponse.json();
-      console.log("File upload response:", JSON.stringify(uploadData, null, 2));
+      const uploadData = await uploadResponse.json()
+      console.log("File upload response:", JSON.stringify(uploadData, null, 2))
 
       if (!Array.isArray(uploadData) || uploadData.length === 0) {
-        throw new Error("Failed to upload file: Invalid response");
+        throw new Error("Failed to upload file: Invalid response")
       }
 
-      const fileId = uploadData[0].id;
+      const fileId = uploadData[0].id
 
       // Now update the user profile with the new cover image ID
       const updateResponse = await fetch(`${apiUrl}/api/users/${userId}`, {
@@ -531,18 +624,18 @@ export class UserService {
           coverImage: fileId,
         }),
         cache: "no-store",
-      });
+      })
 
       if (!updateResponse.ok) {
-        const errorText = await updateResponse.text();
-        console.error(`API error (${updateResponse.status}): ${errorText}`);
-        throw new Error(`API error (${updateResponse.status}): ${errorText}`);
+        const errorText = await updateResponse.text()
+        console.error(`API error (${updateResponse.status}): ${errorText}`)
+        throw new Error(`API error (${updateResponse.status}): ${errorText}`)
       }
 
-      return true;
+      return true
     } catch (error) {
-      console.error("Error uploading cover image:", error);
-      throw error;
+      console.error("Error uploading cover image:", error)
+      throw error
     }
   }
 
@@ -550,45 +643,37 @@ export class UserService {
    * Process user data to ensure all URLs are absolute
    */
   static processUserData(userData: any, apiUrl: string): UserProfileResponse {
-    if (!userData) return userData;
+    if (!userData) return userData
 
     // Process profile image URL
     if (userData.profileImage && userData.profileImage.url) {
-      userData.profileImage.url = UserService.ensureAbsoluteUrl(
-        userData.profileImage.url,
-        apiUrl
-      );
+      userData.profileImage.url = UserService.ensureAbsoluteUrl(userData.profileImage.url, apiUrl)
 
       if (userData.profileImage.formats) {
         Object.keys(userData.profileImage.formats).forEach((format) => {
           if (userData.profileImage.formats[format]?.url) {
-            userData.profileImage.formats[format].url =
-              UserService.ensureAbsoluteUrl(
-                userData.profileImage.formats[format].url,
-                apiUrl
-              );
+            userData.profileImage.formats[format].url = UserService.ensureAbsoluteUrl(
+              userData.profileImage.formats[format].url,
+              apiUrl,
+            )
           }
-        });
+        })
       }
     }
 
     // Process cover image URL
     if (userData.coverImage && userData.coverImage.url) {
-      userData.coverImage.url = UserService.ensureAbsoluteUrl(
-        userData.coverImage.url,
-        apiUrl
-      );
+      userData.coverImage.url = UserService.ensureAbsoluteUrl(userData.coverImage.url, apiUrl)
 
       if (userData.coverImage.formats) {
         Object.keys(userData.coverImage.formats).forEach((format) => {
           if (userData.coverImage.formats[format]?.url) {
-            userData.coverImage.formats[format].url =
-              UserService.ensureAbsoluteUrl(
-                userData.coverImage.formats[format].url,
-                apiUrl
-              );
+            userData.coverImage.formats[format].url = UserService.ensureAbsoluteUrl(
+              userData.coverImage.formats[format].url,
+              apiUrl,
+            )
           }
-        });
+        })
       }
     }
 
@@ -598,46 +683,37 @@ export class UserService {
         if (post.mediaItems && Array.isArray(post.mediaItems)) {
           post.mediaItems = post.mediaItems.map((item) => {
             if (item.file?.url) {
-              item.file.url = UserService.ensureAbsoluteUrl(
-                item.file.url,
-                apiUrl
-              );
+              item.file.url = UserService.ensureAbsoluteUrl(item.file.url, apiUrl)
 
               if (item.file.formats) {
                 Object.keys(item.file.formats).forEach((format) => {
                   if (item.file.formats[format]?.url) {
-                    item.file.formats[format].url =
-                      UserService.ensureAbsoluteUrl(
-                        item.file.formats[format].url,
-                        apiUrl
-                      );
+                    item.file.formats[format].url = UserService.ensureAbsoluteUrl(item.file.formats[format].url, apiUrl)
                   }
-                });
+                })
               }
             }
-            return item;
-          });
+            return item
+          })
         }
-        return post;
-      });
+        return post
+      })
     }
 
-    return userData;
+    return userData
   }
 
   /**
    * Ensure a URL is absolute
    */
   static ensureAbsoluteUrl(url: string, baseUrl: string): string {
-    if (!url) return url;
-    if (url.startsWith("http://") || url.startsWith("https://")) return url;
+    if (!url) return url
+    if (url.startsWith("http://") || url.startsWith("https://")) return url
     if (url.startsWith("/")) {
-      const cleanBaseUrl = baseUrl.endsWith("/")
-        ? baseUrl.slice(0, -1)
-        : baseUrl;
-      return `${cleanBaseUrl}${url}`;
+      const cleanBaseUrl = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl
+      return `${cleanBaseUrl}${url}`
     }
-    return `${baseUrl}/${url}`;
+    return `${baseUrl}/${url}`
   }
 
   /**
@@ -645,40 +721,35 @@ export class UserService {
    */
   static async getUserEngagement(
     username: string,
-    token?: string
+    token?: string,
   ): Promise<{ likes: number; comments: number; saves: number } | null> {
     try {
-      const apiUrl = getApiUrl();
-      console.log(`Fetching engagement for ${username} from ${apiUrl}`);
+      const apiUrl = getApiUrl()
+      console.log(`Fetching engagement for ${username} from ${apiUrl}`)
 
       // If a token was provided, call Strapi directly
       if (token) {
-        const response = await fetch(
-          `${apiUrl}/api/users/engagement/${username}`,
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            cache: "no-store",
-          }
-        );
+        const response = await fetch(`${apiUrl}/api/users/engagement/${username}`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          cache: "no-store",
+        })
 
         if (response.status === 404) {
-          console.log(
-            `No engagement data found for ${username}, using default values`
-          );
-          return { likes: 0, comments: 0, saves: 0 };
+          console.log(`No engagement data found for ${username}, using default values`)
+          return { likes: 0, comments: 0, saves: 0 }
         }
 
         if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`API error (${response.status}): ${errorText}`);
-          throw new Error(`API error (${response.status}): ${errorText}`);
+          const errorText = await response.text()
+          console.error(`API error (${response.status}): ${errorText}`)
+          throw new Error(`API error (${response.status}): ${errorText}`)
         }
 
-        return await response.json();
+        return await response.json()
       }
 
       // No token available on the client: use the server proxy to attach credentials securely
@@ -690,31 +761,27 @@ export class UserService {
           endpoint: `/api/users/engagement/${username}`,
         }),
         cache: "no-store",
-      });
+      })
 
       if (proxyResponse.status === 404) {
-        console.log(
-          `No engagement data found for ${username}, using default values`
-        );
-        return { likes: 0, comments: 0, saves: 0 };
+        console.log(`No engagement data found for ${username}, using default values`)
+        return { likes: 0, comments: 0, saves: 0 }
       }
 
       if (!proxyResponse.ok) {
-        const errorText = await proxyResponse.text();
-        console.error(
-          `Proxy API error (${proxyResponse.status}): ${errorText}`
-        );
-        throw new Error(`API error (${proxyResponse.status}): ${errorText}`);
+        const errorText = await proxyResponse.text()
+        console.error(`Proxy API error (${proxyResponse.status}): ${errorText}`)
+        throw new Error(`API error (${proxyResponse.status}): ${errorText}`)
       }
 
-      return await proxyResponse.json();
+      return await proxyResponse.json()
     } catch (error) {
-      console.error(`Error fetching engagement for ${username}:`, error);
+      console.error(`Error fetching engagement for ${username}:`, error)
       return {
         likes: 0,
         comments: 0,
         saves: 0,
-      };
+      }
     }
   }
 }

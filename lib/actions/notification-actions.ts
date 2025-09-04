@@ -80,7 +80,7 @@ export async function createNotification(data: NotificationData) {
 /**
  * Server action to save push subscription directly to Strapi
  */
-export async function subscribeToPushNotifications(userId: string, subscription: PushSubscription) {
+export async function subscribeToPushNotifications(userIdentifier: string, subscription: PushSubscription) {
   try {
     const headers = await getAuthHeaders()
 
@@ -104,7 +104,19 @@ export async function subscribeToPushNotifications(userId: string, subscription:
       }
     }
 
-    // Create new subscription with Strapi 5 documentId relation syntax
+    // Determine if userIdentifier is a documentId (string) or regular ID (number)
+    const isDocumentId = isNaN(Number(userIdentifier)) || userIdentifier.length > 10
+
+    let userRelation
+    if (isDocumentId) {
+      // Use documentId for Strapi v5 relation syntax
+      userRelation = { connect: [{ documentId: userIdentifier }] }
+    } else {
+      // Use regular ID for Strapi v5 relation syntax
+      userRelation = { connect: [{ id: Number.parseInt(userIdentifier) }] }
+    }
+
+    // Create new subscription with proper Strapi v5 relation syntax
     const response = await fetch(`${API_BASE_URL}/api/push-subscriptions`, {
       method: "POST",
       headers,
@@ -115,7 +127,7 @@ export async function subscribeToPushNotifications(userId: string, subscription:
           auth: subscription.keys.auth,
           userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "Server",
           isActive: true,
-          user: { connect: [{ documentId: userId }] }, // Using Strapi 5 documentId syntax
+          user: userRelation,
         },
       }),
     })
@@ -151,16 +163,24 @@ export async function subscribeToPushNotifications(userId: string, subscription:
 /**
  * Server action to get user's push subscriptions directly from Strapi
  */
-export async function getUserPushSubscriptions(userId: string) {
+export async function getUserPushSubscriptions(userIdentifier: string) {
   try {
     const headers = await getAuthHeaders()
-    const response = await fetch(
-      `${API_BASE_URL}/api/push-subscriptions?filters[user][documentId][$eq]=${userId}&populate=user`,
-      {
-        method: "GET",
-        headers,
-      },
-    )
+
+    // Determine if userIdentifier is a documentId (string) or regular ID (number)
+    const isDocumentId = isNaN(Number(userIdentifier)) || userIdentifier.length > 10
+
+    let filterQuery
+    if (isDocumentId) {
+      filterQuery = `filters[user][documentId][$eq]=${userIdentifier}`
+    } else {
+      filterQuery = `filters[user][id][$eq]=${userIdentifier}`
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/push-subscriptions?${filterQuery}&populate=user`, {
+      method: "GET",
+      headers,
+    })
 
     if (!response.ok) {
       throw new Error(`Failed to get push subscriptions: ${response.status}`)
