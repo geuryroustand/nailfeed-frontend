@@ -125,8 +125,8 @@ export async function addReaction(
           console.log(`[v0] Sending reaction notification from user ${user.id} to post author ${postAuthor.id}`)
 
           const notificationPayload = {
-            title: "New reaction 💅",
-            body: `Someone reacted ${REACTION_EMOJIS[type]} to your post.`,
+            title: `New reaction from ${user.displayName || user.username} 💅`,
+            body: `${user.displayName || user.username} reacted ${REACTION_EMOJIS[type]} to your post. Open to see it.`,
             url: `/post/${postDocumentId || postId}`,
             icon: "/icon-192x192.png",
             badge: "/icon-192x192.png",

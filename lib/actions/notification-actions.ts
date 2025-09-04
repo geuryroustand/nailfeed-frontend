@@ -208,6 +208,21 @@ export async function getUserPushSubscriptions(userIdentifier: string) {
 }
 
 /**
+ * Helper function to get emoji label for reaction type
+ */
+function getReactionEmojiLabel(reactionType: string): string {
+  const emojiMap: Record<string, string> = {
+    like: "👍",
+    love: "❤️",
+    haha: "😂",
+    wow: "😮",
+    sad: "😢",
+    angry: "😡",
+  }
+  return emojiMap[reactionType] || "👍"
+}
+
+/**
  * Server action to create comment notification (without sending push notification)
  */
 export async function createCommentNotification(
@@ -268,14 +283,16 @@ export async function createReactionNotificationWithoutPush(
       return { success: true, message: "No notification needed for own post" }
     }
 
+    const emojiLabel = getReactionEmojiLabel(reactionType)
+
     // Create notification in database only (no push notification)
     const notificationData: NotificationData = {
       type: "like", // Use "like" type for all reactions since it's in the Strapi enum
       userId: postAuthorId,
       relatedUserId: reactionAuthorId,
       relatedPostId: postId,
-      message: `${reactionAuthorName} reacted to your post with ${reactionType}`,
-      title: "New Reaction",
+      message: `${reactionAuthorName} reacted ${emojiLabel} to your post. Open to see it.`,
+      title: `New reaction from ${reactionAuthorName} 💅`,
     }
 
     await createNotification(notificationData)
@@ -374,14 +391,16 @@ export async function createReactionNotification(
       return { success: true, message: "No notification needed for own post" }
     }
 
+    const emojiLabel = getReactionEmojiLabel(reactionType)
+
     // Create notification in database
     const notificationData: NotificationData = {
       type: "like", // Use "like" type for all reactions since it's in the Strapi enum
       userId: postAuthorId,
       relatedUserId: reactionAuthorId,
       relatedPostId: postId,
-      message: `${reactionAuthorName} reacted to your post with ${reactionType}`,
-      title: "New Reaction",
+      message: `${reactionAuthorName} reacted ${emojiLabel} to your post. Open to see it.`,
+      title: `New reaction from ${reactionAuthorName} 💅`,
     }
 
     console.log("[v0] Creating notification in database...")
@@ -394,8 +413,8 @@ export async function createReactionNotification(
     if (subscriptions.length > 0) {
       console.log("[v0] Active subscriptions found, sending push notifications...")
       const pushPayload = {
-        title: "New Reaction",
-        body: `${reactionAuthorName} reacted to your post with ${reactionType}`,
+        title: `New reaction from ${reactionAuthorName} 💅`,
+        body: `${reactionAuthorName} reacted ${emojiLabel} to your post. Open to see it.`,
         icon: "/icon-192x192.png",
         badge: "/icon-192x192.png",
         data: {
