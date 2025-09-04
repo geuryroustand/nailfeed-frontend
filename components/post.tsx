@@ -27,6 +27,9 @@ import { formatDate, formatBackendDate } from "@/lib/date-utils"
 
 import { ReactionService } from "@/lib/services/reaction-service"
 
+// Import the notification action
+import { createReactionNotification } from "@/lib/actions/notification-actions"
+
 // Add the import for TryOnButton and TryOnModal at the top of the file
 import { TryOnButton } from "@/components/try-on/try-on-button"
 import { TryOnModal } from "@/components/try-on/try-on-modal"
@@ -300,6 +303,9 @@ export default function Post({
       console.log("[v0] Current reaction:", reaction, "New reaction:", reactionType)
 
       previousReaction = reaction
+      const isNewReaction = !reaction
+      const postAuthorId = post.user?.id || post.user?.documentId
+
       if (reaction === reactionType) {
         // Toggling off - removing reaction
         setReaction(null)
@@ -317,6 +323,31 @@ export default function Post({
         user.id,
         user.documentId || user.id,
       )
+
+      if (isNewReaction && postAuthorId && postAuthorId.toString() !== user.id.toString()) {
+        console.log("[v0] Post component - creating notification record for post author:", postAuthorId)
+        try {
+          await createReactionNotification(
+            post.documentId,
+            postAuthorId.toString(),
+            user.id.toString(),
+            user.displayName || user.username || "Someone",
+            reactionType,
+          )
+          console.log("[v0] Post component - notification record created successfully (no push notification sent)")
+        } catch (notificationError) {
+          console.error("[v0] Post component - failed to create notification record:", notificationError)
+        }
+      } else {
+        console.log(
+          "[v0] Post component - skipping notification - isNewReaction:",
+          isNewReaction,
+          "postAuthorId:",
+          postAuthorId,
+          "isSelfReaction:",
+          postAuthorId?.toString() === user.id.toString(),
+        )
+      }
 
       const reactionData = await ReactionService.getReactionCounts(post.documentId)
 
