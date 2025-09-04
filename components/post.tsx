@@ -304,7 +304,15 @@ export default function Post({
 
       previousReaction = reaction
       const isNewReaction = !reaction
-      const postAuthorId = post.userId || post.authorId || post.user?.id || post.user?.documentId
+      const postAuthorId = post.userId || post.authorId || post.user?.id || post.user?.documentId || post.userDocumentId
+
+      console.log("[v0] Post object structure:", {
+        userId: post.userId,
+        authorId: post.authorId,
+        userObj: post.user,
+        userDocumentId: post.userDocumentId,
+        extractedPostAuthorId: postAuthorId,
+      })
 
       if (reaction === reactionType) {
         // Toggling off - removing reaction

@@ -255,7 +255,7 @@ export async function createCommentNotification(
 /**
  * Server action to create reaction notification (without sending push notification)
  */
-export async function createReactionNotification(
+export async function createReactionNotificationWithoutPush(
   postId: string,
   postAuthorId: string,
   reactionAuthorId: string,
@@ -290,6 +290,152 @@ export async function createReactionNotification(
     }
   } catch (error) {
     console.error("Error creating reaction notification:", error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to create notification",
+    }
+  }
+}
+
+/**
+ * Server action to send push notifications using web-push
+ */
+async function sendPushNotification(subscription: any, payload: any) {
+  try {
+    const webpush = await import("web-push")
+
+    // Configure VAPID keys
+    webpush.setVapidDetails(
+      process.env.VAPID_SUBJECT || "mailto:your-email@example.com",
+      process.env.VAPID_PUBLIC_KEY || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "",
+      process.env.VAPID_PRIVATE_KEY || "",
+    )
+
+    console.log("[v0] Sending push notification to:", subscription.endpoint)
+
+    const pushSubscription = {
+      endpoint: subscription.endpoint,
+      keys: {
+        p256dh: subscription.p256dh,
+        auth: subscription.auth,
+      },
+    }
+
+    const result = await webpush.sendNotification(pushSubscription, JSON.stringify(payload))
+    console.log("[v0] Push notification sent successfully")
+    return { success: true, result }
+  } catch (error: any) {
+    console.error("[v0] Error sending push notification:", error)
+
+    // Handle invalid subscriptions (410 Gone, 404 Not Found)
+    if (error.statusCode === 410 || error.statusCode === 404) {
+      console.log("[v0] Subscription is invalid, marking as inactive")
+      try {
+        // Mark subscription as inactive in Strapi
+        const headers = await getAuthHeaders()
+        await fetch(`${API_BASE_URL}/api/push-subscriptions/${subscription.id}`, {
+          method: "PUT",
+          headers,
+          body: JSON.stringify({
+            data: { isActive: false },
+          }),
+        })
+      } catch (updateError) {
+        console.error("[v0] Failed to mark subscription as inactive:", updateError)
+      }
+    }
+
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Server action to create reaction notification WITH push notification sending
+ */
+export async function createReactionNotification(
+  postId: string,
+  postAuthorId: string,
+  reactionAuthorId: string,
+  reactionAuthorName: string,
+  reactionType: string,
+) {
+  try {
+    console.log("[v0] Creating reaction notification:", {
+      postId,
+      postAuthorId,
+      reactionAuthorId,
+      reactionAuthorName,
+      reactionType,
+    })
+
+    // Don't create notification if user is reacting to their own post
+    if (postAuthorId === reactionAuthorId) {
+      console.log("[v0] Skipping notification - user reacting to own post")
+      return { success: true, message: "No notification needed for own post" }
+    }
+
+    // Create notification in database
+    const notificationData: NotificationData = {
+      type: "like", // Use "like" type for all reactions since it's in the Strapi enum
+      userId: postAuthorId,
+      relatedUserId: reactionAuthorId,
+      relatedPostId: postId,
+      message: `${reactionAuthorName} reacted to your post with ${reactionType}`,
+      title: "New Reaction",
+    }
+
+    console.log("[v0] Creating notification in database...")
+    await createNotification(notificationData)
+
+    console.log("[v0] Fetching push subscriptions for user:", postAuthorId)
+    const subscriptions = await getUserPushSubscriptions(postAuthorId)
+    console.log("[v0] Found", subscriptions.length, "push subscriptions")
+
+    if (subscriptions.length > 0) {
+      const pushPayload = {
+        title: "New Reaction",
+        body: `${reactionAuthorName} reacted to your post with ${reactionType}`,
+        icon: "/icon-192x192.png",
+        badge: "/icon-192x192.png",
+        data: {
+          postId,
+          type: "reaction",
+          url: `/post/${postId}`,
+        },
+      }
+
+      // Send push notifications to all active subscriptions
+      const pushResults = await Promise.allSettled(
+        subscriptions
+          .filter((sub) => sub.attributes.isActive)
+          .map((sub) =>
+            sendPushNotification(
+              {
+                id: sub.id,
+                endpoint: sub.attributes.endpoint,
+                p256dh: sub.attributes.p256dh,
+                auth: sub.attributes.auth,
+              },
+              pushPayload,
+            ),
+          ),
+      )
+
+      const successCount = pushResults.filter((result) => result.status === "fulfilled" && result.value.success).length
+
+      console.log("[v0] Push notifications sent:", successCount, "of", subscriptions.length)
+    }
+
+    // Revalidate relevant paths
+    revalidatePath("/notifications")
+    revalidatePath(`/post/${postId}`)
+
+    return {
+      success: true,
+      message: "Reaction notification created and push notifications sent",
+    }
+  } catch (error) {
+    console.error("[v0] Error creating reaction notification:", error)
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to create notification",
