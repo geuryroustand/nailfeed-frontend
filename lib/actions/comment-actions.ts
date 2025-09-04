@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
-import { createCommentNotification } from "@/lib/actions/notification-actions"
+import { createCommentNotification, createReplyNotification } from "@/lib/actions/notification-actions"
 
 // Server-only base URL and token
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
@@ -96,36 +96,73 @@ export async function addComment(
     const data = await response.json()
 
     try {
-      // Get post details to find the post author
-      const postResponse = await fetch(`${API_BASE_URL}/api/posts/${postId}?populate=*`, {
-        headers: {
-          Authorization: `Bearer ${SERVER_API_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-      })
+      if (threadOf) {
+        // This is a reply - notify the parent comment author
+        console.log("[v0] Processing reply notification...")
 
-      if (postResponse.ok) {
-        const postData = await postResponse.json()
-        const postAuthorId = postData.data?.attributes?.user?.data?.id
-        const commentAuthorId = author?.id
-        const commentAuthorName = author?.name
+        // Get parent comment details to find the comment author
+        const parentCommentResponse = await fetch(`${API_BASE_URL}/api/comments/${threadOf}?populate=*`, {
+          headers: {
+            Authorization: `Bearer ${SERVER_API_TOKEN}`,
+            "Content-Type": "application/json",
+          },
+        })
 
-        if (postAuthorId && commentAuthorId && commentAuthorName) {
-          // Send notification asynchronously (don't wait for it)
-          createCommentNotification(
-            postId.toString(),
-            postAuthorId.toString(),
-            commentAuthorId,
-            commentAuthorName,
-            content,
-          ).catch((error) => {
-            console.error("Failed to send comment notification:", error)
-          })
+        if (parentCommentResponse.ok) {
+          const parentCommentData = await parentCommentResponse.json()
+          const commentAuthorId = parentCommentData.data?.author?.id
+          const replyAuthorId = author?.id
+          const replyAuthorName = author?.name
+
+          if (commentAuthorId && replyAuthorId && replyAuthorName) {
+            console.log("[v0] Sending reply notification to comment author:", commentAuthorId)
+            createReplyNotification(
+              postId.toString(),
+              threadOf.toString(),
+              commentAuthorId.toString(),
+              replyAuthorId,
+              replyAuthorName,
+              content,
+            ).catch((error) => {
+              console.error("Failed to send reply notification:", error)
+            })
+          }
+        }
+      } else {
+        // This is a direct comment on post - notify the post author
+        console.log("[v0] Processing comment notification...")
+
+        // Get post details to find the post author
+        const postResponse = await fetch(`${API_BASE_URL}/api/posts/${postId}?populate=*`, {
+          headers: {
+            Authorization: `Bearer ${SERVER_API_TOKEN}`,
+            "Content-Type": "application/json",
+          },
+        })
+
+        if (postResponse.ok) {
+          const postData = await postResponse.json()
+          const postAuthorId = postData.data?.attributes?.user?.data?.id
+          const commentAuthorId = author?.id
+          const commentAuthorName = author?.name
+
+          if (postAuthorId && commentAuthorId && commentAuthorName) {
+            console.log("[v0] Sending comment notification to post author:", postAuthorId)
+            createCommentNotification(
+              postId.toString(),
+              postAuthorId.toString(),
+              commentAuthorId,
+              commentAuthorName,
+              content,
+            ).catch((error) => {
+              console.error("Failed to send comment notification:", error)
+            })
+          }
         }
       }
     } catch (notificationError) {
       // Log but don't fail the comment creation
-      console.error("Error sending comment notification:", notificationError)
+      console.error("Error sending notification:", notificationError)
     }
 
     revalidatePath(`/post/${postId}`)
