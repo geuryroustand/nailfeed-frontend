@@ -444,7 +444,8 @@ export default function FeedCommentSection({
 
       if (!commentToDelete) {
         console.error("[v0] Comment not found in local state:", commentId)
-        throw new Error("Comment not found")
+        await fetchComments(1, true)
+        throw new Error("Comment not found in local state. Comments have been refreshed.")
       }
 
       console.log("[v0] Found comment to delete:", {
@@ -501,7 +502,6 @@ export default function FeedCommentSection({
 
       console.log("[v0] Comment deleted successfully, refreshing comments list")
 
-      // Refresh comments to get the updated hierarchical structure
       await fetchComments(1, true)
 
       // Notify parent component
@@ -518,9 +518,24 @@ export default function FeedCommentSection({
       console.error("[v0] Error in performDeleteComment:", err)
       const errorMessage = parseErrorMessage(err)
 
+      console.log("[v0] Refreshing comments after deletion error to ensure UI sync")
+      try {
+        await fetchComments(1, true)
+      } catch (refreshError) {
+        console.error("[v0] Failed to refresh comments after deletion error:", refreshError)
+      }
+
+      let userFriendlyMessage = errorMessage
+      if (errorMessage.includes("Entity does not exist") || errorMessage.includes("not found")) {
+        userFriendlyMessage =
+          "This comment may have already been deleted or you don't have permission to delete it. The comments have been refreshed."
+      } else if (errorMessage.includes("not allowed") || errorMessage.includes("403")) {
+        userFriendlyMessage = "You don't have permission to delete this comment."
+      }
+
       toast({
         title: "Error deleting comment",
-        description: errorMessage,
+        description: userFriendlyMessage,
         variant: "destructive",
       })
     }
