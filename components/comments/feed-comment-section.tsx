@@ -449,6 +449,7 @@ export default function FeedCommentSection({
 
       console.log("[v0] Found comment to delete:", {
         commentId: commentToDelete.id,
+        commentDocumentId: commentToDelete.documentId,
         authorId: commentToDelete.author?.id,
         authorName: commentToDelete.author?.name,
         fullComment: commentToDelete,
@@ -468,13 +469,18 @@ export default function FeedCommentSection({
         throw new Error("Author ID not found in comment data")
       }
 
+      const commentIdentifier = commentToDelete.documentId || commentToDelete.id
+
       console.log("[v0] Validation check before deletion:", {
         postId,
         documentId,
         commentId,
+        commentIdentifier,
+        commentDocumentId: commentToDelete.documentId,
         authorId,
         authorIdType: typeof authorId,
         commentIdType: typeof commentId,
+        commentIdentifierType: typeof commentIdentifier,
         isAuthorIdNumeric: /^\d+$/.test(String(authorId)),
         isCommentIdNumeric: /^\d+$/.test(String(commentId)),
       })
@@ -482,14 +488,11 @@ export default function FeedCommentSection({
       console.log("[v0] Calling CommentsService.deleteComment with:", {
         postId,
         documentId,
-        commentId,
+        commentIdentifier,
         authorId,
       })
 
-      // Delete the comment
-      const response = await CommentsService.deleteComment(postId, documentId, commentId, authorId)
-
-      console.log("[v0] Delete comment response:", response)
+      const response = await CommentsService.deleteComment(postId, documentId, commentIdentifier, authorId)
 
       if (!response.success) {
         console.error("[v0] Delete comment failed:", response.error)

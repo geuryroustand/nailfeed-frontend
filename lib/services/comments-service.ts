@@ -347,9 +347,11 @@ export class CommentsService {
       console.log("[v0] Attempting to delete comment:", {
         postId: documentId || postId,
         commentId,
+        commentIdType: typeof commentId,
         authorId: numericAuthorId,
         endpoint,
         baseEndpoint: base,
+        fullUrl: `${process.env.NEXT_PUBLIC_API_URL || "https://api.nailfeed.com"}${endpoint}`,
       })
 
       const response = await proxyRequest(endpoint, { method: "DELETE" })
