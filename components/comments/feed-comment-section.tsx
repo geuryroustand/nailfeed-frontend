@@ -437,26 +437,48 @@ export default function FeedCommentSection({
     setError(null)
 
     try {
+      console.log("[v0] Starting comment deletion process:", { commentId, postId, documentId })
+
       // Find the comment to get its author information
       const commentToDelete = findCommentById(comments, commentId)
 
       if (!commentToDelete) {
+        console.error("[v0] Comment not found in local state:", commentId)
         throw new Error("Comment not found")
       }
+
+      console.log("[v0] Found comment to delete:", {
+        commentId: commentToDelete.id,
+        authorId: commentToDelete.author?.id,
+        authorName: commentToDelete.author?.name,
+      })
 
       // Get the author ID from the comment
       const authorId = commentToDelete.author?.id
 
       if (!authorId) {
+        console.error("[v0] Author ID not found in comment data:", commentToDelete)
         throw new Error("Author ID not found in comment data")
       }
+
+      console.log("[v0] Calling CommentsService.deleteComment with:", {
+        postId,
+        documentId,
+        commentId,
+        authorId,
+      })
 
       // Delete the comment
       const response = await CommentsService.deleteComment(postId, documentId, commentId, authorId)
 
+      console.log("[v0] Delete comment response:", response)
+
       if (!response.success) {
+        console.error("[v0] Delete comment failed:", response.error)
         throw new Error(response.error || "Failed to delete comment")
       }
+
+      console.log("[v0] Comment deleted successfully, refreshing comments list")
 
       // Refresh comments to get the updated hierarchical structure
       await fetchComments(1, true)
@@ -472,6 +494,7 @@ export default function FeedCommentSection({
         description: "Your comment has been successfully deleted",
       })
     } catch (err) {
+      console.error("[v0] Error in performDeleteComment:", err)
       const errorMessage = parseErrorMessage(err)
 
       toast({
@@ -544,15 +567,26 @@ export default function FeedCommentSection({
   // Check if the user can view comments
   const canViewComments = isAuthenticated || allowViewingForAll
 
-  // Recursive function to render comments and their children
+  // Recursive function to render comments and their replies
   const renderCommentWithReplies = (comment: Comment, level = 0) => {
     const isAuthor =
       user &&
       comment.author &&
       (String(user.id) === String(comment.author.id) ||
         user.username === comment.author.name ||
-        user.email === comment.author.email)
+        user.email === comment.author.email ||
+        user.name === comment.author.name)
+
     const formattedDate = formatDate(comment.createdAt)
+
+    console.log("[v0] Rendering comment:", {
+      commentId: comment.id,
+      authorId: comment.author?.id,
+      authorName: comment.author?.name,
+      currentUserId: user?.id,
+      currentUserName: user?.username || user?.name,
+      isAuthor,
+    })
 
     return (
       <div key={comment.id} className={`mt-4 ${level > 0 ? "ml-6 border-l-2 border-gray-100 pl-4" : ""}`}>

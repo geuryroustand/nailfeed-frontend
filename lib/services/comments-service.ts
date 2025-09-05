@@ -331,19 +331,39 @@ export class CommentsService {
   static async deleteComment(
     postId: string | number,
     documentId: string | undefined,
-    commentId: number,
+    commentId: number | string, // Accept both number and string for backward compatibility
     authorId: string | number,
   ) {
     try {
       if (!commentId) throw new Error("No commentId provided to deleteComment")
+
       const base = buildBaseEndpoint(postId, documentId)
       const numericAuthorId =
         typeof authorId === "string" && /^\d+$/.test(authorId) ? Number.parseInt(authorId, 10) : authorId
+
       const endpoint = `${base}/comment/${commentId}?authorId=${numericAuthorId}`
+
+      console.log("[v0] Attempting to delete comment:", {
+        postId: documentId || postId,
+        commentId,
+        authorId: numericAuthorId,
+        endpoint,
+      })
 
       const response = await proxyRequest(endpoint, { method: "DELETE" })
 
+      console.log("[v0] Delete comment response:", {
+        status: response.status,
+        ok: response.ok,
+        statusText: response.statusText,
+      })
+
       if (response.status === 404) {
+        console.error("[v0] Comment not found for deletion:", {
+          commentId,
+          endpoint,
+          authorId: numericAuthorId,
+        })
         return {
           success: false,
           error: `Comment with ID ${commentId} not found`,
@@ -352,6 +372,12 @@ export class CommentsService {
 
       if (!response.ok) {
         const text = await response.text().catch(() => "")
+        console.error("[v0] Delete comment failed:", {
+          status: response.status,
+          statusText: response.statusText,
+          responseText: text,
+        })
+
         let errorData: any
         try {
           errorData = text ? JSON.parse(text) : { error: { message: `HTTP error: ${response.status}` } }
@@ -369,8 +395,10 @@ export class CommentsService {
         }
       }
 
+      console.log("[v0] Comment deleted successfully:", commentId)
       return { success: true }
     } catch (error) {
+      console.error("[v0] Error in deleteComment:", error)
       return {
         success: false,
         error: error instanceof Error ? error.message : "An unknown error occurred",
