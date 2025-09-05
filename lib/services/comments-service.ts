@@ -341,6 +341,7 @@ export class CommentsService {
       const numericAuthorId =
         typeof authorId === "string" && /^\d+$/.test(authorId) ? Number.parseInt(authorId, 10) : authorId
 
+      // The endpoint should be: /api/comments/api::content-type:id/comment/commentId?authorId=authorId
       const endpoint = `${base}/comment/${commentId}?authorId=${numericAuthorId}`
 
       console.log("[v0] Attempting to delete comment:", {
@@ -348,6 +349,7 @@ export class CommentsService {
         commentId,
         authorId: numericAuthorId,
         endpoint,
+        baseEndpoint: base,
       })
 
       const response = await proxyRequest(endpoint, { method: "DELETE" })
@@ -366,7 +368,31 @@ export class CommentsService {
         })
         return {
           success: false,
-          error: `Comment with ID ${commentId} not found`,
+          error: `Comment with ID ${commentId} not found. It may have already been deleted.`,
+        }
+      }
+
+      if (response.status === 403) {
+        console.error("[v0] Forbidden - user not authorized to delete comment:", {
+          commentId,
+          endpoint,
+          authorId: numericAuthorId,
+        })
+        return {
+          success: false,
+          error: "You are not authorized to delete this comment. You can only delete your own comments.",
+        }
+      }
+
+      if (response.status === 409) {
+        console.error("[v0] Conflict - comment deletion conflict:", {
+          commentId,
+          endpoint,
+          authorId: numericAuthorId,
+        })
+        return {
+          success: false,
+          error: "Unable to delete comment due to a conflict. Please try again.",
         }
       }
 
@@ -390,7 +416,7 @@ export class CommentsService {
         }
         return {
           success: false,
-          error: errorData.error?.message || `Failed to delete`,
+          error: errorData.error?.message || `Failed to delete comment (${response.status})`,
           details: errorData,
         }
       }
