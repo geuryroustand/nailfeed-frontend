@@ -469,7 +469,7 @@ export default function FeedCommentSection({
         throw new Error("Author ID not found in comment data")
       }
 
-      const commentIdentifier = commentToDelete.documentId || commentToDelete.id
+      const commentIdentifier = commentToDelete.id // Always use numeric ID for deletion
 
       console.log("[v0] Validation check before deletion:", {
         postId,
