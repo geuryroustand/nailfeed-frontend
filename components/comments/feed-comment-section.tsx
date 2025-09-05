@@ -451,6 +451,13 @@ export default function FeedCommentSection({
         commentId: commentToDelete.id,
         authorId: commentToDelete.author?.id,
         authorName: commentToDelete.author?.name,
+        fullComment: commentToDelete,
+        currentUser: {
+          id: user?.id,
+          username: user?.username,
+          name: user?.name,
+          email: user?.email,
+        },
       })
 
       // Get the author ID from the comment
@@ -460,6 +467,17 @@ export default function FeedCommentSection({
         console.error("[v0] Author ID not found in comment data:", commentToDelete)
         throw new Error("Author ID not found in comment data")
       }
+
+      console.log("[v0] Validation check before deletion:", {
+        postId,
+        documentId,
+        commentId,
+        authorId,
+        authorIdType: typeof authorId,
+        commentIdType: typeof commentId,
+        isAuthorIdNumeric: /^\d+$/.test(String(authorId)),
+        isCommentIdNumeric: /^\d+$/.test(String(commentId)),
+      })
 
       console.log("[v0] Calling CommentsService.deleteComment with:", {
         postId,
