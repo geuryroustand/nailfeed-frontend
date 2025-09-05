@@ -21,7 +21,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { sendNotificationToUser, getPostAuthor } from "@/lib/services/web-push-service"
 
 interface FeedCommentSectionProps {
   postId: string | number
@@ -337,62 +336,6 @@ export default function FeedCommentSection({
           throw new Error(response.error)
         }
 
-        try {
-          console.log("[v0] Comment created successfully, sending notifications...")
-
-          if (replyTo?.id) {
-            // This is a reply - notify the parent comment author
-            console.log("[v0] Processing reply notification for comment:", replyTo.id)
-
-            // Find the parent comment to get the author info
-            const parentComment = findCommentById(comments, replyTo.id)
-            if (parentComment && parentComment.author.id !== user?.id) {
-              console.log("[v0] Sending reply notification to comment author:", parentComment.author.id)
-
-              const notificationPayload = {
-                title: `New reply from ${user?.name || user?.username || "Someone"} 💅`,
-                body: `${user?.name || user?.username || "Someone"} replied 💬 to your comment: "${newComment.length > 80 ? newComment.substring(0, 80) + "..." : newComment}"`,
-                url: `/post/${documentId || postId}`,
-                icon: "/icon-192x192.png",
-                badge: "/icon-192x192.png",
-              }
-
-              sendNotificationToUser(parentComment.author.id.toString(), notificationPayload).catch((error) => {
-                console.error("[v0] Failed to send reply push notification:", error)
-              })
-            } else {
-              console.log("[v0] Skipping reply notification - same user or parent comment not found")
-            }
-          } else {
-            // This is a direct comment on post - notify the post author
-            console.log("[v0] Processing comment notification for post:", postId)
-
-            const postAuthor = await getPostAuthor(documentId || postId)
-            if (postAuthor && postAuthor.id !== user?.id) {
-              console.log("[v0] Sending comment notification to post author:", postAuthor.id)
-
-              const notificationPayload = {
-                title: `New comment from ${user?.name || user?.username || "Someone"} 💅`,
-                body: `${user?.name || user?.username || "Someone"} commented 💬 on your post: "${newComment.length > 80 ? newComment.substring(0, 80) + "..." : newComment}"`,
-                url: `/post/${documentId || postId}`,
-                icon: "/icon-192x192.png",
-                badge: "/icon-192x192.png",
-              }
-
-              sendNotificationToUser(postAuthor.id, notificationPayload).catch((error) => {
-                console.error("[v0] Failed to send comment push notification:", error)
-              })
-            } else if (postAuthor?.id === user?.id) {
-              console.log("[v0] Skipping self-notification for user", user?.id)
-            } else {
-              console.log("[v0] Could not find post author for post", documentId || postId)
-            }
-          }
-        } catch (notificationError) {
-          // Log but don't fail the comment creation
-          console.error("[v0] Error sending notification:", notificationError)
-        }
-
         // Reset form state
         setNewComment("")
         setReplyTo(null)
@@ -603,7 +546,12 @@ export default function FeedCommentSection({
 
   // Recursive function to render comments and their children
   const renderCommentWithReplies = (comment: Comment, level = 0) => {
-    const isAuthor = user?.id === comment.author.id
+    const isAuthor =
+      user &&
+      comment.author &&
+      (String(user.id) === String(comment.author.id) ||
+        user.username === comment.author.name ||
+        user.email === comment.author.email)
     const formattedDate = formatDate(comment.createdAt)
 
     return (

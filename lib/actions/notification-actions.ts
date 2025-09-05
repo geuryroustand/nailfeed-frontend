@@ -293,6 +293,34 @@ export async function createCommentNotification(
       commentAuthorName,
     })
 
+    if (!postAuthorId) {
+      console.log("[v0] Fetching post author for post:", postId)
+      try {
+        const headers = await getAuthHeaders()
+        const response = await fetch(`${API_BASE_URL}/api/posts/${postId}?populate=user`, {
+          method: "GET",
+          headers,
+        })
+
+        if (response.ok) {
+          const postData = await response.json()
+          const postAuthor = postData.data?.user || postData.data?.attributes?.user?.data
+          if (postAuthor) {
+            postAuthorId = postAuthor.id?.toString() || postAuthor.attributes?.id?.toString()
+            console.log("[v0] Found post author:", postAuthorId)
+          }
+        }
+      } catch (fetchError) {
+        console.error("[v0] Error fetching post author:", fetchError)
+        return { success: false, error: "Could not fetch post author" }
+      }
+    }
+
+    if (!postAuthorId) {
+      console.log("[v0] No post author found, skipping notification")
+      return { success: false, error: "Post author not found" }
+    }
+
     // Don't create notification if user is commenting on their own post
     if (postAuthorId === commentAuthorId) {
       console.log("[v0] Skipping notification - user commenting on own post")
