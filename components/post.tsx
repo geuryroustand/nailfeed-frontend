@@ -304,7 +304,15 @@ export default function Post({
 
       previousReaction = reaction
       const isNewReaction = !reaction
-      const postAuthorId = post.user?.id || post.user?.documentId
+      const postAuthorId = post.userId || post.authorId || post.user?.id || post.user?.documentId || post.userDocumentId
+
+      console.log("[v0] Post object structure:", {
+        userId: post.userId,
+        authorId: post.authorId,
+        userObj: post.user,
+        userDocumentId: post.userDocumentId,
+        extractedPostAuthorId: postAuthorId,
+      })
 
       if (reaction === reactionType) {
         // Toggling off - removing reaction
@@ -334,7 +342,7 @@ export default function Post({
             user.displayName || user.username || "Someone",
             reactionType,
           )
-          console.log("[v0] Post component - notification record created successfully (no push notification sent)")
+          console.log("[v0] Post component - notification record created successfully")
         } catch (notificationError) {
           console.error("[v0] Post component - failed to create notification record:", notificationError)
         }

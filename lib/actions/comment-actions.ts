@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
-import { createCommentNotification } from "@/lib/actions/notification-actions"
+import { sendNotificationToUser, getPostAuthor } from "@/lib/services/web-push-service"
 
 // Server-only base URL and token
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
@@ -60,6 +60,14 @@ export async function addComment(
   author?: { id: string; name: string; email: string; avatar?: string },
 ) {
   try {
+    console.log("[v0] Adding comment:", {
+      postId,
+      documentId,
+      content: content.substring(0, 50),
+      threadOf,
+      authorId: author?.id,
+    })
+
     const identifier = documentId
     const endpoint = `/api/comments/api::post.post:${identifier}`
     const url = `${API_BASE_URL}${API_BASE_URL.endsWith("/") ? "" : "/"}${
@@ -94,38 +102,86 @@ export async function addComment(
     }
 
     const data = await response.json()
+    console.log("[v0] Comment created successfully:", data.data?.id)
 
     try {
-      // Get post details to find the post author
-      const postResponse = await fetch(`${API_BASE_URL}/api/posts/${postId}?populate=*`, {
-        headers: {
-          Authorization: `Bearer ${SERVER_API_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-      })
+      if (threadOf) {
+        // This is a reply - notify the parent comment author
+        console.log("[v0] Processing reply notification for threadOf:", threadOf)
 
-      if (postResponse.ok) {
-        const postData = await postResponse.json()
-        const postAuthorId = postData.data?.attributes?.user?.data?.id
+        // Get parent comment details to find the comment author
+        const parentCommentResponse = await fetch(`${API_BASE_URL}/api/comments/${threadOf}?populate=*`, {
+          headers: {
+            Authorization: `Bearer ${SERVER_API_TOKEN}`,
+            "Content-Type": "application/json",
+          },
+        })
+
+        if (parentCommentResponse.ok) {
+          const parentCommentData = await parentCommentResponse.json()
+          const commentAuthorId = parentCommentData.data?.author?.id
+          const replyAuthorId = author?.id
+          const replyAuthorName = author?.name
+
+          console.log("[v0] Parent comment data:", { commentAuthorId, replyAuthorId, replyAuthorName })
+
+          if (commentAuthorId && replyAuthorId && replyAuthorName && commentAuthorId !== replyAuthorId) {
+            console.log("[v0] Sending reply notification to comment author:", commentAuthorId)
+
+            const notificationPayload = {
+              title: `New reply from ${replyAuthorName} 💅`,
+              body: `${replyAuthorName} replied 💬 to your comment: "${content.length > 80 ? content.substring(0, 80) + "..." : content}"`,
+              url: `/post/${documentId || postId}`,
+              icon: "/icon-192x192.png",
+              badge: "/icon-192x192.png",
+            }
+
+            sendNotificationToUser(commentAuthorId.toString(), notificationPayload).catch((error) => {
+              console.error("[v0] Failed to send reply push notification:", error)
+            })
+          } else {
+            console.log("[v0] Skipping reply notification - same user or missing data")
+          }
+        } else {
+          console.error("[v0] Failed to fetch parent comment:", parentCommentResponse.status)
+        }
+      } else {
+        // This is a direct comment on post - notify the post author
+        console.log("[v0] Processing comment notification for post:", postId)
+
+        const postAuthor = await getPostAuthor(documentId || postId)
         const commentAuthorId = author?.id
         const commentAuthorName = author?.name
 
-        if (postAuthorId && commentAuthorId && commentAuthorName) {
-          // Send notification asynchronously (don't wait for it)
-          createCommentNotification(
-            postId.toString(),
-            postAuthorId.toString(),
-            commentAuthorId,
-            commentAuthorName,
-            content,
-          ).catch((error) => {
-            console.error("Failed to send comment notification:", error)
+        console.log("[v0] Post author data:", {
+          postAuthorId: postAuthor?.id,
+          commentAuthorId,
+          commentAuthorName,
+        })
+
+        if (postAuthor && commentAuthorId && commentAuthorName && postAuthor.id !== commentAuthorId) {
+          console.log("[v0] Sending comment notification to post author:", postAuthor.id)
+
+          const notificationPayload = {
+            title: `New comment from ${commentAuthorName} 💅`,
+            body: `${commentAuthorName} commented 💬 on your post: "${content.length > 80 ? content.substring(0, 80) + "..." : content}"`,
+            url: `/post/${documentId || postId}`,
+            icon: "/icon-192x192.png",
+            badge: "/icon-192x192.png",
+          }
+
+          sendNotificationToUser(postAuthor.id, notificationPayload).catch((error) => {
+            console.error("[v0] Failed to send comment push notification:", error)
           })
+        } else if (postAuthor?.id === commentAuthorId) {
+          console.log("[v0] Skipping self-notification for user", commentAuthorId)
+        } else {
+          console.log("[v0] Could not find post author for post", documentId || postId)
         }
       }
     } catch (notificationError) {
       // Log but don't fail the comment creation
-      console.error("Error sending comment notification:", notificationError)
+      console.error("[v0] Error sending notification:", notificationError)
     }
 
     revalidatePath(`/post/${postId}`)

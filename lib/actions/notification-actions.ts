@@ -8,8 +8,8 @@ const SERVER_API_TOKEN = process.env.API_TOKEN || ""
 
 export interface NotificationData {
   type: "like" | "comment" | "follow" | "mention" | "collection" | "mood"
-  userDocumentId: string // Changed from userId to userDocumentId
-  relatedUserDocumentId?: string // Changed from relatedUserId to relatedUserDocumentId
+  userId: string
+  relatedUserId?: string
   relatedPostId?: string
   relatedCommentId?: string
   message: string
@@ -58,10 +58,8 @@ export async function createNotification(data: NotificationData) {
         data: {
           type: data.type,
           read: false,
-          user: { connect: [{ documentId: data.userDocumentId }] },
-          relatedUser: data.relatedUserDocumentId
-            ? { connect: [{ documentId: data.relatedUserDocumentId }] }
-            : undefined,
+          user: data.userId,
+          relatedUser: data.relatedUserId,
           relatedPost: data.relatedPostId,
           relatedComment: data.relatedCommentId,
         },
@@ -82,8 +80,7 @@ export async function createNotification(data: NotificationData) {
 /**
  * Server action to save push subscription directly to Strapi
  */
-export async function subscribeToPushNotifications(userDocumentId: string, subscription: PushSubscription) {
-  // Parameter renamed from userId to userDocumentId
+export async function subscribeToPushNotifications(userIdentifier: string, subscription: PushSubscription) {
   try {
     const headers = await getAuthHeaders()
 
@@ -107,7 +104,19 @@ export async function subscribeToPushNotifications(userDocumentId: string, subsc
       }
     }
 
-    // Create new subscription with Strapi 5 documentId relation syntax
+    // Determine if userIdentifier is a documentId (string) or regular ID (number)
+    const isDocumentId = isNaN(Number(userIdentifier)) || userIdentifier.length > 10
+
+    let userRelation
+    if (isDocumentId) {
+      // Use documentId for Strapi v5 relation syntax
+      userRelation = { connect: [{ documentId: userIdentifier }] }
+    } else {
+      // Use regular ID for Strapi v5 relation syntax
+      userRelation = { connect: [{ id: Number.parseInt(userIdentifier) }] }
+    }
+
+    // Create new subscription with proper Strapi v5 relation syntax
     const response = await fetch(`${API_BASE_URL}/api/push-subscriptions`, {
       method: "POST",
       headers,
@@ -118,7 +127,7 @@ export async function subscribeToPushNotifications(userDocumentId: string, subsc
           auth: subscription.keys.auth,
           userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "Server",
           isActive: true,
-          user: { connect: [{ documentId: userDocumentId }] },
+          user: userRelation,
         },
       }),
     })
@@ -154,17 +163,24 @@ export async function subscribeToPushNotifications(userDocumentId: string, subsc
 /**
  * Server action to get user's push subscriptions directly from Strapi
  */
-export async function getUserPushSubscriptions(userDocumentId: string) {
-  // Parameter renamed from userId to userDocumentId
+export async function getUserPushSubscriptions(userIdentifier: string) {
   try {
     const headers = await getAuthHeaders()
-    const response = await fetch(
-      `${API_BASE_URL}/api/push-subscriptions?filters[user][documentId][$eq]=${userDocumentId}&populate=user`,
-      {
-        method: "GET",
-        headers,
-      },
-    )
+
+    // Determine if userIdentifier is a documentId (string) or regular ID (number)
+    const isDocumentId = isNaN(Number(userIdentifier)) || userIdentifier.length > 10
+
+    let filterQuery
+    if (isDocumentId) {
+      filterQuery = `filters[user][documentId][$eq]=${userIdentifier}`
+    } else {
+      filterQuery = `filters[user][id][$eq]=${userIdentifier}`
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/push-subscriptions?${filterQuery}&populate=user`, {
+      method: "GET",
+      headers,
+    })
 
     if (!response.ok) {
       throw new Error(`Failed to get push subscriptions: ${response.status}`)
@@ -192,26 +208,49 @@ export async function getUserPushSubscriptions(userDocumentId: string) {
 }
 
 /**
+ * Helper function to get emoji label for reaction type
+ */
+function getReactionEmojiLabel(reactionType: string): string {
+  const emojiMap: Record<string, string> = {
+    like: "👍",
+    love: "❤️",
+    haha: "😂",
+    wow: "😮",
+    sad: "😢",
+    angry: "😡",
+  }
+  return emojiMap[reactionType] || "👍"
+}
+
+/**
+ * Helper function to truncate content for notifications
+ */
+function truncateContent(content: string, maxLength = 90): string {
+  if (content.length <= maxLength) return content
+  return content.substring(0, maxLength).trim() + "..."
+}
+
+/**
  * Server action to create comment notification (without sending push notification)
  */
-export async function createCommentNotification(
+export async function createCommentNotificationWithoutPush(
   postId: string,
-  postAuthorDocumentId: string, // Parameter renamed to indicate documentId
-  commentAuthorDocumentId: string, // Parameter renamed to indicate documentId
+  postAuthorId: string,
+  commentAuthorId: string,
   commentAuthorName: string,
   commentContent: string,
 ) {
   try {
     // Don't create notification if user is commenting on their own post
-    if (postAuthorDocumentId === commentAuthorDocumentId) {
+    if (postAuthorId === commentAuthorId) {
       return { success: true, message: "No notification needed for own post" }
     }
 
     // Create notification in database only (no push notification)
     const notificationData: NotificationData = {
       type: "comment",
-      userDocumentId: postAuthorDocumentId, // Using documentId
-      relatedUserDocumentId: commentAuthorDocumentId, // Using documentId
+      userId: postAuthorId,
+      relatedUserId: commentAuthorId,
       relatedPostId: postId,
       message: `${commentAuthorName} commented on your post`,
       title: "New Comment",
@@ -237,29 +276,160 @@ export async function createCommentNotification(
 }
 
 /**
+ * Server action to create comment notification WITH push notification sending
+ */
+export async function createCommentNotification(
+  postId: string,
+  postAuthorId: string,
+  commentAuthorId: string,
+  commentAuthorName: string,
+  commentContent: string,
+) {
+  try {
+    console.log("[v0] Creating comment notification:", {
+      postId,
+      postAuthorId,
+      commentAuthorId,
+      commentAuthorName,
+    })
+
+    if (!postAuthorId) {
+      console.log("[v0] Fetching post author for post:", postId)
+      try {
+        const headers = await getAuthHeaders()
+        const response = await fetch(`${API_BASE_URL}/api/posts/${postId}?populate=user`, {
+          method: "GET",
+          headers,
+        })
+
+        if (response.ok) {
+          const postData = await response.json()
+          const postAuthor = postData.data?.user || postData.data?.attributes?.user?.data
+          if (postAuthor) {
+            postAuthorId = postAuthor.id?.toString() || postAuthor.attributes?.id?.toString()
+            console.log("[v0] Found post author:", postAuthorId)
+          }
+        }
+      } catch (fetchError) {
+        console.error("[v0] Error fetching post author:", fetchError)
+        return { success: false, error: "Could not fetch post author" }
+      }
+    }
+
+    if (!postAuthorId) {
+      console.log("[v0] No post author found, skipping notification")
+      return { success: false, error: "Post author not found" }
+    }
+
+    // Don't create notification if user is commenting on their own post
+    if (postAuthorId === commentAuthorId) {
+      console.log("[v0] Skipping notification - user commenting on own post")
+      return { success: true, message: "No notification needed for own post" }
+    }
+
+    const truncatedContent = truncateContent(commentContent)
+
+    // Create notification in database
+    const notificationData: NotificationData = {
+      type: "comment",
+      userId: postAuthorId,
+      relatedUserId: commentAuthorId,
+      relatedPostId: postId,
+      message: `${commentAuthorName} commented: "${truncatedContent}"`,
+      title: "New comment on your post 💬",
+    }
+
+    console.log("[v0] Creating comment notification in database...")
+    await createNotification(notificationData)
+
+    console.log("[v0] Fetching push subscriptions for post author:", postAuthorId)
+    const subscriptions = await getUserPushSubscriptions(postAuthorId)
+    console.log("[v0] Found", subscriptions.length, "push subscriptions")
+
+    if (subscriptions.length > 0) {
+      console.log("[v0] Active subscriptions found, sending push notifications...")
+      const pushPayload = {
+        title: "New comment on your post 💬",
+        body: `${commentAuthorName} commented: "${truncatedContent}"`,
+        icon: "/icon-192x192.png",
+        badge: "/icon-192x192.png",
+        data: {
+          postId,
+          type: "comment",
+          url: `/post/${postId}`,
+        },
+      }
+
+      // Send push notifications to all active subscriptions
+      const pushResults = await Promise.allSettled(
+        subscriptions
+          .filter((sub) => sub.attributes.isActive)
+          .map((sub) =>
+            sendPushNotification(
+              {
+                id: sub.id,
+                endpoint: sub.attributes.endpoint,
+                p256dh: sub.attributes.p256dh,
+                auth: sub.attributes.auth,
+              },
+              pushPayload,
+            ),
+          ),
+      )
+
+      const successCount = pushResults.filter((result) => result.status === "fulfilled" && result.value.success).length
+      console.log("[v0] Push notifications sent:", successCount, "of", subscriptions.length)
+    } else {
+      console.log("[v0] ⚠️  No push subscriptions found for post author", postAuthorId)
+      console.log("[v0] 💡 The post author needs to enable notifications to receive push notifications")
+    }
+
+    // Revalidate relevant paths
+    revalidatePath("/notifications")
+    revalidatePath(`/post/${postId}`)
+
+    return {
+      success: true,
+      message:
+        subscriptions.length > 0
+          ? "Comment notification created and push notifications sent"
+          : "Comment notification created (post author has no active push subscriptions)",
+    }
+  } catch (error) {
+    console.error("[v0] Error creating comment notification:", error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to create notification",
+    }
+  }
+}
+
+/**
  * Server action to create reaction notification (without sending push notification)
  */
-export async function createReactionNotification(
+export async function createReactionNotificationWithoutPush(
   postId: string,
-  postAuthorDocumentId: string, // Parameter renamed to indicate documentId
-  reactionAuthorDocumentId: string, // Parameter renamed to indicate documentId
+  postAuthorId: string,
+  reactionAuthorId: string,
   reactionAuthorName: string,
   reactionType: string,
 ) {
   try {
     // Don't create notification if user is reacting to their own post
-    if (postAuthorDocumentId === reactionAuthorDocumentId) {
+    if (postAuthorId === reactionAuthorId) {
       return { success: true, message: "No notification needed for own post" }
     }
+
+    const emojiLabel = getReactionEmojiLabel(reactionType)
 
     // Create notification in database only (no push notification)
     const notificationData: NotificationData = {
       type: "like", // Use "like" type for all reactions since it's in the Strapi enum
-      userDocumentId: postAuthorDocumentId, // Using documentId
-      relatedUserDocumentId: reactionAuthorDocumentId, // Using documentId
+      userId: postAuthorId,
+      relatedUserId: reactionAuthorId,
       relatedPostId: postId,
-      message: `${reactionAuthorName} reacted to your post with ${reactionType}`,
-      title: "New Reaction",
+      message: `${reactionAuthorName} reacted ${emojiLabel} to your post. Open to see it.`,
+      title: `New reaction from ${reactionAuthorName} 💅`,
     }
 
     await createNotification(notificationData)
@@ -282,12 +452,222 @@ export async function createReactionNotification(
 }
 
 /**
+ * Server action to create reaction notification WITH push notification sending
+ */
+export async function createReactionNotification(
+  postId: string,
+  postAuthorId: string,
+  reactionAuthorId: string,
+  reactionAuthorName: string,
+  reactionType: string,
+) {
+  try {
+    console.log("[v0] Creating reaction notification:", {
+      postId,
+      postAuthorId,
+      reactionAuthorId,
+      reactionAuthorName,
+      reactionType,
+    })
+
+    // Don't create notification if user is reacting to their own post
+    if (postAuthorId === reactionAuthorId) {
+      console.log("[v0] Skipping notification - user reacting to own post")
+      return { success: true, message: "No notification needed for own post" }
+    }
+
+    const emojiLabel = getReactionEmojiLabel(reactionType)
+
+    // Create notification in database
+    const notificationData: NotificationData = {
+      type: "like", // Use "like" type for all reactions since it's in the Strapi enum
+      userId: postAuthorId,
+      relatedUserId: reactionAuthorId,
+      relatedPostId: postId,
+      message: `${reactionAuthorName} reacted ${emojiLabel} to your post. Open to see it.`,
+      title: `New reaction from ${reactionAuthorName} 💅`,
+    }
+
+    console.log("[v0] Creating notification in database...")
+    await createNotification(notificationData)
+
+    console.log("[v0] Fetching push subscriptions for user:", postAuthorId)
+    const subscriptions = await getUserPushSubscriptions(postAuthorId)
+    console.log("[v0] Found", subscriptions.length, "push subscriptions")
+
+    if (subscriptions.length > 0) {
+      console.log("[v0] Active subscriptions found, sending push notifications...")
+      const pushPayload = {
+        title: `New reaction from ${reactionAuthorName} 💅`,
+        body: `${reactionAuthorName} reacted ${emojiLabel} to your post. Open to see it.`,
+        icon: "/icon-192x192.png",
+        badge: "/icon-192x192.png",
+        data: {
+          postId,
+          type: "reaction",
+          url: `/post/${postId}`,
+        },
+      }
+
+      // Send push notifications to all active subscriptions
+      const pushResults = await Promise.allSettled(
+        subscriptions
+          .filter((sub) => sub.attributes.isActive)
+          .map((sub) =>
+            sendPushNotification(
+              {
+                id: sub.id,
+                endpoint: sub.attributes.endpoint,
+                p256dh: sub.attributes.p256dh,
+                auth: sub.attributes.auth,
+              },
+              pushPayload,
+            ),
+          ),
+      )
+
+      const successCount = pushResults.filter((result) => result.status === "fulfilled" && result.value.success).length
+
+      console.log("[v0] Push notifications sent:", successCount, "of", subscriptions.length)
+    } else {
+      console.log("[v0] ⚠️  No push subscriptions found for user", postAuthorId)
+      console.log(
+        "[v0] 💡 The post author needs to enable notifications in their browser to receive push notifications",
+      )
+      console.log("[v0] 📱 They can do this by clicking 'Enable' on the notification permission prompt")
+    }
+
+    // Revalidate relevant paths
+    revalidatePath("/notifications")
+    revalidatePath(`/post/${postId}`)
+
+    return {
+      success: true,
+      message:
+        subscriptions.length > 0
+          ? "Reaction notification created and push notifications sent"
+          : "Reaction notification created (post author has no active push subscriptions)",
+    }
+  } catch (error) {
+    console.error("[v0] Error creating reaction notification:", error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to create notification",
+    }
+  }
+}
+
+/**
+ * Server action to create reply notification WITH push notification sending
+ */
+export async function createReplyNotification(
+  postId: string,
+  parentCommentId: string,
+  commentAuthorId: string, // Author of the parent comment (who should receive notification)
+  replyAuthorId: string, // Author of the reply
+  replyAuthorName: string,
+  replyContent: string,
+) {
+  try {
+    console.log("[v0] Creating reply notification:", {
+      postId,
+      parentCommentId,
+      commentAuthorId,
+      replyAuthorId,
+      replyAuthorName,
+    })
+
+    // Don't create notification if user is replying to their own comment
+    if (commentAuthorId === replyAuthorId) {
+      console.log("[v0] Skipping notification - user replying to own comment")
+      return { success: true, message: "No notification needed for own comment" }
+    }
+
+    const truncatedContent = truncateContent(replyContent)
+
+    // Create notification in database
+    const notificationData: NotificationData = {
+      type: "comment", // Use comment type for replies as well
+      userId: commentAuthorId, // Notify the comment author, not the post author
+      relatedUserId: replyAuthorId,
+      relatedPostId: postId,
+      relatedCommentId: parentCommentId,
+      message: `${replyAuthorName} replied: "${truncatedContent}"`,
+      title: "New reply to your comment 💬",
+    }
+
+    console.log("[v0] Creating reply notification in database...")
+    await createNotification(notificationData)
+
+    console.log("[v0] Fetching push subscriptions for comment author:", commentAuthorId)
+    const subscriptions = await getUserPushSubscriptions(commentAuthorId)
+    console.log("[v0] Found", subscriptions.length, "push subscriptions")
+
+    if (subscriptions.length > 0) {
+      console.log("[v0] Active subscriptions found, sending push notifications...")
+      const pushPayload = {
+        title: "New reply to your comment 💬",
+        body: `${replyAuthorName} replied: "${truncatedContent}"`,
+        icon: "/icon-192x192.png",
+        badge: "/icon-192x192.png",
+        data: {
+          postId,
+          commentId: parentCommentId,
+          type: "reply",
+          url: `/post/${postId}#comment-${parentCommentId}`,
+        },
+      }
+
+      // Send push notifications to all active subscriptions
+      const pushResults = await Promise.allSettled(
+        subscriptions
+          .filter((sub) => sub.attributes.isActive)
+          .map((sub) =>
+            sendPushNotification(
+              {
+                id: sub.id,
+                endpoint: sub.attributes.endpoint,
+                p256dh: sub.attributes.p256dh,
+                auth: sub.attributes.auth,
+              },
+              pushPayload,
+            ),
+          ),
+      )
+
+      const successCount = pushResults.filter((result) => result.status === "fulfilled" && result.value.success).length
+      console.log("[v0] Push notifications sent:", successCount, "of", subscriptions.length)
+    } else {
+      console.log("[v0] ⚠️  No push subscriptions found for comment author", commentAuthorId)
+      console.log("[v0] 💡 The comment author needs to enable notifications to receive push notifications")
+    }
+
+    // Revalidate relevant paths
+    revalidatePath("/notifications")
+    revalidatePath(`/post/${postId}`)
+
+    return {
+      success: true,
+      message:
+        subscriptions.length > 0
+          ? "Reply notification created and push notifications sent"
+          : "Reply notification created (comment author has no active push subscriptions)",
+    }
+  } catch (error) {
+    console.error("[v0] Error creating reply notification:", error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to create notification",
+    }
+  }
+}
+
+/**
  * Server action to get user notifications
  */
-export async function getUserNotifications(userDocumentId: string, page = 1, pageSize = 20) {
-  // Parameter renamed to indicate documentId
+export async function getUserNotifications(userId: string, page = 1, pageSize = 20) {
   try {
-    const url = `${API_BASE_URL}/api/notifications?filters[user][documentId][$eq]=${userDocumentId}&sort=createdAt:desc&pagination[page]=${page}&pagination[pageSize]=${pageSize}&populate=*`
+    const url = `${API_BASE_URL}/api/notifications?filters[user][id][$eq]=${userId}&sort=createdAt:desc&pagination[page]=${page}&pagination[pageSize]=${pageSize}&populate=*`
     const headers = await getAuthHeaders()
 
     const response = await fetch(url, {
@@ -341,5 +721,57 @@ export async function markNotificationAsRead(notificationId: string) {
       success: false,
       error: error instanceof Error ? error.message : "Failed to mark as read",
     }
+  }
+}
+
+/**
+ * Server action to send push notifications using web-push
+ */
+async function sendPushNotification(subscription: any, payload: any) {
+  try {
+    const webpush = await import("web-push")
+
+    // Configure VAPID keys
+    webpush.setVapidDetails(
+      process.env.VAPID_SUBJECT || "mailto:your-email@example.com",
+      process.env.VAPID_PUBLIC_KEY || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "",
+      process.env.VAPID_PRIVATE_KEY || "",
+    )
+
+    console.log("[v0] Sending push notification to:", subscription.endpoint)
+
+    const pushSubscription = {
+      endpoint: subscription.endpoint,
+      keys: {
+        p256dh: subscription.p256dh,
+        auth: subscription.auth,
+      },
+    }
+
+    const result = await webpush.sendNotification(pushSubscription, JSON.stringify(payload))
+    console.log("[v0] Push notification sent successfully")
+    return { success: true, result }
+  } catch (error: any) {
+    console.error("[v0] Error sending push notification:", error)
+
+    // Handle invalid subscriptions (410 Gone, 404 Not Found)
+    if (error.statusCode === 410 || error.statusCode === 404) {
+      console.log("[v0] Subscription is invalid, marking as inactive")
+      try {
+        // Mark subscription as inactive in Strapi
+        const headers = await getAuthHeaders()
+        await fetch(`${API_BASE_URL}/api/push-subscriptions/${subscription.id}`, {
+          method: "PUT",
+          headers,
+          body: JSON.stringify({
+            data: { isActive: false },
+          }),
+        })
+      } catch (updateError) {
+        console.error("[v0] Failed to mark subscription as inactive:", updateError)
+      }
+    }
+
+    return { success: false, error: error.message }
   }
 }
