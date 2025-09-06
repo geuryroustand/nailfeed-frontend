@@ -96,6 +96,8 @@ export default function FeedCommentSection({
   const [reportDialogOpen, setReportDialogOpen] = useState(false)
   const [totalComments, setTotalComments] = useState(0)
   const [editingComment, setEditingComment] = useState<{ id: number; content: string } | null>(null)
+  const [optimisticComments, setOptimisticComments] = useState<Comment[]>([])
+  const [submittingCommentId, setSubmittingCommentId] = useState<string | null>(null)
 
   const { toast } = useToast()
   const commentInputRef = useRef<HTMLTextAreaElement>(null)
@@ -300,22 +302,86 @@ export default function FeedCommentSection({
     setIsSubmitting(true)
     setError(null)
 
+    const optimisticId = `temp-${Date.now()}`
+    const optimisticComment: Comment = {
+      id: Number.parseInt(optimisticId.replace("temp-", "")),
+      documentId: optimisticId,
+      content: newComment,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      author: {
+        id: user?.id || 0,
+        name: user?.username || user?.name || "You",
+        email: user?.email || "",
+        avatar: user?.avatar || "",
+      },
+      children: [],
+      threadOf: replyTo?.id || null,
+      related: postId.toString(),
+      reports: [],
+      blocked: false,
+      blockedThread: false,
+      blockReason: null,
+      points: 0,
+      removed: false,
+    }
+
     try {
+      if (replyTo) {
+        // For replies, add to the parent comment's children
+        setComments((prevComments) => {
+          const updateCommentReplies = (comments: Comment[]): Comment[] => {
+            return comments.map((comment) => {
+              if (comment.id === replyTo.id) {
+                return {
+                  ...comment,
+                  children: [...(comment.children || []), optimisticComment],
+                }
+              }
+              if (comment.children && comment.children.length > 0) {
+                return {
+                  ...comment,
+                  children: updateCommentReplies(comment.children),
+                }
+              }
+              return comment
+            })
+          }
+          return updateCommentReplies(prevComments)
+        })
+      } else {
+        // For new comments, add to the top of the list
+        setComments((prevComments) => [optimisticComment, ...prevComments])
+      }
+
+      setSubmittingCommentId(optimisticId)
+      setTotalComments((prev) => prev + 1)
+
+      const commentContent = newComment
+      const replyToData = replyTo
+      setNewComment("")
+      setReplyTo(null)
+
       // If we're editing a comment
       if (editingComment) {
-        const response = await CommentsService.updateComment(postId, documentId, editingComment.id, newComment)
+        const response = await CommentsService.updateComment(postId, documentId, editingComment.id, commentContent)
 
         // Check if the response indicates an error
         if (!response.success && response.error) {
           throw new Error(response.error)
         }
 
-        // Reset form state
-        setNewComment("")
         setEditingComment(null)
 
-        // Refresh comments to get the updated hierarchical structure
+        const scrollContainer = document.querySelector(".max-h-\\[500px\\]")
+        const scrollTop = scrollContainer?.scrollTop || 0
+
         await fetchComments(1, true)
+
+        // Restore scroll position
+        if (scrollContainer) {
+          scrollContainer.scrollTop = scrollTop
+        }
 
         // Notify parent component
         if (onCommentEdited) {
@@ -329,19 +395,27 @@ export default function FeedCommentSection({
         })
       } else {
         // Submit a new comment or reply
-        const response = await CommentsService.addComment(postId, documentId, newComment, replyTo?.id)
+        const response = await CommentsService.addComment(postId, documentId, commentContent, replyToData?.id)
 
         // Check if the response indicates an error
         if (!response.success && response.error) {
           throw new Error(response.error)
         }
 
-        // Reset form state
-        setNewComment("")
-        setReplyTo(null)
+        const scrollContainer = document.querySelector(".max-h-\\[500px\\]")
+        const scrollTop = scrollContainer?.scrollTop || 0
 
-        // Refresh comments to get the updated hierarchical structure
         await fetchComments(1, true)
+
+        if (scrollContainer && !replyToData) {
+          // Only auto-scroll for new top-level comments, not replies
+          setTimeout(() => {
+            scrollContainer.scrollTo({ top: 0, behavior: "smooth" })
+          }, 100)
+        } else if (scrollContainer) {
+          // For replies, maintain current scroll position
+          scrollContainer.scrollTop = scrollTop
+        }
 
         // Notify parent component
         if (onCommentAdded) {
@@ -355,6 +429,36 @@ export default function FeedCommentSection({
         })
       }
     } catch (err) {
+      if (replyTo) {
+        setComments((prevComments) => {
+          const removeOptimisticReply = (comments: Comment[]): Comment[] => {
+            return comments.map((comment) => {
+              if (comment.id === replyTo.id) {
+                return {
+                  ...comment,
+                  children: (comment.children || []).filter((child) => child.documentId !== optimisticId),
+                }
+              }
+              if (comment.children && comment.children.length > 0) {
+                return {
+                  ...comment,
+                  children: removeOptimisticReply(comment.children),
+                }
+              }
+              return comment
+            })
+          }
+          return removeOptimisticReply(prevComments)
+        })
+      } else {
+        setComments((prevComments) => prevComments.filter((comment) => comment.documentId !== optimisticId))
+      }
+
+      setTotalComments((prev) => Math.max(0, prev - 1))
+
+      setNewComment(newComment)
+      setReplyTo(replyTo)
+
       const errorMessage = parseErrorMessage(err)
       setError(errorMessage)
 
@@ -365,6 +469,7 @@ export default function FeedCommentSection({
       })
     } finally {
       setIsSubmitting(false)
+      setSubmittingCommentId(null)
     }
   }
 
@@ -615,6 +720,8 @@ export default function FeedCommentSection({
 
     const formattedDate = formatDate(comment.createdAt)
 
+    const isSubmittingThis = submittingCommentId === comment.documentId
+
     console.log("[v0] Rendering comment:", {
       commentId: comment.id,
       authorId: comment.author?.id,
@@ -642,10 +749,18 @@ export default function FeedCommentSection({
           </Avatar>
 
           <div className="flex-1">
-            <div className="bg-gray-50 rounded-lg p-3">
+            <div className={`bg-gray-50 rounded-lg p-3 ${isSubmittingThis ? "opacity-70" : ""}`}>
               <div className="flex justify-between items-start">
-                <p className="text-sm font-medium">{comment.author.name}</p>
-                {isAuthor && (
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium">{comment.author.name}</p>
+                  {isSubmittingThis && (
+                    <div className="flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin text-pink-500" />
+                      <span className="text-xs text-pink-500">Posting...</span>
+                    </div>
+                  )}
+                </div>
+                {isAuthor && !isSubmittingThis && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
@@ -671,20 +786,24 @@ export default function FeedCommentSection({
 
             <div className="flex items-center mt-1 text-xs text-gray-500">
               <span>{formattedDate}</span>
-              <span className="mx-2">•</span>
-              <button
-                onClick={() => handleReplyToComment(comment.id, comment.author.name)}
-                className="flex items-center hover:text-pink-500"
-              >
-                <Reply className="h-3 w-3 mr-1" />
-                Reply
-              </button>
-              {!isAuthor && (
+              {!isSubmittingThis && (
                 <>
                   <span className="mx-2">•</span>
-                  <button onClick={() => handleReportComment(comment.id, "OTHER")} className="hover:text-pink-500">
-                    Report
+                  <button
+                    onClick={() => handleReplyToComment(comment.id, comment.author.name)}
+                    className="flex items-center hover:text-pink-500"
+                  >
+                    <Reply className="h-3 w-3 mr-1" />
+                    Reply
                   </button>
+                  {!isAuthor && (
+                    <>
+                      <span className="mx-2">•</span>
+                      <button onClick={() => handleReportComment(comment.id, "OTHER")} className="hover:text-pink-500">
+                        Report
+                      </button>
+                    </>
+                  )}
                 </>
               )}
             </div>

@@ -73,7 +73,6 @@ export interface Comment {
     content?: string
     author?: { id: string; name: string; avatar?: string }
   } | null
-  removed?: boolean
 }
 
 export interface PaginationInfo {
@@ -112,7 +111,7 @@ export class CommentsService {
       }
 
       const base = buildBaseEndpoint(postId, documentId)
-      const endpoint = `${base}?pagination[page]=${page}&pagination[pageSize]=${pageSize}&sort=createdAt:desc&filters[removed][$ne]=true&filters[blocked][$ne]=true`
+      const endpoint = `${base}?pagination[page]=${page}&pagination[pageSize]=${pageSize}&sort=createdAt:desc`
 
       const response = await proxyRequestWithRetry(endpoint, { method: "GET" }, { retries: 2, retryDelay: 500 })
 
@@ -180,7 +179,7 @@ export class CommentsService {
     if (!comments || !Array.isArray(comments)) return 0
     let count = 0
     for (const c of comments) {
-      if (!c || c.removed || c.blocked) continue
+      if (!c) continue
       count++
       if (c.children && Array.isArray(c.children)) count += this.countTotalComments(c.children)
     }
