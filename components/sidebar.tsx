@@ -3,19 +3,7 @@
 import { useState } from "react"
 import { useAuth } from "@/context/auth-context"
 import { motion } from "framer-motion"
-import {
-  Home,
-  Search,
-  Compass,
-  Heart,
-  MessageCircle,
-  PlusSquare,
-  User,
-  Menu,
-  Bookmark,
-  Palette,
-  Lightbulb,
-} from "lucide-react"
+import { Home, Search, Heart, MessageCircle, PlusSquare, User, Menu, Bookmark, Palette, Lightbulb } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -35,7 +23,7 @@ export default function Sidebar({ activeItem = "home" }: SidebarProps) {
   const menuItems = [
     { id: "home", icon: Home, label: "Home", href: "/" },
     { id: "search", icon: Search, label: "Search", href: "/" },
-    { id: "explore", icon: Compass, label: "Explore", href: "/explore" },
+    // { id: "explore", icon: Compass, label: "Explore", href: "/explore" },
     { id: "suggestions", icon: Lightbulb, label: "Community Ideas", href: "/suggestions" },
     { id: "messages", icon: MessageCircle, label: "Messages", href: "/" },
     { id: "notifications", icon: Heart, label: "Notifications", href: "/" },

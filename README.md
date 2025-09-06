@@ -146,56 +146,24 @@ Visit [http://localhost:3000](http://localhost:3000) to see the application.
 
 ## 🏗️ Project Structure
 
-\`\`\`
+```text
+.
 ├── app/                    # Next.js App Router
-│   ├── actions/           # Server actions for API calls
-│   ├── globals.css        # Global styles and animations
-│   ├── layout.tsx         # Root layout with providers
-│   └── page.tsx           # Homepage component
-├── components/            # Reusable UI components
-│   ├── ui/               # shadcn/ui base components
-│   ├── auth/             # Authentication components
-│   ├── search/           # Search functionality
-│   └── ...               # Feature-specific components
-├── context/              # React Context providers
-├── hooks/                # Custom React hooks
-├── lib/                  # Utility functions and configurations
-├── public/               # Static assets
-└── types/                # TypeScript type definitions
-\`\`\`
+│   ├── actions/            # Server actions for API calls
+│   ├── globals.css         # Global styles and animations
+│   ├── layout.tsx          # Root layout with providers
+│   └── page.tsx            # Homepage component
+├── components/             # Reusable UI components
+│   ├── ui/                 # shadcn/ui base components
+│   ├── auth/               # Authentication components
+│   ├── search/             # Search functionality
+│   └── ...                 # Feature-specific components
+├── context/                # React Context providers
+├── hooks/                  # Custom React hooks
+├── lib/                    # Utility functions and configurations
+├── public/                 # Static assets
+└── types/                  # TypeScript type definitions
 
-## 🤝 Contributing
-
-We welcome contributions from the community! Here's how you can help:
-
-### Getting Started
-1. **Fork** the repository
-2. **Clone** your fork locally
-3. **Create** a new branch for your feature
-4. **Make** your changes
-5. **Test** thoroughly
-6. **Submit** a pull request
-
-### Development Guidelines
-- Follow the existing code style and conventions
-- Write meaningful commit messages
-- Add tests for new features
-- Update documentation as needed
-- Ensure all tests pass before submitting
-
-### Types of Contributions
-- 🐛 **Bug Fixes**: Help us squash bugs and improve stability
-- ✨ **New Features**: Add exciting new functionality
-- 📚 **Documentation**: Improve guides and documentation
-- 🎨 **UI/UX**: Enhance the user interface and experience
-- ⚡ **Performance**: Optimize loading times and responsiveness
-
-### Code Style
-- Use TypeScript for all new code
-- Follow the existing component patterns
-- Use Tailwind CSS for styling
-- Implement proper error handling
-- Add loading states for async operations
 
 ## 📄 License
 
