@@ -70,9 +70,10 @@ const toBoolean = (value: FormDataEntryValue | null): boolean => {
   return v === "true" || v === "on" || v === "1" || v === "yes";
 };
 
-const setSessionCookie = (jwt: string, rememberMe: boolean) => {
+const setSessionCookie = async (jwt: string, rememberMe: boolean) => {
   const isProd = process.env.NODE_ENV === "production";
-  cookies().set("auth_token", jwt, {
+  const cookieStore = await cookies();
+  cookieStore.set("auth_token", jwt, {
     httpOnly: true,
     sameSite: "lax",
     secure: isProd,
@@ -125,8 +126,8 @@ export async function loginWithFormAction(
         },
       };
     }
-
-    setSessionCookie(result.jwt, parsed.data.rememberMe);
+    await setSessionCookie(result.jwt, parsed.data.rememberMe);
+    return { status: "success", message: "Login successful" };
     return { status: "success", message: "Login successful" };
   } catch (err) {
     console.error("Login server action error:", err);
@@ -187,8 +188,8 @@ export async function registerWithFormAction(
       };
     }
 
-    // After registration, sign the user in
-    setSessionCookie(result.jwt, true);
+    await setSessionCookie(result.jwt, true);
+    return { status: "success", message: "Registration successful" };
     return { status: "success", message: "Registration successful" };
   } catch (err) {
     console.error("Registration server action error:", err);
@@ -224,7 +225,7 @@ export const loginAction = async (data: {
     if (!result || "error" in result) {
       return { success: false, error: result?.error || "Invalid credentials" };
     }
-    setSessionCookie(result.jwt, parsed.data.rememberMe);
+    await setSessionCookie(result.jwt, parsed.data.rememberMe);
     return { success: true };
   } catch (e) {
     console.error("loginAction error:", e);
