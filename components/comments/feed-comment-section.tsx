@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Loader2, AlertCircle, X, MessageCircle, Reply, Edit, Trash2, MoreVertical, ImageIcon } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { CommentsService, type Comment } from "@/lib/services/comments-service"
+import { MediaUploadService } from "@/lib/services/media-upload-service"
 import Link from "next/link"
 import {
   AlertDialog,
@@ -318,18 +319,49 @@ export default function FeedCommentSection({
       },
       children: [],
       threadOf: replyTo?.id || null,
-      related: postId.toString(),
-      reports: [],
-      blocked: false,
-      blockedThread: false,
-      blockReason: null,
-      points: 0,
-      removed: false,
+      attachment: imageFile
+        ? {
+            id: 0,
+            url: URL.createObjectURL(imageFile),
+            formats: {},
+          }
+        : undefined,
     }
 
     try {
+      let attachmentId: number | undefined = undefined
+
+      if (imageFile) {
+        console.log("[v0] Uploading image before creating comment:", imageFile.name)
+        try {
+          const token = localStorage.getItem("authToken") || localStorage.getItem("jwt")
+          const uploadResult = await MediaUploadService.uploadFiles([imageFile], token || undefined)
+
+          if (uploadResult && uploadResult.length > 0 && uploadResult[0].id) {
+            attachmentId = uploadResult[0].id
+            console.log("[v0] Image uploaded successfully, file ID:", attachmentId)
+          } else {
+            throw new Error("Failed to get file ID from upload response")
+          }
+        } catch (uploadError) {
+          console.error("[v0] Image upload failed:", uploadError)
+          setError("Failed to upload image. Please try again.")
+          setIsSubmitting(false)
+          return
+        }
+      }
+
+      const commentContent = newComment
+      const replyToData = replyTo
+      setNewComment("")
+      setImageFile(null)
+      const fileInput = document.getElementById("feed-comment-image-upload") as HTMLInputElement
+      if (fileInput) {
+        fileInput.value = ""
+      }
+      setReplyTo(null)
+
       if (replyTo) {
-        // For replies, add to the parent comment's children
         setComments((prevComments) => {
           const updateCommentReplies = (comments: Comment[]): Comment[] => {
             return comments.map((comment) => {
@@ -351,24 +383,15 @@ export default function FeedCommentSection({
           return updateCommentReplies(prevComments)
         })
       } else {
-        // For new comments, add to the top of the list
         setComments((prevComments) => [optimisticComment, ...prevComments])
       }
 
       setSubmittingCommentId(optimisticId)
       setTotalComments((prev) => prev + 1)
 
-      const commentContent = newComment
-      const replyToData = replyTo
-      setNewComment("")
-      setReplyTo(null)
-      setImageFile(null)
-
-      // If we're editing a comment
       if (editingComment) {
         const response = await CommentsService.updateComment(postId, documentId, editingComment.id, commentContent)
 
-        // Check if the response indicates an error
         if (!response.success && response.error) {
           throw new Error(response.error)
         }
@@ -380,105 +403,70 @@ export default function FeedCommentSection({
 
         await fetchComments(1, true)
 
-        // Restore scroll position
         if (scrollContainer) {
           scrollContainer.scrollTop = scrollTop
         }
 
-        // Notify parent component
         if (onCommentEdited) {
           onCommentEdited()
         }
 
-        // Show success toast
         toast({
           title: "Comment updated",
           description: "Your comment has been successfully updated",
         })
       } else {
-        // Submit a new comment or reply
         const response = await CommentsService.addComment(
           postId,
           documentId,
           commentContent,
           replyToData?.id,
-          imageFile,
+          attachmentId,
         )
 
-        // Check if the response indicates an error
         if (!response.success && response.error) {
           throw new Error(response.error)
         }
 
-        const scrollContainer = document.querySelector(".max-h-\\[500px\\]")
-        const scrollTop = scrollContainer?.scrollTop || 0
-
-        await fetchComments(1, true)
-
-        if (scrollContainer && !replyToData) {
-          // Only auto-scroll for new top-level comments, not replies
-          setTimeout(() => {
-            scrollContainer.scrollTo({ top: 0, behavior: "smooth" })
-          }, 100)
-        } else if (scrollContainer) {
-          // For replies, maintain current scroll position
-          scrollContainer.scrollTop = scrollTop
+        setNewComment("")
+        setReplyTo(null)
+        setImageFile(null)
+        const fileInput = document.getElementById("feed-comment-image-upload") as HTMLInputElement
+        if (fileInput) {
+          fileInput.value = ""
         }
 
-        // Notify parent component
-        if (onCommentAdded) {
-          onCommentAdded()
-        }
-
-        // Show success toast
-        toast({
-          title: "Comment posted",
-          description: "Your comment has been successfully posted",
-        })
-      }
-    } catch (err) {
-      if (replyTo) {
-        setComments((prevComments) => {
-          const removeOptimisticReply = (comments: Comment[]): Comment[] => {
-            return comments.map((comment) => {
-              if (comment.id === replyTo.id) {
-                return {
-                  ...comment,
-                  children: (comment.children || []).filter((child) => child.documentId !== optimisticId),
-                }
-              }
-              if (comment.children && comment.children.length > 0) {
-                return {
-                  ...comment,
-                  children: removeOptimisticReply(comment.children),
-                }
-              }
-              return comment
-            })
+        if (response && !response.error) {
+          setNewComment("")
+          setImageFile(null)
+          const fileInput = document.getElementById("feed-comment-image-upload") as HTMLInputElement
+          if (fileInput) {
+            fileInput.value = ""
           }
-          return removeOptimisticReply(prevComments)
-        })
-      } else {
-        setComments((prevComments) => prevComments.filter((comment) => comment.documentId !== optimisticId))
+          setReplyTo(null)
+          onCommentAdded?.()
+
+          toast({
+            title: "Comment posted!",
+            description: imageFile
+              ? "Your comment with image has been posted successfully."
+              : "Your comment has been posted successfully.",
+          })
+        } else {
+          throw new Error(response?.error || "Failed to post comment")
+        }
       }
-
-      setTotalComments((prev) => Math.max(0, prev - 1))
-
-      setNewComment(newComment)
-      setReplyTo(replyTo)
-      setImageFile(null)
-
-      const errorMessage = parseErrorMessage(err)
-      setError(errorMessage)
+    } catch (error) {
+      console.error("[v0] Error submitting comment:", error)
+      setError(error instanceof Error ? error.message : "Failed to post comment. Please try again.")
 
       toast({
-        title: editingComment ? "Error updating comment" : "Error posting comment",
-        description: errorMessage,
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to post comment. Please try again.",
         variant: "destructive",
       })
     } finally {
       setIsSubmitting(false)
-      setSubmittingCommentId(null)
     }
   }
 
@@ -553,7 +541,6 @@ export default function FeedCommentSection({
     try {
       console.log("[v0] Starting comment deletion process:", { commentId, postId, documentId })
 
-      // Find the comment to get its author information
       const commentToDelete = findCommentById(comments, commentId)
 
       if (!commentToDelete) {
@@ -576,7 +563,6 @@ export default function FeedCommentSection({
         },
       })
 
-      // Get the author ID from the comment
       const authorId = commentToDelete.author?.id
 
       if (!authorId) {
@@ -584,7 +570,7 @@ export default function FeedCommentSection({
         throw new Error("Author ID not found in comment data")
       }
 
-      const commentIdentifier = commentToDelete.id // Always use numeric ID for deletion
+      const commentIdentifier = commentToDelete.id
 
       console.log("[v0] Validation check before deletion:", {
         postId,
@@ -618,12 +604,10 @@ export default function FeedCommentSection({
 
       await fetchComments(1, true)
 
-      // Notify parent component
       if (onCommentDeleted) {
         onCommentDeleted()
       }
 
-      // Show success toast
       toast({
         title: "Comment deleted",
         description: "Your comment has been successfully deleted",
@@ -668,14 +652,12 @@ export default function FeedCommentSection({
     setError(null)
 
     try {
-      // Ensure reason is one of the valid enum values
       let validReason: ReportReason = "OTHER"
 
       if (["BAD_LANGUAGE", "DISCRIMINATION", "OTHER"].includes(reason)) {
         validReason = reason as ReportReason
       }
 
-      // Report the comment with a valid reason
       const response = await CommentsService.reportCommentAbuse(
         postId,
         documentId,
@@ -684,12 +666,10 @@ export default function FeedCommentSection({
         `User reported: ${reason}`,
       )
 
-      // Check if the response indicates an error
       if (!response.success && response.error) {
         throw new Error(response.error)
       }
 
-      // Show success toast
       toast({
         title: "Comment reported",
         description: "Thank you for reporting this comment. Our team will review it.",
@@ -721,7 +701,6 @@ export default function FeedCommentSection({
     if (file) {
       console.log("[v0] File selected:", { name: file.name, size: file.size, type: file.type })
 
-      // Validate file type and size
       if (!file.type.startsWith("image/")) {
         console.log("[v0] Invalid file type:", file.type)
         alert("Please select an image file")
@@ -729,7 +708,6 @@ export default function FeedCommentSection({
       }
 
       if (file.size > 5 * 1024 * 1024) {
-        // 5MB limit
         console.log("[v0] File too large:", file.size)
         alert("Image must be smaller than 5MB")
         return
@@ -743,17 +721,14 @@ export default function FeedCommentSection({
   const removeImage = () => {
     console.log("[v0] Removing selected image")
     setImageFile(null)
-    // Reset file input
     const fileInput = document.getElementById("feed-comment-image-upload") as HTMLInputElement
     if (fileInput) {
       fileInput.value = ""
     }
   }
 
-  // Check if the user can view comments
   const canViewComments = isAuthenticated || allowViewingForAll
 
-  // Recursive function to render comments and their replies
   const renderCommentWithReplies = (comment: Comment, level = 0) => {
     const isAuthor =
       user &&
@@ -784,7 +759,6 @@ export default function FeedCommentSection({
               src={comment.author.avatar || ""}
               alt={comment.author.name}
               onError={(e) => {
-                // Hide the image on error
                 ;(e.target as HTMLImageElement).style.display = "none"
               }}
             />
@@ -827,6 +801,15 @@ export default function FeedCommentSection({
                 )}
               </div>
               <p className="text-sm mt-1">{comment.content}</p>
+              {comment.attachment && (
+                <div className="mt-2">
+                  <img
+                    src={comment.attachment.url || "/placeholder.svg"}
+                    alt="Comment attachment"
+                    className="max-w-full rounded-lg"
+                  />
+                </div>
+              )}
             </div>
 
             <div className="flex items-center mt-1 text-xs text-gray-500">
@@ -855,7 +838,6 @@ export default function FeedCommentSection({
           </div>
         </div>
 
-        {/* Render child comments */}
         {comment.children && comment.children.length > 0 && (
           <div className="mt-2">
             {comment.children.map((childComment) => renderCommentWithReplies(childComment, level + 1))}
@@ -960,7 +942,6 @@ export default function FeedCommentSection({
               src={user?.avatar || ""}
               alt={user?.username || "User"}
               onError={(e) => {
-                // Hide the image on error
                 ;(e.target as HTMLImageElement).style.display = "none"
               }}
             />
