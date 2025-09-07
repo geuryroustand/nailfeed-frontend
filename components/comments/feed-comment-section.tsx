@@ -716,9 +716,37 @@ export default function FeedCommentSection({
   }
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log("[v0] Image upload triggered in feed comment section")
     const file = e.target.files?.[0]
     if (file) {
+      console.log("[v0] File selected:", { name: file.name, size: file.size, type: file.type })
+
+      // Validate file type and size
+      if (!file.type.startsWith("image/")) {
+        console.log("[v0] Invalid file type:", file.type)
+        alert("Please select an image file")
+        return
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        // 5MB limit
+        console.log("[v0] File too large:", file.size)
+        alert("Image must be smaller than 5MB")
+        return
+      }
+
       setImageFile(file)
+      console.log("[v0] Image file set successfully")
+    }
+  }
+
+  const removeImage = () => {
+    console.log("[v0] Removing selected image")
+    setImageFile(null)
+    // Reset file input
+    const fileInput = document.getElementById("feed-comment-image-upload") as HTMLInputElement
+    if (fileInput) {
+      fileInput.value = ""
     }
   }
 
@@ -1001,8 +1029,53 @@ export default function FeedCommentSection({
               </Button>
             </div>
 
-            <div id="comment-help" className="sr-only">
-              Write your comment and optionally attach an image using the image button.
+            {imageFile && (
+              <div className="mt-3 p-3 bg-gray-50 rounded-lg border">
+                <div className="flex items-start gap-3">
+                  <div className="relative">
+                    <img
+                      src={URL.createObjectURL(imageFile) || "/placeholder.svg"}
+                      alt="Selected image preview"
+                      className="w-20 h-20 object-cover rounded-lg border"
+                    />
+                    <button
+                      type="button"
+                      onClick={removeImage}
+                      className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500"
+                      aria-label="Remove image"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{imageFile.name}</p>
+                    <p className="text-xs text-gray-500">{(imageFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                    <p className="text-xs text-green-600 mt-1">✓ Image ready to upload</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between pt-3">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  id="feed-comment-image-upload"
+                  disabled={isSubmitting}
+                  onChange={handleImageUpload}
+                />
+                <label
+                  htmlFor="feed-comment-image-upload"
+                  className={`inline-flex items-center justify-center h-8 w-8 rounded-full focus:outline-none focus:ring-2 focus:ring-pink-500 cursor-pointer transition-colors ${
+                    imageFile ? "bg-pink-100 hover:bg-pink-200 text-pink-600" : "hover:bg-gray-100 text-gray-500"
+                  }`}
+                  aria-label={imageFile ? "Change image" : "Add image to comment"}
+                >
+                  <ImageIcon className="h-4 w-4" />
+                </label>
+              </div>
             </div>
           </div>
         </div>
