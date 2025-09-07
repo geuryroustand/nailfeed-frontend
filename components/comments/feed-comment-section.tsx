@@ -353,13 +353,6 @@ export default function FeedCommentSection({
 
       const commentContent = newComment
       const replyToData = replyTo
-      setNewComment("")
-      setImageFile(null)
-      const fileInput = document.getElementById("feed-comment-image-upload") as HTMLInputElement
-      if (fileInput) {
-        fileInput.value = ""
-      }
-      setReplyTo(null)
 
       if (replyTo) {
         setComments((prevComments) => {
@@ -389,7 +382,16 @@ export default function FeedCommentSection({
       setSubmittingCommentId(optimisticId)
       setTotalComments((prev) => prev + 1)
 
+      setNewComment("")
+      setImageFile(null)
+      const fileInput = document.getElementById("feed-comment-image-upload") as HTMLInputElement
+      if (fileInput) {
+        fileInput.value = ""
+      }
+      setReplyTo(null)
+
       if (editingComment) {
+        console.log("[v0] Updating existing comment:", editingComment.id)
         const response = await CommentsService.updateComment(postId, documentId, editingComment.id, commentContent)
 
         if (!response.success && response.error) {
@@ -416,6 +418,14 @@ export default function FeedCommentSection({
           description: "Your comment has been successfully updated",
         })
       } else {
+        console.log("[v0] Creating new comment with data:", {
+          postId,
+          documentId,
+          content: commentContent,
+          replyTo: replyToData?.id,
+          attachmentId,
+        })
+
         const response = await CommentsService.addComment(
           postId,
           documentId,
@@ -424,31 +434,18 @@ export default function FeedCommentSection({
           attachmentId,
         )
 
+        console.log("[v0] Comment creation response:", response)
+
         if (!response.success && response.error) {
           throw new Error(response.error)
         }
 
-        setNewComment("")
-        setReplyTo(null)
-        setImageFile(null)
-        const fileInput = document.getElementById("feed-comment-image-upload") as HTMLInputElement
-        if (fileInput) {
-          fileInput.value = ""
-        }
-
         if (response && !response.error) {
-          setNewComment("")
-          setImageFile(null)
-          const fileInput = document.getElementById("feed-comment-image-upload") as HTMLInputElement
-          if (fileInput) {
-            fileInput.value = ""
-          }
-          setReplyTo(null)
           onCommentAdded?.()
 
           toast({
             title: "Comment posted!",
-            description: imageFile
+            description: attachmentId
               ? "Your comment with image has been posted successfully."
               : "Your comment has been posted successfully.",
           })
@@ -458,6 +455,33 @@ export default function FeedCommentSection({
       }
     } catch (error) {
       console.error("[v0] Error submitting comment:", error)
+
+      setComments((prevComments) => {
+        if (replyTo) {
+          const removeOptimisticReply = (comments: Comment[]): Comment[] => {
+            return comments.map((comment) => {
+              if (comment.id === replyTo.id) {
+                return {
+                  ...comment,
+                  children: comment.children?.filter((child) => child.documentId !== optimisticId) || [],
+                }
+              }
+              if (comment.children && comment.children.length > 0) {
+                return {
+                  ...comment,
+                  children: removeOptimisticReply(comment.children),
+                }
+              }
+              return comment
+            })
+          }
+          return removeOptimisticReply(prevComments)
+        } else {
+          return prevComments.filter((comment) => comment.documentId !== optimisticId)
+        }
+      })
+
+      setTotalComments((prev) => prev - 1)
       setError(error instanceof Error ? error.message : "Failed to post comment. Please try again.")
 
       toast({
@@ -467,6 +491,8 @@ export default function FeedCommentSection({
       })
     } finally {
       setIsSubmitting(false)
+      setSubmittingCommentId(null)
+      console.log("[v0] Comment submission completed, loading state cleared")
     }
   }
 
