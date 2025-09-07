@@ -344,21 +344,32 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
               )}
 
               {imagePreview && (
-                <div className="relative inline-block">
-                  <img
-                    src={imagePreview || "/placeholder.svg"}
-                    alt="Comment attachment preview"
-                    className="max-w-xs max-h-40 rounded-lg border border-gray-200 object-cover shadow-sm"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleRemoveImage}
-                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 shadow-sm transition-colors"
-                    aria-label="Remove image attachment"
-                    disabled={isSubmitting}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
+                <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex items-start gap-3">
+                    <div className="relative">
+                      <img
+                        src={imagePreview || "/placeholder.svg"}
+                        alt="Selected image preview"
+                        className="w-20 h-20 rounded-lg border border-gray-300 object-cover shadow-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRemoveImage}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 shadow-sm transition-colors"
+                        aria-label="Remove selected image"
+                        disabled={isSubmitting}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900">Image selected</p>
+                      <p className="text-xs text-gray-500 truncate">{selectedImage?.name}</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {selectedImage && `${(selectedImage.size / 1024 / 1024).toFixed(1)} MB`}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -380,13 +391,24 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 onKeyDown={handleImageButtonKeyDown}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                aria-label="Upload image attachment"
+                className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  selectedImage
+                    ? "text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100"
+                    : "text-gray-700 bg-white border-gray-300 hover:bg-gray-50"
+                }`}
+                aria-label={selectedImage ? "Change selected image" : "Select image to attach"}
                 disabled={isSubmitting}
               >
                 <ImageIcon className="h-4 w-4" />
                 {selectedImage ? "Change Image" : "Add Image"}
               </button>
+
+              {selectedImage && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-full">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  Image ready
+                </span>
+              )}
 
               <span id="image-upload-help" className="text-xs text-gray-500">
                 Max 5MB • JPG, PNG, GIF, WebP
