@@ -73,6 +73,16 @@ export interface Comment {
     content?: string
     author?: { id: string; name: string; avatar?: string }
   } | null
+  attachment?: {
+    id: number
+    url: string
+    formats?: {
+      thumbnail?: { url: string }
+      small?: { url: string }
+      medium?: { url: string }
+      large?: { url: string }
+    }
+  }
 }
 
 export interface PaginationInfo {
@@ -186,7 +196,13 @@ export class CommentsService {
     return count
   }
 
-  static async addComment(postId: string | number, documentId: string | undefined, content: string, threadOf?: number) {
+  static async addComment(
+    postId: string | number,
+    documentId: string | undefined,
+    content: string,
+    threadOf?: number,
+    attachment?: number,
+  ) {
     try {
       if (!postId && !documentId) throw new Error("No postId or documentId provided to addComment")
 
@@ -195,6 +211,7 @@ export class CommentsService {
 
       const body: Record<string, any> = { content }
       if (threadOf) body.threadOf = threadOf
+      if (attachment) body.attachment = attachment
 
       const response = await proxyRequest(endpoint, {
         method: "POST",
@@ -482,4 +499,20 @@ export class CommentsService {
     return undefined
   }
 }
-export const commentsService = new CommentsService()
+
+export const commentsService = {
+  getComments: CommentsService.getComments.bind(CommentsService),
+  addComment: (
+    content: string,
+    relatedTo: string,
+    relatedId: string | number,
+    threadOf?: number,
+    attachment?: number,
+  ) =>
+    CommentsService.addComment(relatedId, relatedTo === "posts" ? undefined : relatedTo, content, threadOf, attachment),
+  updateComment: (id: number, content: string) => CommentsService.updateComment("", undefined, id, content),
+  deleteComment: (id: number) => CommentsService.deleteComment("", undefined, id, ""),
+  reportCommentAbuse: (id: number, reason: string, content: string) =>
+    CommentsService.reportCommentAbuse("", undefined, id, reason, content),
+  countTotalComments: CommentsService.countTotalComments.bind(CommentsService),
+}

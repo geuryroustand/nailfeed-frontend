@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect, useRef, useCallback } from "react"
 import { type Comment, commentsService } from "@/lib/services/comments-service"
 import { Button } from "@/components/ui/button"
@@ -9,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/hooks/use-auth"
 import CommentItem from "./comment-item"
 import { Skeleton } from "@/components/ui/skeleton"
-import { MessageSquare } from "lucide-react"
+import { MessageSquare, ImageIcon, X } from "lucide-react"
 
 interface CommentSectionProps {
   relatedTo: string
@@ -27,9 +26,53 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
   const [hasMore, setHasMore] = useState(true)
   const [totalComments, setTotalComments] = useState(0)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [selectedImage, setSelectedImage] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [isUploadingImage, setIsUploadingImage] = useState(false)
   const { user, isAuthenticated } = useAuth()
   const observerRef = useRef<IntersectionObserver | null>(null)
   const loadMoreRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleImageSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith("image/")) {
+      setError("Please select a valid image file.")
+      return
+    }
+
+    const maxSize = 5 * 1024 * 1024 // 5MB
+    if (file.size > maxSize) {
+      setError("Image size must be less than 5MB.")
+      return
+    }
+
+    setSelectedImage(file)
+    const previewUrl = URL.createObjectURL(file)
+    setImagePreview(previewUrl)
+    setError(null)
+  }, [])
+
+  const handleRemoveImage = useCallback(() => {
+    if (imagePreview) {
+      URL.revokeObjectURL(imagePreview)
+    }
+    setSelectedImage(null)
+    setImagePreview(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+  }, [imagePreview])
+
+  useEffect(() => {
+    return () => {
+      if (imagePreview) {
+        URL.revokeObjectURL(imagePreview)
+      }
+    }
+  }, [imagePreview])
 
   const fetchComments = useCallback(
     async (pageNum = 1, append = false) => {
@@ -39,16 +82,12 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
 
         const response = await commentsService.getComments(relatedTo, relatedId, pageNum)
 
-        // Update total comments count from the response
         setTotalComments(response.meta.totalComments || 0)
 
-        // Check if there are more pages
         const { page, pageCount } = response.meta.pagination
         setHasMore(page < pageCount)
 
-        // Update comments state
         if (append) {
-          // Append new comments to existing ones, avoiding duplicates
           setComments((prev) => {
             const existingIds = new Set(prev.map((c) => c.id))
             const newComments = response.data.filter((c) => !existingIds.has(c.id))
@@ -59,7 +98,7 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
         }
 
         setError(null)
-      } catch (err) {
+      } catch (err: any) {
         setError("Failed to load comments. Please try again.")
         console.error("Error fetching comments:", err)
       } finally {
@@ -79,7 +118,6 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
     })
   }, [fetchComments, hasMore, isLoadingMore])
 
-  // Set up intersection observer for infinite scrolling
   useEffect(() => {
     if (!loadMoreRef.current) return
 
@@ -101,14 +139,10 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
     }
   }, [hasMore, isLoadingMore, loadMoreComments])
 
-  // Fetch comments immediately when component mounts
   useEffect(() => {
-    // Immediate fetch on mount
     fetchComments()
 
-    // Clean up function
     return () => {
-      // Cancel any pending requests if component unmounts
       if (observerRef.current) {
         observerRef.current.disconnect()
       }
@@ -117,15 +151,48 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newComment.trim() || !isAuthenticated) return
+    if ((!newComment.trim() && !selectedImage) || !isAuthenticated) return
 
     try {
       setIsSubmitting(true)
-      await commentsService.addComment(newComment, relatedTo, relatedId)
+
+      let attachmentId = null
+      if (selectedImage) {
+        setIsUploadingImage(true)
+        const token = user?.token || localStorage.getItem("jwt") || localStorage.getItem("authToken")
+        if (!token) {
+          throw new Error("Authentication token not found")
+        }
+
+        const formData = new FormData()
+        formData.append("files", selectedImage)
+
+        const uploadResponse = await fetch("/api/auth-proxy/upload?endpoint=/api/upload", {
+          method: "POST",
+          body: formData,
+        })
+
+        if (!uploadResponse.ok) {
+          const errorText = await uploadResponse.text()
+          throw new Error(`Upload failed: ${errorText}`)
+        }
+
+        const uploadResult = await uploadResponse.json()
+        if (Array.isArray(uploadResult) && uploadResult.length > 0) {
+          attachmentId = uploadResult[0].id
+        } else {
+          throw new Error("Invalid upload response")
+        }
+        setIsUploadingImage(false)
+      }
+
+      await commentsService.addComment(newComment.trim() || "", relatedTo, relatedId, undefined, attachmentId)
+
       setNewComment("")
-      // Refresh comments and update count
+      handleRemoveImage()
+
       fetchComments()
-    } catch (err) {
+    } catch (err: any) {
       setError("Failed to post comment. Please try again.")
       console.error("Error posting comment:", err)
     } finally {
@@ -136,11 +203,10 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
   const handleCommentUpdate = async (id: number, content: string) => {
     try {
       await commentsService.updateComment(id, content)
-      // Update the comment in the state
       setComments((prevComments) =>
         prevComments.map((comment) => (comment.id === id ? { ...comment, content } : comment)),
       )
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error updating comment:", err)
     }
   }
@@ -148,16 +214,14 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
   const handleCommentDelete = async (id: number) => {
     try {
       await commentsService.deleteComment(id)
-      // Remove the comment from the state and update count
       setComments((prevComments) => prevComments.filter((comment) => comment.id !== id))
       setTotalComments((prev) => Math.max(0, prev - 1))
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error deleting comment:", err)
     }
   }
 
   const handleReplyAdded = (parentId: number, newReply: Comment) => {
-    // Update the comments state to include the new reply
     setComments((prevComments) =>
       prevComments.map((comment) =>
         comment.id === parentId
@@ -169,12 +233,10 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
       ),
     )
 
-    // Increment the total comment count
     setTotalComments((prev) => prev + 1)
   }
 
   const handleReplyDeleted = (parentId: number, replyId: number) => {
-    // Update the comments state to remove the deleted reply
     setComments((prevComments) =>
       prevComments.map((comment) =>
         comment.id === parentId
@@ -186,7 +248,6 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
       ),
     )
 
-    // Decrement the total comment count
     setTotalComments((prev) => Math.max(0, prev - 1))
   }
 
@@ -202,17 +263,68 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
       {error && <div className="p-3 bg-red-100 text-red-700 rounded-md">{error}</div>}
 
       {isAuthenticated ? (
-        <form onSubmit={handleSubmit} className="space-y-2">
-          <Textarea
-            placeholder="Add a comment..."
-            value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-            className="min-h-[80px]"
-            disabled={isSubmitting}
-          />
-          <div className="flex justify-end">
-            <Button type="submit" disabled={isSubmitting || !newComment.trim()}>
-              {isSubmitting ? "Posting..." : "Post Comment"}
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="space-y-2">
+            <Textarea
+              placeholder="Add a comment..."
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              className="min-h-[80px]"
+              disabled={isSubmitting}
+              aria-label="Comment text"
+            />
+
+            {imagePreview && (
+              <div className="relative inline-block">
+                <img
+                  src={imagePreview || "/placeholder.svg"}
+                  alt="Comment attachment preview"
+                  className="max-w-xs max-h-32 rounded-lg border border-gray-200 object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={handleRemoveImage}
+                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                  aria-label="Remove image attachment"
+                  disabled={isSubmitting}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageSelect}
+                className="sr-only"
+                id="comment-image-upload"
+                disabled={isSubmitting}
+                aria-describedby="image-upload-help"
+              />
+              <label
+                htmlFor="comment-image-upload"
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Upload image attachment"
+              >
+                <ImageIcon className="h-4 w-4" />
+                {selectedImage ? "Change Image" : "Add Image"}
+              </label>
+              <span id="image-upload-help" className="sr-only">
+                Upload an image to attach to your comment. Maximum file size is 5MB.
+              </span>
+            </div>
+
+            <Button
+              type="submit"
+              disabled={isSubmitting || isUploadingImage || (!newComment.trim() && !selectedImage)}
+              aria-label={isSubmitting ? "Posting comment..." : "Post comment"}
+            >
+              {isSubmitting ? (isUploadingImage ? "Uploading..." : "Posting...") : "Post Comment"}
             </Button>
           </div>
         </form>
@@ -222,7 +334,6 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
 
       <div className="space-y-4">
         {isLoading ? (
-          // Skeleton loading state
           Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="space-y-2">
               <div className="flex items-center space-x-2">
@@ -253,7 +364,6 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
           <div className="text-center py-6 text-gray-500">No comments yet. Be the first to comment!</div>
         )}
 
-        {/* Load more indicator */}
         {!isLoading && comments.length > 0 && (
           <div ref={loadMoreRef} className="py-2 text-center">
             {isLoadingMore ? (

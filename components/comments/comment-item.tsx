@@ -68,6 +68,7 @@ export function CommentItem({ comment, onReply, onDelete, onReport, onEdit }: Co
   const [isEditing, setIsEditing] = useState(false)
   const [editedContent, setEditedContent] = useState(comment.content)
   const [isExpanded, setIsExpanded] = useState(true)
+  const [showImageModal, setShowImageModal] = useState(false)
   const editInputRef = useRef<HTMLInputElement>(null)
 
   const isAuthor =
@@ -100,6 +101,14 @@ export function CommentItem({ comment, onReply, onDelete, onReport, onEdit }: Co
       editInputRef.current.focus()
     }
   }, [isEditing])
+
+  const getImageUrl = (url: string): string => {
+    if (!url) return ""
+    if (url.startsWith("http://") || url.startsWith("https://")) return url
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
+    const baseUrl = apiUrl.endsWith("/") ? apiUrl.slice(0, -1) : apiUrl
+    return url.startsWith("/") ? `${baseUrl}${url}` : `${baseUrl}/${url}`
+  }
 
   const handleReport = () => {
     onReport(comment.id, reportReason)
@@ -230,7 +239,27 @@ export function CommentItem({ comment, onReply, onDelete, onReport, onEdit }: Co
                 </div>
               </div>
             ) : (
-              <p className="text-sm break-words">{comment.content}</p>
+              <div className="space-y-2">
+                {comment.content && <p className="text-sm break-words">{comment.content}</p>}
+
+                {comment.attachment && (
+                  <div className="mt-2">
+                    <img
+                      src={getImageUrl(comment.attachment.formats?.small?.url || comment.attachment.url)}
+                      alt="Comment attachment"
+                      className="max-w-xs max-h-48 rounded-lg border border-gray-200 object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                      onClick={() => setShowImageModal(true)}
+                      onError={(e) => {
+                        // Fallback to original URL if formatted URL fails
+                        const target = e.target as HTMLImageElement
+                        if (target.src !== getImageUrl(comment.attachment!.url)) {
+                          target.src = getImageUrl(comment.attachment!.url)
+                        }
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
@@ -275,6 +304,31 @@ export function CommentItem({ comment, onReply, onDelete, onReport, onEdit }: Co
           )}
         </div>
       </div>
+
+      {comment.attachment && (
+        <Dialog open={showImageModal} onOpenChange={setShowImageModal}>
+          <DialogContent className="max-w-4xl max-h-[90vh] p-2">
+            <DialogHeader className="sr-only">
+              <DialogTitle>Comment Image</DialogTitle>
+              <DialogDescription>Full size view of the comment attachment</DialogDescription>
+            </DialogHeader>
+            <div className="flex items-center justify-center">
+              <img
+                src={getImageUrl(comment.attachment.formats?.large?.url || comment.attachment.url)}
+                alt="Comment attachment - full size"
+                className="max-w-full max-h-[80vh] object-contain rounded-lg"
+                onError={(e) => {
+                  // Fallback to original URL if formatted URL fails
+                  const target = e.target as HTMLImageElement
+                  if (target.src !== getImageUrl(comment.attachment!.url)) {
+                    target.src = getImageUrl(comment.attachment!.url)
+                  }
+                }}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Report Dialog */}
       <Dialog open={showReportDialog} onOpenChange={setShowReportDialog}>
