@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/hooks/use-auth"
 import CommentItem from "./comment-item"
 import { Skeleton } from "@/components/ui/skeleton"
-import { MessageSquare, ImageIcon, X } from "lucide-react"
+import { MessageSquare, ImageIcon, X, Upload } from "lucide-react"
 
 interface CommentSectionProps {
   relatedTo: string
@@ -29,17 +29,23 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [isUploadingImage, setIsUploadingImage] = useState(false)
+  const [isDragOver, setIsDragOver] = useState(false)
   const { user, isAuthenticated } = useAuth()
   const observerRef = useRef<IntersectionObserver | null>(null)
   const loadMoreRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const dropZoneRef = useRef<HTMLDivElement>(null)
 
   const handleImageSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
 
+    validateAndSetImage(file)
+  }, [])
+
+  const validateAndSetImage = useCallback((file: File) => {
     if (!file.type.startsWith("image/")) {
-      setError("Please select a valid image file.")
+      setError("Please select a valid image file (JPG, PNG, GIF, WebP).")
       return
     }
 
@@ -55,6 +61,33 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
     setError(null)
   }, [])
 
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(true)
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+  }, [])
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      setIsDragOver(false)
+
+      const files = Array.from(e.dataTransfer.files)
+      const imageFile = files.find((file) => file.type.startsWith("image/"))
+
+      if (imageFile) {
+        validateAndSetImage(imageFile)
+      } else if (files.length > 0) {
+        setError("Please drop a valid image file.")
+      }
+    },
+    [validateAndSetImage],
+  )
+
   const handleRemoveImage = useCallback(() => {
     if (imagePreview) {
       URL.revokeObjectURL(imagePreview)
@@ -65,6 +98,13 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
       fileInputRef.current.value = ""
     }
   }, [imagePreview])
+
+  const handleImageButtonKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault()
+      fileInputRef.current?.click()
+    }
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -260,38 +300,68 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
         </h3>
       </div>
 
-      {error && <div className="p-3 bg-red-100 text-red-700 rounded-md">{error}</div>}
+      {error && (
+        <div
+          className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg flex items-start gap-2"
+          role="alert"
+        >
+          <div className="flex-shrink-0 w-5 h-5 rounded-full bg-red-100 flex items-center justify-center mt-0.5">
+            <X className="h-3 w-3" />
+          </div>
+          <span>{error}</span>
+        </div>
+      )}
 
       {isAuthenticated ? (
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div className="space-y-2">
-            <Textarea
-              placeholder="Add a comment..."
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              className="min-h-[80px]"
-              disabled={isSubmitting}
-              aria-label="Comment text"
-            />
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div
+            ref={dropZoneRef}
+            className={`relative border-2 border-dashed rounded-lg transition-colors ${
+              isDragOver ? "border-blue-400 bg-blue-50" : "border-gray-200 hover:border-gray-300"
+            }`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            <div className="p-4 space-y-3">
+              <Textarea
+                placeholder="Add a comment..."
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                className="min-h-[80px] border-0 resize-none focus:ring-0 focus:border-0 bg-transparent"
+                disabled={isSubmitting}
+                aria-label="Comment text"
+                aria-describedby="comment-help"
+              />
 
-            {imagePreview && (
-              <div className="relative inline-block">
-                <img
-                  src={imagePreview || "/placeholder.svg"}
-                  alt="Comment attachment preview"
-                  className="max-w-xs max-h-32 rounded-lg border border-gray-200 object-cover"
-                />
-                <button
-                  type="button"
-                  onClick={handleRemoveImage}
-                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-                  aria-label="Remove image attachment"
-                  disabled={isSubmitting}
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            )}
+              {isDragOver && (
+                <div className="absolute inset-0 flex items-center justify-center bg-blue-50 bg-opacity-90 rounded-lg">
+                  <div className="text-center">
+                    <Upload className="h-8 w-8 text-blue-500 mx-auto mb-2" />
+                    <p className="text-blue-600 font-medium">Drop your image here</p>
+                  </div>
+                </div>
+              )}
+
+              {imagePreview && (
+                <div className="relative inline-block">
+                  <img
+                    src={imagePreview || "/placeholder.svg"}
+                    alt="Comment attachment preview"
+                    className="max-w-xs max-h-40 rounded-lg border border-gray-200 object-cover shadow-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleRemoveImage}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 shadow-sm transition-colors"
+                    aria-label="Remove image attachment"
+                    disabled={isSubmitting}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center justify-between">
@@ -306,30 +376,42 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
                 disabled={isSubmitting}
                 aria-describedby="image-upload-help"
               />
-              <label
-                htmlFor="comment-image-upload"
-                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                onKeyDown={handleImageButtonKeyDown}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 aria-label="Upload image attachment"
+                disabled={isSubmitting}
               >
                 <ImageIcon className="h-4 w-4" />
                 {selectedImage ? "Change Image" : "Add Image"}
-              </label>
-              <span id="image-upload-help" className="sr-only">
-                Upload an image to attach to your comment. Maximum file size is 5MB.
+              </button>
+
+              <span id="image-upload-help" className="text-xs text-gray-500">
+                Max 5MB • JPG, PNG, GIF, WebP
               </span>
             </div>
 
             <Button
               type="submit"
               disabled={isSubmitting || isUploadingImage || (!newComment.trim() && !selectedImage)}
+              className="px-6"
               aria-label={isSubmitting ? "Posting comment..." : "Post comment"}
             >
               {isSubmitting ? (isUploadingImage ? "Uploading..." : "Posting...") : "Post Comment"}
             </Button>
           </div>
+
+          <div id="comment-help" className="sr-only">
+            You can drag and drop an image file into the comment area, or use the Add Image button to attach a photo to
+            your comment.
+          </div>
         </form>
       ) : (
-        <div className="p-3 bg-gray-100 text-gray-700 rounded-md">Please sign in to leave a comment.</div>
+        <div className="p-4 bg-gray-50 text-gray-700 rounded-lg border text-center">
+          Please sign in to leave a comment.
+        </div>
       )}
 
       <div className="space-y-4">
@@ -361,7 +443,10 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
             />
           ))
         ) : (
-          <div className="text-center py-6 text-gray-500">No comments yet. Be the first to comment!</div>
+          <div className="text-center py-8 text-gray-500">
+            <MessageSquare className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+            <p>No comments yet. Be the first to comment!</p>
+          </div>
         )}
 
         {!isLoading && comments.length > 0 && (

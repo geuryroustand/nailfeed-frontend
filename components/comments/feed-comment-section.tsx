@@ -6,7 +6,7 @@ import { useAuth } from "@/context/auth-context"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Loader2, AlertCircle, X, MessageCircle, Reply, Edit, Trash2, MoreVertical } from "lucide-react"
+import { Loader2, AlertCircle, X, MessageCircle, Reply, Edit, Trash2, MoreVertical, ImageIcon } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { CommentsService, type Comment } from "@/lib/services/comments-service"
 import Link from "next/link"
@@ -98,6 +98,7 @@ export default function FeedCommentSection({
   const [editingComment, setEditingComment] = useState<{ id: number; content: string } | null>(null)
   const [optimisticComments, setOptimisticComments] = useState<Comment[]>([])
   const [submittingCommentId, setSubmittingCommentId] = useState<string | null>(null)
+  const [imageFile, setImageFile] = useState<File | null>(null)
 
   const { toast } = useToast()
   const commentInputRef = useRef<HTMLTextAreaElement>(null)
@@ -287,7 +288,7 @@ export default function FeedCommentSection({
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!newComment.trim()) return
+    if (!newComment.trim() && !imageFile) return
 
     if (!isAuthenticated) {
       setError("You need to be logged in to comment. Please sign in to continue.")
@@ -361,6 +362,7 @@ export default function FeedCommentSection({
       const replyToData = replyTo
       setNewComment("")
       setReplyTo(null)
+      setImageFile(null)
 
       // If we're editing a comment
       if (editingComment) {
@@ -395,7 +397,13 @@ export default function FeedCommentSection({
         })
       } else {
         // Submit a new comment or reply
-        const response = await CommentsService.addComment(postId, documentId, commentContent, replyToData?.id)
+        const response = await CommentsService.addComment(
+          postId,
+          documentId,
+          commentContent,
+          replyToData?.id,
+          imageFile,
+        )
 
         // Check if the response indicates an error
         if (!response.success && response.error) {
@@ -458,6 +466,7 @@ export default function FeedCommentSection({
 
       setNewComment(newComment)
       setReplyTo(replyTo)
+      setImageFile(null)
 
       const errorMessage = parseErrorMessage(err)
       setError(errorMessage)
@@ -703,6 +712,14 @@ export default function FeedCommentSection({
   const cancelEditing = () => {
     setEditingComment(null)
     setNewComment("")
+    setImageFile(null)
+  }
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setImageFile(file)
+    }
   }
 
   // Check if the user can view comments
@@ -925,43 +942,68 @@ export default function FeedCommentSection({
           </Avatar>
 
           <div className="flex-1 relative">
-            <Textarea
-              ref={commentInputRef}
-              placeholder={replyTo ? `Reply to ${replyTo.username}...` : "Write a comment..."}
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              disabled={isSubmitting || !isAuthenticated}
-              className="resize-none pr-12 min-h-[50px] py-3 rounded-full"
-              rows={1}
-              aria-label="Comment input"
-              aria-invalid={!!error}
-              aria-describedby={error ? "comment-error" : undefined}
-            />
-            <Button
-              type="submit"
-              size="icon"
-              disabled={isSubmitting || !newComment.trim() || !isAuthenticated}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 h-8 w-8 rounded-full p-0"
-              aria-label={isSubmitting ? "Submitting comment" : "Submit comment"}
-            >
-              {isSubmitting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-4 w-4 rotate-45"
+            <div className="relative border border-gray-200 rounded-full focus-within:border-pink-500 focus-within:ring-1 focus-within:ring-pink-500">
+              <Textarea
+                ref={commentInputRef}
+                placeholder={replyTo ? `Reply to ${replyTo.username}...` : "Write a comment..."}
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                disabled={isSubmitting || !isAuthenticated}
+                className="resize-none border-0 focus:ring-0 focus:border-0 bg-transparent rounded-full pr-20 min-h-[50px] py-3"
+                rows={1}
+                aria-label="Comment input"
+                aria-invalid={!!error}
+                aria-describedby={error ? "comment-error" : "comment-help"}
+              />
+
+              <div className="absolute right-12 top-1/2 transform -translate-y-1/2">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  id="feed-comment-image-upload"
+                  disabled={isSubmitting}
+                  onChange={handleImageUpload}
+                />
+                <label
+                  htmlFor="feed-comment-image-upload"
+                  className="inline-flex items-center justify-center h-8 w-8 rounded-full hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-pink-500 cursor-pointer transition-colors"
+                  aria-label="Add image to comment"
                 >
-                  <line x1="22" y1="2" x2="11" y2="13"></line>
-                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                </svg>
-              )}
-            </Button>
+                  <ImageIcon className="h-4 w-4 text-gray-500" />
+                </label>
+              </div>
+
+              <Button
+                type="submit"
+                size="icon"
+                disabled={isSubmitting || !newComment.trim() || !isAuthenticated}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 h-8 w-8 rounded-full p-0"
+                aria-label={isSubmitting ? "Submitting comment" : "Submit comment"}
+              >
+                {isSubmitting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-4 w-4 rotate-45"
+                  >
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                  </svg>
+                )}
+              </Button>
+            </div>
+
+            <div id="comment-help" className="sr-only">
+              Write your comment and optionally attach an image using the image button.
+            </div>
           </div>
         </div>
 

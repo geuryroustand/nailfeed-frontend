@@ -146,7 +146,7 @@ Visit [http://localhost:3000](http://localhost:3000) to see the application.
 
 ## 🏗️ Project Structure
 
-```text
+\`\`\`text
 .
 ├── app/                    # Next.js App Router
 │   ├── actions/            # Server actions for API calls
@@ -164,7 +164,7 @@ Visit [http://localhost:3000](http://localhost:3000) to see the application.
 ├── public/                 # Static assets
 └── types/                  # TypeScript type definitions
 
-```
+\`\`\`
 
 ## 📄 License
 
