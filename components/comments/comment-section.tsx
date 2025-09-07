@@ -44,6 +44,8 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
   }, [])
 
   const validateAndSetImage = useCallback((file: File) => {
+    console.log("[v0] Image file selected:", file.name, file.size, file.type)
+
     if (!file.type.startsWith("image/")) {
       setError("Please select a valid image file (JPG, PNG, GIF, WebP).")
       return
@@ -59,6 +61,8 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
     const previewUrl = URL.createObjectURL(file)
     setImagePreview(previewUrl)
     setError(null)
+
+    console.log("[v0] Image preview URL created:", previewUrl)
   }, [])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -344,30 +348,43 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
               )}
 
               {imagePreview && (
-                <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="flex items-start gap-3">
-                    <div className="relative">
+                <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border-2 border-blue-200 shadow-sm">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                    <span className="text-sm font-semibold text-blue-800">Image Preview</span>
+                  </div>
+
+                  <div className="flex items-start gap-4">
+                    <div className="relative group">
                       <img
                         src={imagePreview || "/placeholder.svg"}
                         alt="Selected image preview"
-                        className="w-20 h-20 rounded-lg border border-gray-300 object-cover shadow-sm"
+                        className="w-24 h-24 rounded-xl border-2 border-white object-cover shadow-md group-hover:shadow-lg transition-shadow"
+                        onLoad={() => console.log("[v0] Image preview loaded successfully")}
+                        onError={() => console.log("[v0] Image preview failed to load")}
                       />
                       <button
                         type="button"
                         onClick={handleRemoveImage}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 shadow-sm transition-colors"
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 shadow-lg transition-all hover:scale-110"
                         aria-label="Remove selected image"
                         disabled={isSubmitting}
                       >
                         <X className="h-3 w-3" />
                       </button>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900">Image selected</p>
-                      <p className="text-xs text-gray-500 truncate">{selectedImage?.name}</p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        {selectedImage && `${(selectedImage.size / 1024 / 1024).toFixed(1)} MB`}
+
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-full">
+                          ✓ Ready to post
+                        </span>
+                      </div>
+                      <p className="text-sm font-medium text-gray-900 truncate">{selectedImage?.name}</p>
+                      <p className="text-xs text-gray-600">
+                        Size: {selectedImage && `${(selectedImage.size / 1024 / 1024).toFixed(1)} MB`}
                       </p>
+                      <p className="text-xs text-blue-600 font-medium">This image will be attached to your comment</p>
                     </div>
                   </div>
                 </div>
@@ -389,25 +406,30 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
               />
               <button
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => {
+                  console.log("[v0] Image upload button clicked")
+                  fileInputRef.current?.click()
+                }}
                 onKeyDown={handleImageButtonKeyDown}
-                className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                   selectedImage
-                    ? "text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100"
-                    : "text-gray-700 bg-white border-gray-300 hover:bg-gray-50"
+                    ? "text-white bg-blue-600 border-blue-600 hover:bg-blue-700 shadow-md"
+                    : "text-gray-700 bg-white border-gray-300 hover:bg-gray-50 hover:border-gray-400"
                 }`}
                 aria-label={selectedImage ? "Change selected image" : "Select image to attach"}
                 disabled={isSubmitting}
               >
                 <ImageIcon className="h-4 w-4" />
-                {selectedImage ? "Change Image" : "Add Image"}
+                {selectedImage ? "✓ Image Selected" : "Add Image"}
               </button>
 
               {selectedImage && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-full">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  Image ready
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-green-700 bg-green-100 rounded-full border border-green-200">
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                    Image ready to post
+                  </span>
+                </div>
               )}
 
               <span id="image-upload-help" className="text-xs text-gray-500">
