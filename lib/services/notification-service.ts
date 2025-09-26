@@ -1,26 +1,28 @@
-"use server"
+"use server";
 
-import { cookies } from "next/headers"
+import { cookies } from "next/headers";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
-const SERVER_API_TOKEN = process.env.API_TOKEN || ""
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  "https://nailfeed-backend-production.up.railway.app";
+const SERVER_API_TOKEN = process.env.API_TOKEN || "";
 
 export interface NotificationData {
-  type: "like" | "comment" | "follow" | "mention" | "collection" | "mood"
-  userId: string
-  relatedUserId?: string
-  relatedPostId?: string
-  relatedCommentId?: string
-  message: string
-  title: string
+  type: "like" | "comment" | "follow" | "mention" | "collection" | "mood";
+  userId: string;
+  relatedUserId?: string;
+  relatedPostId?: string;
+  relatedCommentId?: string;
+  message: string;
+  title: string;
 }
 
 export interface PushSubscription {
-  endpoint: string
+  endpoint: string;
   keys: {
-    p256dh: string
-    auth: string
-  }
+    p256dh: string;
+    auth: string;
+  };
 }
 
 /**
@@ -28,18 +30,18 @@ export interface PushSubscription {
  */
 export async function createNotification(data: NotificationData) {
   try {
-    const url = `${API_BASE_URL}/api/notifications`
+    const url = `${API_BASE_URL}/api/notifications`;
 
     const headers: HeadersInit = {
       "Content-Type": "application/json",
-    }
+    };
 
-    const cookieStore = cookies()
-    const jwt = cookieStore.get("jwt")?.value
+    const cookieStore = cookies();
+    const jwt = cookieStore.get("jwt")?.value;
     if (jwt) {
-      headers["Authorization"] = `Bearer ${jwt}`
+      headers["Authorization"] = `Bearer ${jwt}`;
     } else if (SERVER_API_TOKEN) {
-      headers["Authorization"] = `Bearer ${SERVER_API_TOKEN}`
+      headers["Authorization"] = `Bearer ${SERVER_API_TOKEN}`;
     }
 
     const response = await fetch(url, {
@@ -55,16 +57,16 @@ export async function createNotification(data: NotificationData) {
           relatedComment: data.relatedCommentId,
         },
       }),
-    })
+    });
 
     if (!response.ok) {
-      throw new Error(`Failed to create notification: ${response.status}`)
+      throw new Error(`Failed to create notification: ${response.status}`);
     }
 
-    return await response.json()
+    return await response.json();
   } catch (error) {
-    console.error("Error creating notification:", error)
-    throw error
+    console.error("Error creating notification:", error);
+    throw error;
   }
 }
 
@@ -74,34 +76,39 @@ export async function createNotification(data: NotificationData) {
 export async function getUserPushSubscriptions(userId: string) {
   try {
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/push-subscriptions?userId=${userId}`,
+      `${process.env.NEXT_PUBLIC_APP_URL}/api/push-subscriptions?userId=${userId}`,
       {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
         },
-      },
-    )
+      }
+    );
 
     if (!response.ok) {
-      throw new Error(`Failed to get push subscriptions: ${response.status}`)
+      throw new Error(`Failed to get push subscriptions: ${response.status}`);
     }
 
-    const result = await response.json()
-    return result.data || []
+    const result = await response.json();
+    return result.data || [];
   } catch (error) {
-    console.error("Error getting push subscriptions:", error)
-    return []
+    console.error("Error getting push subscriptions:", error);
+    return [];
   }
 }
 
 /**
  * Save push subscription using the new dedicated endpoint
  */
-export async function savePushSubscription(userId: string, subscription: PushSubscription) {
+export async function savePushSubscription(
+  userId: string,
+  subscription: PushSubscription
+) {
   try {
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/push-subscriptions`,
+      `${
+        process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+      }/api/push-subscriptions`,
       {
         method: "POST",
         headers: {
@@ -112,19 +119,23 @@ export async function savePushSubscription(userId: string, subscription: PushSub
           endpoint: subscription.endpoint,
           p256dh: subscription.keys.p256dh,
           auth: subscription.keys.auth,
-          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "Server",
+          userAgent:
+            typeof navigator !== "undefined" ? navigator.userAgent : "Server",
         }),
-      },
-    )
+      }
+    );
 
     if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || `Failed to save push subscription: ${response.status}`)
+      const errorData = await response.json();
+      throw new Error(
+        errorData.error ||
+          `Failed to save push subscription: ${response.status}`
+      );
     }
 
-    return await response.json()
+    return await response.json();
   } catch (error) {
-    console.error("Error saving push subscription:", error)
-    throw error
+    console.error("Error saving push subscription:", error);
+    throw error;
   }
 }

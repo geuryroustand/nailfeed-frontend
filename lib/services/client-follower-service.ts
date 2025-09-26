@@ -1,3 +1,4 @@
+﻿import { getClientSessionStatus } from "@/lib/auth/client-session"
 import qs from "qs";
 
 export type FollowUser = {
@@ -53,10 +54,7 @@ export async function getFollowers(
   pageSize = 10
 ): Promise<FollowListResponse> {
   try {
-    const isAuthenticated =
-      typeof document !== "undefined" &&
-      (document.cookie.includes("jwt=") ||
-        document.cookie.includes("authToken="));
+    const isAuthenticated = await getClientSessionStatus()
 
     const user = await getUserByUsername(username);
     if (!user) {
@@ -135,10 +133,7 @@ export async function getFollowing(
   pageSize = 10
 ): Promise<FollowListResponse> {
   try {
-    const isAuthenticated =
-      typeof document !== "undefined" &&
-      (document.cookie.includes("jwt=") ||
-        document.cookie.includes("authToken="));
+    const isAuthenticated = await getClientSessionStatus()
 
     const user = await getUserByUsername(username);
     if (!user) {
@@ -245,3 +240,4 @@ export async function toggleFollowStatus(
     };
   }
 }
+

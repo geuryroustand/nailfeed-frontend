@@ -1,8 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { useAuth } from "@/context/auth-context"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useAuth } from "@/hooks/use-auth"
 import { Button } from "@/components/ui/button"
 import { MoreHorizontal, Reply, Trash2, Flag, AlertTriangle, Pencil, Check, X, MessageSquare } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
@@ -10,13 +9,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import {
   AlertDialog,
@@ -29,13 +24,15 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import type { Comment } from "@/lib/services/comments-service"
+import { ReportContentModal } from "@/components/report-content-modal"
+import Image from "next/image"
 
 interface CommentItemProps {
   comment: Comment
-  onReply: (commentId: number, username: string) => void
-  onDelete: (commentId: number) => void
-  onReport: (commentId: number, reason: string) => void
-  onEdit: (commentId: number, newContent: string) => void
+  onReply: (comment: Comment) => void
+  onDelete: (commentDocumentId: string) => void
+  onReport?: (commentDocumentId: string, reason: string) => void
+  onEdit: (commentDocumentId: string, newContent: string) => void
 }
 
 const getNameInitials = (name: string): string => {
@@ -62,14 +59,14 @@ const getNameInitials = (name: string): string => {
 
 export function CommentItem({ comment, onReply, onDelete, onReport, onEdit }: CommentItemProps) {
   const { user } = useAuth()
-  const [showReportDialog, setShowReportDialog] = useState(false)
+  const [showReportModal, setShowReportModal] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [reportReason, setReportReason] = useState("BAD_LANGUAGE")
   const [isEditing, setIsEditing] = useState(false)
   const [editedContent, setEditedContent] = useState(comment.content)
   const [isExpanded, setIsExpanded] = useState(true)
   const [showImageModal, setShowImageModal] = useState(false)
   const editInputRef = useRef<HTMLInputElement>(null)
+  const [avatarError, setAvatarError] = useState(false)
 
   const isAuthor =
     user &&
@@ -110,10 +107,8 @@ export function CommentItem({ comment, onReply, onDelete, onReport, onEdit }: Co
     return url.startsWith("/") ? `${baseUrl}${url}` : `${baseUrl}/${url}`
   }
 
-  const handleReport = () => {
-    onReport(comment.id, reportReason)
-    setShowReportDialog(false)
-  }
+  const avatarUrl = !avatarError ? comment.author?.avatar : undefined
+
 
   const handleEdit = () => {
     setIsEditing(true)
@@ -122,7 +117,7 @@ export function CommentItem({ comment, onReply, onDelete, onReport, onEdit }: Co
 
   const handleSaveEdit = () => {
     if (editedContent.trim()) {
-      onEdit(comment.id, editedContent)
+      onEdit(comment.documentId, editedContent)
       setIsEditing(false)
     }
   }
@@ -133,7 +128,7 @@ export function CommentItem({ comment, onReply, onDelete, onReport, onEdit }: Co
   }
 
   const handleConfirmDelete = () => {
-    onDelete(comment.id)
+    onDelete(comment.documentId)
     setShowDeleteDialog(false)
   }
 
@@ -153,22 +148,20 @@ export function CommentItem({ comment, onReply, onDelete, onReport, onEdit }: Co
   return (
     <div className="mb-4 last:mb-0">
       <div className="flex gap-2">
-        <Avatar className="h-6 w-6 flex-shrink-0">
-          <AvatarImage
-            src={comment.author?.avatar || ""}
-            alt={comment.author?.name || "User"}
-            onError={(e) => {
-              // Hide the image on error
-              ;(e.target as HTMLImageElement).style.display = "none"
-            }}
-          />
-          <AvatarFallback
-            className="bg-pink-100 text-pink-800 text-[10px] font-bold flex items-center justify-center"
-            aria-label={`${comment.author?.name || "Anonymous"} profile picture`}
-          >
-            {getNameInitials(comment.author?.name || "Anonymous")}
-          </AvatarFallback>
-        </Avatar>
+        <div className="relative h-8 w-8 flex-shrink-0 rounded-full bg-pink-100 text-pink-800 text-[10px] font-bold flex items-center justify-center overflow-hidden">
+          {avatarUrl ? (
+            <Image
+              src={avatarUrl}
+              alt={`${comment.author?.name || "Anonymous"} profile picture`}
+              fill
+              className="object-cover"
+              sizes="32px"
+              onError={() => setAvatarError(true)}
+            />
+          ) : (
+            <span>{getNameInitials(comment.author?.name || "Anonymous")}</span>
+          )}
+        </div>
 
         <div className="flex-1 min-w-0">
           <div className="bg-gray-50 rounded-lg p-2 mb-1">
@@ -186,7 +179,7 @@ export function CommentItem({ comment, onReply, onDelete, onReport, onEdit }: Co
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => onReply(comment.id, comment.author?.name || "Anonymous")}>
+                  <DropdownMenuItem onClick={() => onReply(comment)}>
                     <Reply className="h-4 w-4 mr-2" />
                     Reply
                   </DropdownMenuItem>
@@ -204,12 +197,11 @@ export function CommentItem({ comment, onReply, onDelete, onReport, onEdit }: Co
                     </>
                   )}
 
-                  {!isAuthor && (
-                    <DropdownMenuItem onClick={() => setShowReportDialog(true)} className="text-amber-500">
-                      <Flag className="h-4 w-4 mr-2" />
-                      Report
-                    </DropdownMenuItem>
-                  )}
+                  {/* Report option - always visible for everyone */}
+                  <DropdownMenuItem onClick={() => setShowReportModal(true)} className="text-red-600 focus:text-red-600 focus:bg-red-50">
+                    <Flag className="h-4 w-4 mr-2" />
+                    Report
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -243,21 +235,22 @@ export function CommentItem({ comment, onReply, onDelete, onReport, onEdit }: Co
                 {comment.content && <p className="text-sm break-words">{comment.content}</p>}
 
                 {comment.attachment && (
-                  <div className="mt-2">
-                    <img
-                      src={getImageUrl(comment.attachment.formats?.small?.url || comment.attachment.url)}
-                      alt="Comment attachment"
-                      className="max-w-xs max-h-48 rounded-lg border border-gray-200 object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                      onClick={() => setShowImageModal(true)}
-                      onError={(e) => {
-                        // Fallback to original URL if formatted URL fails
-                        const target = e.target as HTMLImageElement
-                        if (target.src !== getImageUrl(comment.attachment!.url)) {
-                          target.src = getImageUrl(comment.attachment!.url)
-                        }
-                      }}
-                    />
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowImageModal(true)}
+                    className="mt-2 block max-w-xs"
+                    aria-label="View comment attachment"
+                  >
+                    <div className="relative w-full max-w-[160px] h-[160px] overflow-hidden rounded-lg border border-gray-200">
+                      <Image
+                        src={getImageUrl(comment.attachment.formats?.small?.url || comment.attachment.url)}
+                        alt="Comment attachment"
+                        fill
+                        className="object-cover"
+                        sizes="160px"
+                      />
+                    </div>
+                  </button>
                 )}
               </div>
             )}
@@ -267,7 +260,7 @@ export function CommentItem({ comment, onReply, onDelete, onReport, onEdit }: Co
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => onReply(comment.id, comment.author?.name || "Anonymous")}
+              onClick={() => onReply(comment)}
               className="h-6 text-xs text-gray-500 hover:text-pink-500"
             >
               Reply
@@ -292,7 +285,7 @@ export function CommentItem({ comment, onReply, onDelete, onReport, onEdit }: Co
             <div className="ml-4 mt-2 space-y-3 border-l-2 border-gray-100 pl-3">
               {comment.children.map((reply) => (
                 <CommentItem
-                  key={reply.id}
+                  key={reply.documentId || reply.id}
                   comment={reply}
                   onReply={onReply}
                   onDelete={onDelete}
@@ -313,69 +306,29 @@ export function CommentItem({ comment, onReply, onDelete, onReport, onEdit }: Co
               <DialogDescription>Full size view of the comment attachment</DialogDescription>
             </DialogHeader>
             <div className="flex items-center justify-center">
-              <img
-                src={getImageUrl(comment.attachment.formats?.large?.url || comment.attachment.url)}
-                alt="Comment attachment - full size"
-                className="max-w-full max-h-[80vh] object-contain rounded-lg"
-                onError={(e) => {
-                  // Fallback to original URL if formatted URL fails
-                  const target = e.target as HTMLImageElement
-                  if (target.src !== getImageUrl(comment.attachment!.url)) {
-                    target.src = getImageUrl(comment.attachment!.url)
-                  }
-                }}
-              />
+              <div className="relative w-full h-[80vh] max-h-[80vh]">
+                <Image
+                  src={getImageUrl(comment.attachment.formats?.large?.url || comment.attachment.url)}
+                  alt="Comment attachment - full size"
+                  fill
+                  className="object-contain rounded-lg"
+                  sizes="100vw"
+                />
+              </div>
             </div>
           </DialogContent>
         </Dialog>
       )}
 
-      {/* Report Dialog */}
-      <Dialog open={showReportDialog} onOpenChange={setShowReportDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-500" />
-              Report Comment
-            </DialogTitle>
-            <DialogDescription>
-              Please select a reason for reporting this comment. Our moderation team will review it.
-            </DialogDescription>
-          </DialogHeader>
-
-          <RadioGroup value={reportReason} onValueChange={setReportReason} className="mt-2">
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="BAD_LANGUAGE" id="inappropriate" />
-              <Label htmlFor="inappropriate">Inappropriate content</Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="OTHER" id="spam" />
-              <Label htmlFor="spam">Spam</Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="DISCRIMINATION" id="harassment" />
-              <Label htmlFor="harassment">Harassment</Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="OTHER" id="misinformation" />
-              <Label htmlFor="misinformation">Misinformation</Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="OTHER" id="other" />
-              <Label htmlFor="other">Other</Label>
-            </div>
-          </RadioGroup>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowReportDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleReport} className="bg-amber-500 hover:bg-amber-600">
-              Report
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Report Comment Modal */}
+      <ReportContentModal
+        isOpen={showReportModal}
+        onOpenChange={setShowReportModal}
+        contentType="comment"
+        contentId={comment.documentId}
+        contentTitle={comment.content || ""}
+        contentAuthor={comment.author?.name}
+      />
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

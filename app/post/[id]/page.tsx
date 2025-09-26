@@ -19,8 +19,10 @@ interface PostPageProps {
 // Generate dynamic metadata for SEO
 export async function generateMetadata({ params }: PostPageProps, parent: ResolvingMetadata): Promise<Metadata> {
   try {
+    const resolvedParams = await Promise.resolve(params)
+
     // Fetch post data for metadata
-    const { post } = await getPostWithRelated(params.id)
+    const { post } = await getPostWithRelated(resolvedParams.id)
 
     // If post not found, return basic metadata
     if (!post) {
@@ -34,7 +36,7 @@ export async function generateMetadata({ params }: PostPageProps, parent: Resolv
     const previousImages = (await parent).openGraph?.images || []
 
     // Prepare post image for metadata
-    const postImage = post.image || (post.mediaItems && post.mediaItems.length > 0 ? post.mediaItems[0].url : null)
+    const postImage = post.image || (post.media && post.media.length > 0 ? post.media[0].url : null)
 
     // Create description from post content
     const description = post.description
@@ -79,7 +81,7 @@ export async function generateMetadata({ params }: PostPageProps, parent: Resolv
 
 export default async function PostPage({ params }: PostPageProps) {
   try {
-    const idOrDocumentId = params.id
+    const { id: idOrDocumentId } = await Promise.resolve(params)
 
     // Use the optimized server action to fetch both post and related posts
     const { post, relatedPosts } = await getPostWithRelated(idOrDocumentId)

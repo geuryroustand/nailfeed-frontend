@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { useAuth } from "@/context/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 import { useProfile } from "@/context/profile-context"
 
 export function useProfileFlow() {

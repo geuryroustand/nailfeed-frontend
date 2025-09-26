@@ -3,6 +3,7 @@
 import type React from "react"
 import { useState, useEffect, useRef, useCallback } from "react"
 import { type Comment, commentsService } from "@/lib/services/comments-service"
+import { OptimizedMediaUploadService } from "@/lib/services/optimized-media-upload-service"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/hooks/use-auth"
@@ -17,6 +18,7 @@ interface CommentSectionProps {
 }
 
 export default function CommentSection({ relatedTo, relatedId, className = "" }: CommentSectionProps) {
+  const postDocumentId = typeof relatedId === "string" ? relatedId : String(relatedId)
   const [comments, setComments] = useState<Comment[]>([])
   const [newComment, setNewComment] = useState("")
   const [isLoading, setIsLoading] = useState(true)
@@ -124,17 +126,17 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
         setIsLoading(pageNum === 1)
         if (pageNum > 1) setIsLoadingMore(true)
 
-        const response = await commentsService.getComments(relatedTo, relatedId, pageNum)
+        const response = await commentsService.getComments(postDocumentId, undefined, pageNum)
 
-        setTotalComments(response.meta.totalComments || 0)
+        setTotalComments(response.pagination.total || 0)
 
-        const { page, pageCount } = response.meta.pagination
+        const { page, pageCount } = response.pagination
         setHasMore(page < pageCount)
 
         if (append) {
           setComments((prev) => {
-            const existingIds = new Set(prev.map((c) => c.id))
-            const newComments = response.data.filter((c) => !existingIds.has(c.id))
+            const existingIds = new Set(prev.map((c) => c.documentId))
+            const newComments = response.data.filter((c) => !existingIds.has(c.documentId))
             return [...prev, ...newComments]
           })
         } else {
@@ -199,100 +201,81 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
 
     try {
       setIsSubmitting(true)
+      const fileForUpload = selectedImage ?? null
 
-      let attachmentId = null
-      if (selectedImage) {
-        setIsUploadingImage(true)
-        const token = user?.token || localStorage.getItem("jwt") || localStorage.getItem("authToken")
-        if (!token) {
-          throw new Error("Authentication token not found")
-        }
+      // Create comment first (with placeholder content if only image)
+      const response = await commentsService.addComment(
+        newComment.trim() || (fileForUpload ? "📷" : ""),
+        "posts",
+        postDocumentId,
+      )
 
-        const formData = new FormData()
-        formData.append("files", selectedImage)
-
-        const uploadResponse = await fetch("/api/auth-proxy/upload?endpoint=/api/upload", {
-          method: "POST",
-          body: formData,
-        })
-
-        if (!uploadResponse.ok) {
-          const errorText = await uploadResponse.text()
-          throw new Error(`Upload failed: ${errorText}`)
-        }
-
-        const uploadResult = await uploadResponse.json()
-        if (Array.isArray(uploadResult) && uploadResult.length > 0) {
-          attachmentId = uploadResult[0].id
-        } else {
-          throw new Error("Invalid upload response")
-        }
-        setIsUploadingImage(false)
+      if (!response.success || !response.comment) {
+        throw new Error(response.error || "Failed to post comment")
       }
 
-      await commentsService.addComment(newComment.trim() || "", relatedTo, relatedId, undefined, attachmentId)
+      let finalComment = response.comment
+
+      // Now upload image with proper relation if we have one
+      if (fileForUpload) {
+        try {
+          setIsUploadingImage(true)
+          const attachment = await OptimizedMediaUploadService.uploadCommentImage(finalComment.id, fileForUpload)
+          if (attachment) {
+            finalComment = { ...finalComment, attachment }
+
+            // If comment was created with placeholder content (just for image), clean it
+            if (!newComment.trim() && finalComment.content?.trim() === "📷") {
+              try {
+                await commentsService.updateComment(finalComment.documentId, "", attachment.id)
+                finalComment = { ...finalComment, content: "" }
+              } catch (updateError) {
+                console.warn("Failed to clean placeholder content:", updateError)
+              }
+            }
+          }
+        } catch (uploadError) {
+          console.error("Error uploading comment image:", uploadError)
+          setError("Image upload failed. Your comment was posted without the image.")
+        } finally {
+          setIsUploadingImage(false)
+        }
+      }
 
       setNewComment("")
       handleRemoveImage()
 
-      fetchComments()
+      await fetchComments()
     } catch (err: any) {
       setError("Failed to post comment. Please try again.")
       console.error("Error posting comment:", err)
     } finally {
       setIsSubmitting(false)
+      setIsUploadingImage(false)
     }
   }
 
-  const handleCommentUpdate = async (id: number, content: string) => {
+  const handleCommentUpdate = async (documentId: string, content: string) => {
     try {
-      await commentsService.updateComment(id, content)
+      await commentsService.updateComment(documentId, content)
       setComments((prevComments) =>
-        prevComments.map((comment) => (comment.id === id ? { ...comment, content } : comment)),
+        prevComments.map((comment) =>
+          comment.documentId === documentId ? { ...comment, content } : comment,
+        ),
       )
     } catch (err: any) {
       console.error("Error updating comment:", err)
     }
   }
 
-  const handleCommentDelete = async (id: number) => {
+  const handleCommentDelete = async (documentId: string) => {
     try {
-      await commentsService.deleteComment(id)
-      setComments((prevComments) => prevComments.filter((comment) => comment.id !== id))
+      await commentsService.deleteComment(documentId)
+      setComments((prevComments) => prevComments.filter((comment) => comment.documentId !== documentId))
       setTotalComments((prev) => Math.max(0, prev - 1))
     } catch (err: any) {
       console.error("Error deleting comment:", err)
     }
-  }
-
-  const handleReplyAdded = (parentId: number, newReply: Comment) => {
-    setComments((prevComments) =>
-      prevComments.map((comment) =>
-        comment.id === parentId
-          ? {
-              ...comment,
-              replies: [...(comment.replies || []), newReply],
-            }
-          : comment,
-      ),
-    )
-
-    setTotalComments((prev) => prev + 1)
-  }
-
-  const handleReplyDeleted = (parentId: number, replyId: number) => {
-    setComments((prevComments) =>
-      prevComments.map((comment) =>
-        comment.id === parentId
-          ? {
-              ...comment,
-              replies: (comment.replies || []).filter((reply) => reply.id !== replyId),
-            }
-          : comment,
-      ),
-    )
-
-    setTotalComments((prev) => Math.max(0, prev - 1))
   }
 
   return (
@@ -442,15 +425,23 @@ export default function CommentSection({ relatedTo, relatedId, className = "" }:
         ) : comments.length > 0 ? (
           comments.map((comment) => (
             <CommentItem
-              key={comment.id}
+              key={comment.documentId || comment.id}
               comment={comment}
-              currentUser={user}
-              onUpdate={handleCommentUpdate}
+              onReply={(target) => console.log("[v0] Reply clicked (comment-section)", target.documentId)}
               onDelete={handleCommentDelete}
-              onReplyAdded={handleReplyAdded}
-              onReplyDeleted={handleReplyDeleted}
-              relatedTo={relatedTo}
-              relatedId={relatedId}
+              onReport={async (commentDocumentId, reason) => {
+                try {
+                  await commentsService.reportCommentAbuse(
+                    commentDocumentId,
+                    reason,
+                    `User reported: ${reason}`,
+                  )
+                } catch (err) {
+                  console.error("Error reporting comment:", err)
+                  setError("Failed to report comment. Please try again.")
+                }
+              }}
+              onEdit={handleCommentUpdate}
             />
           ))
         ) : (

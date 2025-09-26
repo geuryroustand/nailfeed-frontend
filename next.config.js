@@ -1,3 +1,4 @@
+// next.config.js
 const withPWA = require("@ducanh2912/next-pwa").default({
   dest: "public",
   cacheOnFrontEndNav: true,
@@ -7,46 +8,38 @@ const withPWA = require("@ducanh2912/next-pwa").default({
   disable: process.env.NODE_ENV === "development",
   workboxOptions: {
     disableDevLogs: true,
-    // Exclude API routes from caching to ensure fresh data
     runtimeCaching: [
+      // No cache para API (Network First)
       {
         urlPattern: /^https?.*\/api\/.*$/,
         handler: "NetworkFirst",
         options: {
           cacheName: "api-cache",
           networkTimeoutSeconds: 10,
-          expiration: {
-            maxEntries: 16,
-            maxAgeSeconds: 86400, // 24 hours
-          },
+          expiration: { maxEntries: 16, maxAgeSeconds: 86400 },
         },
       },
+      // Imágenes (Cache First)
       {
         urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp)$/,
         handler: "CacheFirst",
         options: {
           cacheName: "images",
-          expiration: {
-            maxEntries: 64,
-            maxAgeSeconds: 86400,
-          },
+          expiration: { maxEntries: 64, maxAgeSeconds: 86400 },
         },
       },
     ],
   },
-})
+});
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
+  eslint: { ignoreDuringBuilds: true },
+  typescript: { ignoreBuildErrors: true },
+
   images: {
-    unoptimized: true,
-    domains: ["nailfeed-backend-production.up.railway.app"],
+    unoptimized: false,
+
     remotePatterns: [
       {
         protocol: "https",
@@ -54,26 +47,30 @@ const nextConfig = {
         port: "",
         pathname: "/**",
       },
+      {
+        protocol: "http",
+        hostname: "localhost",
+        port: "1337",
+        pathname: "/**",
+      },
+      {
+        protocol: "http",
+        hostname: "127.0.0.1",
+        port: "1337",
+        pathname: "/**",
+      },
     ],
   },
+
   transpilePackages: [],
   async headers() {
     return [
       {
         source: "/(.*)",
         headers: [
-          {
-            key: "X-Content-Type-Options",
-            value: "nosniff",
-          },
-          {
-            key: "X-Frame-Options",
-            value: "DENY",
-          },
-          {
-            key: "Referrer-Policy",
-            value: "strict-origin-when-cross-origin",
-          },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
         ],
       },
       {
@@ -93,8 +90,8 @@ const nextConfig = {
           },
         ],
       },
-    ]
+    ];
   },
-}
+};
 
-module.exports = withPWA(nextConfig)
+module.exports = withPWA(nextConfig);

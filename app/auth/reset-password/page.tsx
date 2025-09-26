@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
-import { useAuth } from "@/context/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 import { Progress } from "@/components/ui/progress"
 
 const resetPasswordSchema = z

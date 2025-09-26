@@ -2,11 +2,15 @@ import { Suspense } from "react"
 import { getPosts } from "@/lib/post-data"
 import PostFeedOptimized from "./post-feed-optimized"
 import { FEATURES } from "@/lib/config"
+import { validateSession } from "@/lib/auth/session"
 
 export default async function PostFeedServerOptimized() {
   try {
+    const { session } = await validateSession()
+    const currentUserId = session?.userId ? String(session.userId) : null
+
     // Fetch initial posts on the server with a smaller limit to reduce chance of rate limiting
-    const { posts, hasMore, nextPage, error } = await getPosts(5, 0)
+    const { posts, hasMore, nextPage, error } = await getPosts(5, 0, currentUserId)
 
     // If we hit an error but have fallback posts, still show them
     if (error && posts.length > 0 && FEATURES.useFallbackData) {

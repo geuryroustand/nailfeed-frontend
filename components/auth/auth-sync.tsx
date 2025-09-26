@@ -1,13 +1,12 @@
 "use client"
 
 import { useEffect } from "react"
-import { useAuth } from "@/context/auth-context"
-import { usePathname, useRouter } from "next/navigation"
+import { useAuth } from "@/hooks/use-auth"
+import { usePathname } from "next/navigation"
 
 export default function AuthSync() {
-  const { checkAuthStatus, isAuthenticated, isLoading } = useAuth()
+  const { checkAuthStatus } = useAuth()
   const pathname = usePathname()
-  const router = useRouter()
 
   // Check auth status when the component mounts
   useEffect(() => {

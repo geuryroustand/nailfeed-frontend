@@ -1,56 +1,45 @@
-"use client"
+﻿"use client"
 
-import type React from "react"
-import { createContext, useContext, useState, useEffect } from "react"
+import type { ReactNode } from "react"
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react"
+import type { Collection, CollectionShare } from "@/types/collection"
+import { useAuth } from "@/hooks/use-auth"
 import { useToast } from "@/hooks/use-toast"
+import { normalizeImageUrl } from "@/lib/image-utils"
 
-export interface CollectionShare {
-  id: string
-  collectionId: string
-  type: "link" | "user" | "social"
-  recipient?: string
-  permission: "view" | "edit"
-  createdAt: string
-  expiresAt?: string
-  isActive: boolean
-}
-
-export interface Collection {
-  id: string
-  name: string
-  description?: string
-  coverImage?: string
-  isPrivate: boolean
-  createdAt: string
-  updatedAt: string
-  postIds: number[]
-  shares: CollectionShare[]
-  shareLink?: string
-  isShared?: boolean
-}
-
-export interface Post {
-  id: number
-  username: string
-  userImage: string
-  image: string
-  description: string
-  likes: number
-  comments: any[]
-  timestamp: string
-  tags?: string[]
+type RefreshOptions = {
+  silent?: boolean
 }
 
 interface CollectionsContextType {
   collections: Collection[]
-  savedPosts: Record<number, boolean>
-  createCollection: (name: string, description?: string, isPrivate?: boolean) => Promise<Collection>
-  updateCollection: (id: string, data: Partial<Collection>) => Promise<Collection>
-  deleteCollection: (id: string) => Promise<void>
-  saveToCollection: (postId: number, collectionId: string) => Promise<void>
-  removeFromCollection: (postId: number, collectionId: string) => Promise<void>
-  getPostCollections: (postId: number) => Collection[]
-  isSaved: (postId: number) => boolean
+  savedPosts: Record<string, boolean>
+  isLoading: boolean
+  isRefreshing: boolean
+  error: string | null
+  refreshCollections: (options?: RefreshOptions) => Promise<void>
+  createCollection: (
+    name: string,
+    description?: string,
+    isPrivate?: boolean,
+    coverImageId?: number
+  ) => Promise<Collection>
+  updateCollection: (
+    id: string,
+    data: Partial<Collection>
+  ) => Promise<{ success: boolean; message: string; collection?: Collection }>
+  deleteCollection: (id: string) => Promise<{ success: boolean; message: string }>
+  saveToCollection: (postId: string | number, collectionId: string) => Promise<void>
+  removeFromCollection: (postId: string | number, collectionId: string) => Promise<void>
+  getPostCollections: (postId: string | number) => Collection[]
+  isSaved: (postId: string | number) => boolean
   shareCollection: (
     collectionId: string,
     shareType: "link" | "user" | "social",
@@ -58,413 +47,757 @@ interface CollectionsContextType {
       recipient?: string
       permission?: "view" | "edit"
       expiresAt?: string
-    },
+    }
   ) => Promise<CollectionShare>
   getShareLink: (collectionId: string) => Promise<string>
   removeShare: (collectionId: string, shareId: string) => Promise<void>
-  updateSharePermission: (collectionId: string, shareId: string, permission: "view" | "edit") => Promise<void>
+  updateSharePermission: (
+    collectionId: string,
+    shareId: string,
+    permission: "view" | "edit"
+  ) => Promise<void>
 }
 
 const CollectionsContext = createContext<CollectionsContextType | undefined>(undefined)
 
-// Sample initial collections
-const initialCollections: Collection[] = [
-  {
-    id: "1",
-    name: "For my birthday",
-    description: "Nail designs I'm considering for my birthday celebration",
-    coverImage: "/vibrant-abstract-nails.png",
-    isPrivate: false,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    postIds: [1, 3],
-    shares: [],
-  },
-  {
-    id: "2",
-    name: "Christmas ideas",
-    description: "Festive nail art for the holiday season",
-    coverImage: "/glitter-french-elegance.png",
-    isPrivate: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    postIds: [2, 5],
-    shares: [],
-  },
-  {
-    id: "3",
-    name: "Summer",
-    description: "Bright and colorful designs for summer",
-    coverImage: "/vibrant-floral-nails.png",
-    isPrivate: false,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    postIds: [4, 6],
-    shares: [],
-  },
-]
-
-export function CollectionsProvider({ children }: { children: React.ReactNode }) {
-  const [collections, setCollections] = useState<Collection[]>([])
-  const [savedPosts, setSavedPosts] = useState<Record<number, boolean>>({})
-  const { toast } = useToast()
-
-  // Load collections from localStorage on mount
-  useEffect(() => {
-    const storedCollections = localStorage.getItem("collections")
-    const storedSavedPosts = localStorage.getItem("savedPosts")
-
-    if (storedCollections) {
-      setCollections(JSON.parse(storedCollections))
-    } else {
-      // Use initial collections if none exist
-      setCollections(initialCollections)
-      localStorage.setItem("collections", JSON.stringify(initialCollections))
-    }
-
-    if (storedSavedPosts) {
-      setSavedPosts(JSON.parse(storedSavedPosts))
-    } else {
-      // Initialize saved posts based on initial collections
-      const saved: Record<number, boolean> = {}
-      initialCollections.forEach((collection) => {
-        collection.postIds.forEach((postId) => {
-          saved[postId] = true
-        })
-      })
-      setSavedPosts(saved)
-      localStorage.setItem("savedPosts", JSON.stringify(saved))
-    }
-  }, [])
-
-  // Save collections to localStorage whenever they change
-  useEffect(() => {
-    if (collections.length > 0) {
-      localStorage.setItem("collections", JSON.stringify(collections))
-    }
-  }, [collections])
-
-  // Save savedPosts to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem("savedPosts", JSON.stringify(savedPosts))
-  }, [savedPosts])
-
-  const createCollection = async (name: string, description?: string, isPrivate = false): Promise<Collection> => {
-    const newCollection: Collection = {
-      id: Date.now().toString(),
-      name,
-      description,
-      isPrivate,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      postIds: [],
-      shares: [],
-    }
-
-    setCollections((prev) => [...prev, newCollection])
-
-    toast({
-      title: "Collection created",
-      description: `"${name}" has been created successfully.`,
-    })
-
-    return newCollection
+function ensureArray(input: any): any[] {
+  if (!input) {
+    return []
   }
 
-  const updateCollection = async (id: string, data: Partial<Collection>): Promise<Collection> => {
-    let updatedCollection: Collection | undefined
-
-    setCollections((prev) =>
-      prev.map((collection) => {
-        if (collection.id === id) {
-          updatedCollection = {
-            ...collection,
-            ...data,
-            updatedAt: new Date().toISOString(),
-          }
-          return updatedCollection
-        }
-        return collection
-      }),
-    )
-
-    if (!updatedCollection) {
-      throw new Error("Collection not found")
-    }
-
-    toast({
-      title: "Collection updated",
-      description: `"${updatedCollection.name}" has been updated.`,
-    })
-
-    return updatedCollection
+  if (Array.isArray(input)) {
+    return input
   }
 
-  const deleteCollection = async (id: string): Promise<void> => {
-    const collection = collections.find((c) => c.id === id)
-    if (!collection) {
-      throw new Error("Collection not found")
-    }
-
-    setCollections((prev) => prev.filter((collection) => collection.id !== id))
-
-    // Update savedPosts state by removing posts that are only in this collection
-    const postsToRemove = collection.postIds.filter((postId) => {
-      return !collections.filter((c) => c.id !== id).some((c) => c.postIds.includes(postId))
-    })
-
-    if (postsToRemove.length > 0) {
-      setSavedPosts((prev) => {
-        const updated = { ...prev }
-        postsToRemove.forEach((postId) => {
-          delete updated[postId]
-        })
-        return updated
-      })
-    }
-
-    toast({
-      title: "Collection deleted",
-      description: `"${collection.name}" has been deleted.`,
-    })
+  if (Array.isArray(input.data)) {
+    return input.data
   }
 
-  const saveToCollection = async (postId: number, collectionId: string): Promise<void> => {
-    setCollections((prev) =>
-      prev.map((collection) => {
-        if (collection.id === collectionId && !collection.postIds.includes(postId)) {
-          return {
-            ...collection,
-            postIds: [...collection.postIds, postId],
-            updatedAt: new Date().toISOString(),
-          }
-        }
-        return collection
-      }),
-    )
+  return []
+}
 
-    setSavedPosts((prev) => ({
-      ...prev,
-      [postId]: true,
-    }))
-
-    const collection = collections.find((c) => c.id === collectionId)
-    toast({
-      title: "Saved to collection",
-      description: `Post saved to "${collection?.name || "collection"}"`,
-    })
+function toPostIdentifier(value: unknown): string | undefined {
+  if (value === null || value === undefined) {
+    return undefined
   }
 
-  const removeFromCollection = async (postId: number, collectionId: string): Promise<void> => {
-    setCollections((prev) =>
-      prev.map((collection) => {
-        if (collection.id === collectionId) {
-          return {
-            ...collection,
-            postIds: collection.postIds.filter((id) => id !== postId),
-            updatedAt: new Date().toISOString(),
-          }
-        }
-        return collection
-      }),
-    )
-
-    // Check if the post exists in any other collections
-    const existsInOtherCollections = collections.some((c) => c.id !== collectionId && c.postIds.includes(postId))
-
-    if (!existsInOtherCollections) {
-      setSavedPosts((prev) => {
-        const updated = { ...prev }
-        delete updated[postId]
-        return updated
-      })
-    }
-
-    const collection = collections.find((c) => c.id === collectionId)
-    toast({
-      title: "Removed from collection",
-      description: `Post removed from "${collection?.name || "collection"}"`,
-    })
+  if (typeof value === "string" && value.length > 0) {
+    return value
   }
 
-  const getPostCollections = (postId: number): Collection[] => {
-    return collections.filter((collection) => collection.postIds.includes(postId))
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value.toString()
   }
 
-  const isSaved = (postId: number): boolean => {
-    return !!savedPosts[postId]
+  return undefined
+}
+
+function extractPostIdentifier(post: any): string | undefined {
+  if (!post) {
+    return undefined
   }
 
-  // New sharing functions
-  const shareCollection = async (
-    collectionId: string,
-    shareType: "link" | "user" | "social",
-    options?: {
-      recipient?: string
-      permission?: "view" | "edit"
-      expiresAt?: string
-    },
-  ): Promise<CollectionShare> => {
-    const collection = collections.find((c) => c.id === collectionId)
-    if (!collection) {
-      throw new Error("Collection not found")
-    }
-
-    // Create a new share
-    const newShare: CollectionShare = {
-      id: Date.now().toString(),
-      collectionId,
-      type: shareType,
-      recipient: options?.recipient,
-      permission: options?.permission || "view",
-      createdAt: new Date().toISOString(),
-      expiresAt: options?.expiresAt,
-      isActive: true,
-    }
-
-    // Update the collection with the new share
-    setCollections((prev) =>
-      prev.map((c) => {
-        if (c.id === collectionId) {
-          return {
-            ...c,
-            shares: [...c.shares, newShare],
-            isShared: true,
-            updatedAt: new Date().toISOString(),
-          }
-        }
-        return c
-      }),
-    )
-
-    toast({
-      title: "Collection shared",
-      description:
-        shareType === "link"
-          ? "Collection link created and copied to clipboard"
-          : `Collection shared with ${options?.recipient || "others"}`,
-    })
-
-    return newShare
-  }
-
-  const getShareLink = async (collectionId: string): Promise<string> => {
-    const collection = collections.find((c) => c.id === collectionId)
-    if (!collection) {
-      throw new Error("Collection not found")
-    }
-
-    // Generate a share link if it doesn't exist
-    if (!collection.shareLink) {
-      const baseUrl = typeof window !== "undefined" ? window.location.origin : ""
-      const shareLink = `${baseUrl}/shared/collection/${collectionId}?token=${Date.now().toString(36)}`
-
-      setCollections((prev) =>
-        prev.map((c) => {
-          if (c.id === collectionId) {
-            return {
-              ...c,
-              shareLink,
-              updatedAt: new Date().toISOString(),
-            }
-          }
-          return c
-        }),
-      )
-
-      return shareLink
-    }
-
-    return collection.shareLink
-  }
-
-  const removeShare = async (collectionId: string, shareId: string): Promise<void> => {
-    const collection = collections.find((c) => c.id === collectionId)
-    if (!collection) {
-      throw new Error("Collection not found")
-    }
-
-    // Remove the share
-    setCollections((prev) =>
-      prev.map((c) => {
-        if (c.id === collectionId) {
-          const updatedShares = c.shares.filter((share) => share.id !== shareId)
-          return {
-            ...c,
-            shares: updatedShares,
-            isShared: updatedShares.length > 0,
-            updatedAt: new Date().toISOString(),
-          }
-        }
-        return c
-      }),
-    )
-
-    toast({
-      title: "Share removed",
-      description: "The collection is no longer shared with this user",
-    })
-  }
-
-  const updateSharePermission = async (
-    collectionId: string,
-    shareId: string,
-    permission: "view" | "edit",
-  ): Promise<void> => {
-    const collection = collections.find((c) => c.id === collectionId)
-    if (!collection) {
-      throw new Error("Collection not found")
-    }
-
-    // Update the share permission
-    setCollections((prev) =>
-      prev.map((c) => {
-        if (c.id === collectionId) {
-          return {
-            ...c,
-            shares: c.shares.map((share) => {
-              if (share.id === shareId) {
-                return {
-                  ...share,
-                  permission,
-                }
-              }
-              return share
-            }),
-            updatedAt: new Date().toISOString(),
-          }
-        }
-        return c
-      }),
-    )
-
-    toast({
-      title: "Permissions updated",
-      description: `Share permissions updated to ${permission}`,
-    })
+  if (typeof post === "string" || typeof post === "number") {
+    return toPostIdentifier(post)
   }
 
   return (
-    <CollectionsContext.Provider
-      value={{
-        collections,
-        savedPosts,
-        createCollection,
-        updateCollection,
-        deleteCollection,
-        saveToCollection,
-        removeFromCollection,
-        getPostCollections,
-        isSaved,
-        shareCollection,
-        getShareLink,
-        removeShare,
-        updateSharePermission,
-      }}
-    >
-      {children}
-    </CollectionsContext.Provider>
+    toPostIdentifier(post.documentId ?? post.document_id ?? post.id) ??
+    toPostIdentifier(post.attributes?.documentId ?? post.attributes?.document_id ?? post.attributes?.id) ??
+    toPostIdentifier(post.attributes?.legacyId ?? post.attributes?.legacy_id)
   )
+}
+
+function resolveMediaUrl(media: any): string | undefined {
+  if (!media) {
+    return undefined
+  }
+
+  if (Array.isArray(media) && media.length > 0) {
+    for (const item of media) {
+      const candidate = resolveMediaUrl(item)
+      if (candidate) {
+        return candidate
+      }
+    }
+    return undefined
+  }
+
+  if (Array.isArray(media?.data) && media.data.length > 0) {
+    return resolveMediaUrl(media.data[0])
+  }
+
+  if (media?.data && typeof media.data === "object") {
+    return resolveMediaUrl(media.data)
+  }
+
+  const candidates = [
+    media?.url,
+    media?.attributes?.url,
+    media?.formats?.medium?.url,
+    media?.formats?.small?.url,
+    media?.formats?.large?.url,
+    media?.formats?.thumbnail?.url,
+    media?.attributes?.formats?.medium?.url,
+    media?.attributes?.formats?.small?.url,
+    media?.attributes?.formats?.large?.url,
+    media?.attributes?.formats?.thumbnail?.url
+  ]
+
+  const url = candidates.find((value) => typeof value === "string" && value.length > 0)
+  return url ? normalizeImageUrl(url) : undefined
+}
+
+function transformShareEntity(entity: any, collectionId: string): CollectionShare {
+  const source = entity?.attributes ?? entity ?? {}
+  const rawId = entity?.documentId ?? source.documentId ?? entity?.id ?? source.id ?? Date.now().toString(36)
+
+  return {
+    id: String(rawId),
+    collectionId,
+    type: source.type ?? "link",
+    recipient: source.recipient ?? undefined,
+    permission: source.permission === "edit" ? "edit" : "view",
+    createdAt: source.createdAt ?? new Date().toISOString(),
+    expiresAt: source.expiresAt ?? undefined,
+    isActive: source.isActive ?? true
+  }
+}
+
+function transformCollectionEntity(entity: any): Collection {
+  if (!entity) {
+    throw new Error("Invalid collection payload")
+  }
+
+  const source = entity.attributes ? { ...entity.attributes } : { ...entity }
+  const documentId =
+    entity.documentId ??
+    source.documentId ??
+    entity.id?.toString() ??
+    source.id?.toString()
+
+  if (!documentId) {
+    throw new Error("Collection is missing documentId")
+  }
+
+  const visibility = source.visibility ?? (source.isPrivate ? "private" : "public")
+  const coverImage = resolveMediaUrl(source.coverImage ?? source.cover_image)
+  const postsSource = ensureArray(source.posts)
+  const sharesSource = ensureArray(source.shares)
+  const ownerSource = source.owner?.data ?? source.owner ?? entity.owner?.data ?? entity.owner
+  const owner = ownerSource
+    ? {
+        id: ownerSource.id?.toString() ?? undefined,
+        documentId:
+          ownerSource.documentId ??
+          ownerSource.document_id ??
+          ownerSource.id?.toString() ??
+          ownerSource.attributes?.documentId ??
+          ownerSource.attributes?.document_id,
+        username:
+          ownerSource.username ??
+          ownerSource.attributes?.username ??
+          ownerSource.handle,
+        displayName: ownerSource.displayName ?? ownerSource.attributes?.displayName,
+      }
+    : undefined
+
+  const postIds = Array.from(
+    new Set(
+      postsSource
+        .map((post: any) => extractPostIdentifier(post))
+        .filter((id): id is string => typeof id === "string" && id.length > 0)
+    )
+  )
+
+  const shares = sharesSource.map((share: any) => transformShareEntity(share, documentId))
+  const shareToken = source.shareToken ?? source.share_token
+  const shareLink = shareToken ? `/shared/collection/${documentId}?token=${shareToken}` : source.shareLink
+
+  return {
+    id: documentId,
+    name: source.name ?? "Untitled collection",
+    description: source.description ?? undefined,
+    coverImage,
+    isPrivate: (visibility ?? "private") === "private",
+    createdAt: source.createdAt ?? new Date().toISOString(),
+    updatedAt: source.updatedAt ?? new Date().toISOString(),
+    postIds,
+    owner,
+    shares,
+    shareLink: shareLink ?? undefined,
+    isShared: shares.length > 0 || Boolean(shareToken)
+  }
+}
+
+function buildSavedPostMap(collections: Collection[]): Record<string, boolean> {
+  const map: Record<string, boolean> = {}
+
+  for (const collection of collections) {
+    for (const id of collection.postIds) {
+      const key = toPostIdentifier(id)
+      if (key) {
+        map[key] = true
+      }
+    }
+  }
+
+  return map
+}
+
+export function CollectionsProvider({ children }: { children: ReactNode }) {
+  const { isAuthenticated } = useAuth()
+  const { toast } = useToast()
+
+  const [collections, setCollections] = useState<Collection[]>([])
+  const [savedPosts, setSavedPosts] = useState<Record<string, boolean>>({})
+  const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const refreshCollections = useCallback(async (options?: RefreshOptions) => {
+    const useSilent = options?.silent === true
+
+    if (!isAuthenticated) {
+      setCollections([])
+      setSavedPosts({})
+      setError(null)
+      if (useSilent) {
+        setIsRefreshing(false)
+      } else {
+        setIsLoading(false)
+      }
+      return
+    }
+
+    if (useSilent) {
+      setIsRefreshing(true)
+    } else {
+      setIsLoading(true)
+    }
+
+    try {
+      const params = new URLSearchParams({
+        "populate[0]": "coverImage",
+        "populate[1]": "posts",
+        "populate[2]": "shares",
+        "fields[0]": "name",
+        "fields[1]": "description",
+        "fields[2]": "visibility",
+        "fields[3]": "shareToken",
+        "fields[4]": "createdAt",
+        "fields[5]": "updatedAt",
+        sort: "updatedAt:desc"
+      })
+
+      const response = await fetch(`/api/auth-proxy/collections?${params.toString()}`, {
+        method: "GET",
+        credentials: "include",
+        headers: {
+          Accept: "application/json"
+        },
+        cache: "no-store"
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "")
+        throw new Error(errorText || `Failed to load collections (${response.status})`)
+      }
+
+      const payload = await response.json()
+      const rawCollections = ensureArray(payload)
+      const parsedCollections = rawCollections.map((item) => transformCollectionEntity(item))
+
+      setCollections(parsedCollections)
+      setSavedPosts(buildSavedPostMap(parsedCollections))
+      setError(null)
+    } catch (refreshError) {
+      console.error("Failed to load collections:", refreshError)
+      setError(refreshError instanceof Error ? refreshError.message : "Unknown error")
+      if (!useSilent) {
+        toast({
+          title: "Could not load collections",
+          description: "Please try again in a moment.",
+          variant: "destructive"
+        })
+      }
+    } finally {
+      if (useSilent) {
+        setIsRefreshing(false)
+      } else {
+        setIsLoading(false)
+      }
+    }
+  }, [isAuthenticated, toast])
+
+  useEffect(() => {
+    refreshCollections().catch((bootstrapError) => {
+      console.error("Collections bootstrap error:", bootstrapError)
+    })
+  }, [refreshCollections])
+
+  const createCollection = useCallback(
+    async (
+      name: string,
+      description?: string,
+      isPrivate = false,
+      coverImageId?: number
+    ): Promise<Collection> => {
+      if (!isAuthenticated) {
+        throw new Error("Authentication required")
+      }
+
+      const payload: Record<string, unknown> = {
+        name,
+        visibility: isPrivate ? "private" : "public"
+      }
+
+      if (description !== undefined) {
+        payload.description = description || undefined
+      }
+
+      if (typeof coverImageId === "number") {
+        payload.coverImage = coverImageId
+      }
+
+      const response = await fetch("/api/auth-proxy/collections", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ data: payload })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "")
+        throw new Error(errorText || "Failed to create collection")
+      }
+
+      const body = await response.json()
+      const created = transformCollectionEntity(body.data ?? body)
+
+      let nextCollections: Collection[] = []
+      setCollections((prev) => {
+        const exists = prev.some((collection) => collection.id === created.id)
+        nextCollections = exists
+          ? prev.map((collection) => (collection.id === created.id ? created : collection))
+          : [...prev, created]
+        return nextCollections
+      })
+      setSavedPosts(buildSavedPostMap(nextCollections))
+
+      void refreshCollections({ silent: true })
+      return created
+    },
+    [isAuthenticated, refreshCollections]
+  )
+
+  const updateCollection = useCallback(
+    async (
+      id: string,
+      data: Partial<Collection>
+    ): Promise<{ success: boolean; message: string; collection?: Collection }> => {
+      if (!isAuthenticated) {
+        return { success: false, message: "Authentication required" }
+      }
+
+      const payload: Record<string, unknown> = {}
+
+      if (data.name !== undefined) {
+        payload.name = data.name
+      }
+
+      if (data.description !== undefined) {
+        payload.description = data.description ?? null
+      }
+
+      if (data.isPrivate !== undefined) {
+        payload.visibility = data.isPrivate ? "private" : "public"
+      }
+
+      if (Object.keys(payload).length === 0) {
+        const existing = collections.find((collection) => collection.id === id)
+        return { success: true, message: "No changes applied", collection: existing }
+      }
+
+      const response = await fetch(`/api/auth-proxy/collections/${id}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ data: payload })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "")
+        return {
+          success: false,
+          message: errorText || "Failed to update collection"
+        }
+      }
+
+      const body = await response.json()
+      const updated = transformCollectionEntity(body.data ?? body)
+
+      let nextCollections: Collection[] = []
+      setCollections((prev) => {
+        nextCollections = prev.map((collection) =>
+          collection.id === updated.id ? updated : collection
+        )
+        return nextCollections
+      })
+      setSavedPosts(buildSavedPostMap(nextCollections))
+
+      void refreshCollections({ silent: true })
+      return { success: true, message: "Collection updated", collection: updated }
+    },
+    [collections, isAuthenticated, refreshCollections]
+  )
+
+  const deleteCollection = useCallback(
+    async (id: string): Promise<{ success: boolean; message: string }> => {
+      if (!isAuthenticated) {
+        return { success: false, message: "Authentication required" }
+      }
+
+      const response = await fetch(`/api/auth-proxy/collections/${id}`, {
+        method: "DELETE",
+        credentials: "include"
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "")
+        return {
+          success: false,
+          message: errorText || "Failed to delete collection"
+        }
+      }
+
+      let nextCollections: Collection[] = []
+      setCollections((prev) => {
+        nextCollections = prev.filter((collection) => collection.id !== id)
+        return nextCollections
+      })
+      setSavedPosts(buildSavedPostMap(nextCollections))
+
+      void refreshCollections({ silent: true })
+      return { success: true, message: "Collection deleted" }
+    },
+    [isAuthenticated, refreshCollections]
+  )
+
+  const saveToCollection = useCallback(
+    async (postId: string | number, collectionId: string) => {
+      if (!isAuthenticated) {
+        throw new Error("Authentication required")
+      }
+
+      const target = collections.find((collection) => collection.id === collectionId)
+      if (!target) {
+        throw new Error("Collection not found")
+      }
+
+      const identifier = toPostIdentifier(postId)
+      if (!identifier) {
+        throw new Error("Invalid post identifier")
+      }
+
+      if (target.postIds.includes(identifier)) {
+        return
+      }
+
+      const updatedPostIds = Array.from(new Set([...target.postIds, identifier]))
+
+      const response = await fetch(`/api/auth-proxy/collections/${collectionId}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ data: { posts: updatedPostIds } })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "")
+        throw new Error(errorText || "Failed to add post to collection")
+      }
+
+      const body = await response.json()
+      const updated = transformCollectionEntity(body.data ?? body)
+
+      let nextCollections: Collection[] = []
+      setCollections((prev) => {
+        nextCollections = prev.map((collection) =>
+          collection.id === updated.id ? updated : collection
+        )
+        return nextCollections
+      })
+      setSavedPosts(buildSavedPostMap(nextCollections))
+
+      void refreshCollections({ silent: true })
+    },
+    [collections, isAuthenticated, refreshCollections]
+  )
+
+  const removeFromCollection = useCallback(
+    async (postId: string | number, collectionId: string) => {
+      if (!isAuthenticated) {
+        throw new Error("Authentication required")
+      }
+
+      const target = collections.find((collection) => collection.id === collectionId)
+      if (!target) {
+        throw new Error("Collection not found")
+      }
+
+      const identifier = toPostIdentifier(postId)
+      if (!identifier) {
+        throw new Error("Invalid post identifier")
+      }
+
+      if (!target.postIds.includes(identifier)) {
+        return
+      }
+
+      const remainingPostIds = target.postIds.filter((id) => id !== identifier)
+
+      const response = await fetch(`/api/auth-proxy/collections/${collectionId}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ data: { posts: remainingPostIds } })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "")
+        throw new Error(errorText || "Failed to remove post from collection")
+      }
+
+      const body = await response.json()
+      const updated = transformCollectionEntity(body.data ?? body)
+
+      let nextCollections: Collection[] = []
+      setCollections((prev) => {
+        nextCollections = prev.map((collection) =>
+          collection.id === updated.id ? updated : collection
+        )
+        return nextCollections
+      })
+      setSavedPosts(buildSavedPostMap(nextCollections))
+
+      void refreshCollections({ silent: true })
+    },
+    [collections, isAuthenticated, refreshCollections]
+  )
+
+  const getPostCollections = useCallback(
+    (postId: string | number) => {
+      const identifier = toPostIdentifier(postId)
+      if (!identifier) {
+        return []
+      }
+
+      return collections.filter((collection) => collection.postIds.includes(identifier))
+    },
+    [collections]
+  )
+
+  const isSaved = useCallback(
+    (postId: string | number) => {
+      const identifier = toPostIdentifier(postId)
+      return identifier ? Boolean(savedPosts[identifier]) : false
+    },
+    [savedPosts]
+  )
+
+  const shareCollection = useCallback(
+    async (
+      collectionId: string,
+      shareType: "link" | "user" | "social",
+      options?: {
+        recipient?: string
+        permission?: "view" | "edit"
+        expiresAt?: string
+      }
+    ): Promise<CollectionShare> => {
+      const collection = collections.find((item) => item.id === collectionId)
+      if (!collection) {
+        throw new Error("Collection not found")
+      }
+
+      const newShare: CollectionShare = {
+        id: Date.now().toString(36),
+        collectionId,
+        type: shareType,
+        recipient: options?.recipient,
+        permission: options?.permission ?? "view",
+        createdAt: new Date().toISOString(),
+        expiresAt: options?.expiresAt,
+        isActive: true
+      }
+
+      setCollections((prev) =>
+        prev.map((item) =>
+          item.id === collectionId
+            ? {
+                ...item,
+                shares: [...item.shares, newShare],
+                isShared: true
+              }
+            : item
+        )
+      )
+
+      toast({
+        title: "Collection shared",
+        description:
+          shareType === "link"
+            ? "Shareable link generated."
+            : `Collection shared with ${options?.recipient ?? "a user"}.`
+      })
+
+      return newShare
+    },
+    [collections, toast]
+  )
+
+  const getShareLink = useCallback(
+    async (collectionId: string): Promise<string> => {
+      const collection = collections.find((item) => item.id === collectionId)
+      if (!collection) {
+        throw new Error("Collection not found")
+      }
+
+      if (collection.shareLink) {
+        return collection.shareLink
+      }
+
+      const origin = typeof window !== "undefined" ? window.location.origin : ""
+      const shareLink = `${origin}/shared/collection/${collectionId}?token=${Date.now().toString(36)}`
+
+      setCollections((prev) =>
+        prev.map((item) =>
+          item.id === collectionId
+            ? {
+                ...item,
+                shareLink,
+                isShared: true
+              }
+            : item
+        )
+      )
+
+      toast({
+        title: "Share link created",
+        description: "Anyone with the link can view this collection."
+      })
+
+      return shareLink
+    },
+    [collections, toast]
+  )
+
+  const removeShare = useCallback(
+    async (collectionId: string, shareId: string) => {
+      setCollections((prev) =>
+        prev.map((item) => {
+          if (item.id !== collectionId) {
+            return item
+          }
+
+          const nextShares = item.shares.filter((share) => share.id !== shareId)
+          return {
+            ...item,
+            shares: nextShares,
+            isShared: nextShares.length > 0
+          }
+        })
+      )
+
+      toast({
+        title: "Share removed",
+        description: "The collection is no longer shared with that entry."
+      })
+    },
+    [toast]
+  )
+
+  const updateSharePermission = useCallback(
+    async (collectionId: string, shareId: string, permission: "view" | "edit") => {
+      setCollections((prev) =>
+        prev.map((item) => {
+          if (item.id !== collectionId) {
+            return item
+          }
+
+          return {
+            ...item,
+            shares: item.shares.map((share) =>
+              share.id === shareId
+                ? {
+                    ...share,
+                    permission
+                  }
+                : share
+            )
+          }
+        })
+      )
+
+      toast({
+        title: "Permissions updated",
+        description: `Share permission set to ${permission}.`
+      })
+    },
+    [toast]
+  )
+
+  const contextValue = useMemo(
+    () => ({
+      collections,
+      savedPosts,
+      isLoading,
+      isRefreshing,
+      error,
+      refreshCollections,
+      createCollection,
+      updateCollection,
+      deleteCollection,
+      saveToCollection,
+      removeFromCollection,
+      getPostCollections,
+      isSaved,
+      shareCollection,
+      getShareLink,
+      removeShare,
+      updateSharePermission
+    }),
+    [
+      collections,
+      savedPosts,
+      isLoading,
+      isRefreshing,
+      error,
+      refreshCollections,
+      createCollection,
+      updateCollection,
+      deleteCollection,
+      saveToCollection,
+      removeFromCollection,
+      getPostCollections,
+      isSaved,
+      shareCollection,
+      getShareLink,
+      removeShare,
+      updateSharePermission
+    ]
+  )
+
+  return <CollectionsContext.Provider value={contextValue}>{children}</CollectionsContext.Provider>
 }
 
 export function useCollections() {
@@ -474,3 +807,5 @@ export function useCollections() {
   }
   return context
 }
+
+export type { Collection, CollectionShare }

@@ -10,8 +10,10 @@ import CollectionGridItem from "./collection-grid-item"
 import CollectionListItem from "./collection-list-item"
 import CollectionFormModal from "./collection-form-modal"
 import EmptyCollectionsState from "./empty-collections-state"
-import { createCollection, updateCollection, deleteCollection } from "@/lib/collections-actions"
+import { useCollections } from "@/context/collections-context"
+import { uploadFiles } from "@/lib/services/client-upload-service"
 import { useToast } from "@/hooks/use-toast"
+import { normalizeImageUrl } from "@/lib/image-utils"
 
 interface CollectionsClientProps {
   initialCollections: Collection[]
@@ -20,6 +22,7 @@ interface CollectionsClientProps {
 export default function CollectionsClient({ initialCollections }: CollectionsClientProps) {
   const router = useRouter()
   const { toast } = useToast()
+  const { createCollection, updateCollection, deleteCollection } = useCollections()
 
   // State
   const [collections, setCollections] = useState<Collection[]>(initialCollections)
@@ -60,21 +63,39 @@ export default function CollectionsClient({ initialCollections }: CollectionsCli
   }, [searchQuery, collections])
 
   // Handle create collection
-  const handleCreateCollection = async (name: string, description: string, isPrivate: boolean) => {
+  const handleCreateCollection = async (
+    name: string,
+    description: string,
+    isPrivate: boolean,
+    coverImageFile?: File | null,
+  ) => {
     try {
-      const result = await createCollection(name, description, isPrivate)
-
-      if (result.success && result.collection) {
-        // Optimistically update the UI
-        setCollections((prev) => [...prev, result.collection!])
-
-        toast({
-          title: "Collection created",
-          description: `"${name}" has been created successfully.`,
-        })
-      } else {
-        throw new Error(result.message)
+      let coverImageId: number | undefined
+      let coverImageUrl: string | undefined
+      if (coverImageFile) {
+        const uploaded = await uploadFiles([coverImageFile])
+        if (!uploaded.success || !uploaded.files?.[0]) {
+          throw new Error(uploaded.error || "Failed to upload cover image")
+        }
+        const uploadedFile = uploaded.files[0]
+        coverImageId = uploadedFile.id
+        coverImageUrl = normalizeImageUrl(uploadedFile.url)
       }
+
+      const newCollection = await createCollection(name, description, isPrivate, coverImageId)
+
+      // Optimistically update the UI
+      const hydratedCollection =
+        coverImageUrl && !newCollection.coverImage
+          ? { ...newCollection, coverImage: coverImageUrl }
+          : newCollection
+
+      setCollections((prev) => [...prev, hydratedCollection])
+
+      toast({
+        title: "Collection created",
+        description: `"${name}" has been created successfully.`,
+      })
     } catch (error) {
       console.error("Error creating collection:", error)
       toast({
@@ -148,7 +169,7 @@ export default function CollectionsClient({ initialCollections }: CollectionsCli
 
   // Handle view collection
   const handleViewCollection = (id: string) => {
-    router.push(`/collections/${id}`)
+    router.push(`/me/collections/${id}`)
   }
 
   // Handle edit button click

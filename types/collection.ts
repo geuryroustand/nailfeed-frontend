@@ -1,3 +1,5 @@
+import type { Post } from "@/lib/post-data"
+
 export interface CollectionShare {
   id: string
   collectionId: string
@@ -17,8 +19,19 @@ export interface Collection {
   isPrivate: boolean
   createdAt: string
   updatedAt: string
-  postIds: number[]
+  /**
+   * Stored as Strapi document identifiers to support both numeric and UUID-style IDs.
+   * Always compare using string equality.
+   */
+  postIds: string[]
+  owner?: {
+    id?: string
+    documentId?: string
+    username?: string
+    displayName?: string
+  }
   shares: CollectionShare[]
   shareLink?: string
   isShared?: boolean
+  posts?: Post[]
 }

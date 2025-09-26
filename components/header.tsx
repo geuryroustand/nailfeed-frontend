@@ -1,57 +1,73 @@
-"use client"
+"use client";
 
-import { Bell, MessageCircle } from "lucide-react"
-import { motion } from "framer-motion"
-import Link from "next/link"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
+import { Bell, MessageCircle } from "lucide-react";
+import { motion } from "framer-motion";
+import Link from "next/link";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { normalizeImageUrl } from "@/lib/image-utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { useAuth } from "@/hooks/use-auth"
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+} from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/hooks/use-auth";
+import { logoutAction } from "@/app/actions/auth-actions";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 export default function Header() {
-  const { user, isAuthenticated, isLoading, logout, checkAuthStatus } = useAuth()
-  const [isLoggingOut, setIsLoggingOut] = useState(false)
-  const router = useRouter()
-  const [mounted, setMounted] = useState(false)
+  const { user, isAuthenticated, isLoading, clearUserState, checkAuthStatus } =
+    useAuth();
+  const userProfileImageUrl = user?.profileImage?.url
+    ? normalizeImageUrl(user.profileImage.url)
+    : undefined;
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const router = useRouter();
+  const [mounted, setMounted] = useState(false);
 
   // Set mounted state to true after component mounts
   useEffect(() => {
-    setMounted(true)
+    setMounted(true);
     // Check auth status when component mounts
-    checkAuthStatus()
-  }, [checkAuthStatus])
+    checkAuthStatus();
+  }, [checkAuthStatus]);
 
   // Debug effect to log auth state in header
   useEffect(() => {
     if (mounted) {
-      console.log("[SERVER]\nHeader auth state:", { isAuthenticated, user })
+      console.log("[SERVER]\nHeader auth state:", { isAuthenticated, user });
     }
-  }, [isAuthenticated, user, mounted])
+  }, [isAuthenticated, user, mounted]);
 
+  // ✅ SECURITY: Use server action for logout
   const handleLogout = async () => {
-    if (isLoggingOut) return // Prevent multiple clicks
+    if (isLoggingOut) return; // Prevent multiple clicks
 
-    setIsLoggingOut(true)
+    setIsLoggingOut(true);
     try {
-      await logout()
+      const result = await logoutAction();
+      if (result.success) {
+        clearUserState(); // Clear client-side state
+      } else {
+        console.error("Logout failed:", result.error);
+        // Still clear client state even if server logout fails
+        clearUserState();
+      }
     } catch (error) {
-      console.error("Logout error:", error)
+      console.error("Logout error:", error);
+      // Still clear client state even if server logout fails
+      clearUserState();
     } finally {
-      setIsLoggingOut(false)
+      setIsLoggingOut(false);
     }
-  }
+  };
 
   // Don't render anything until after client-side hydration
   if (!mounted) {
-    return null
+    return null;
   }
 
   return (
@@ -117,10 +133,19 @@ export default function Header() {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 ml-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-full h-8 w-8 ml-1"
+              >
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src={user?.profileImage?.url || "/diverse-avatars.png"} alt="Your profile" />
-                  <AvatarFallback>{user?.username?.substring(0, 2).toUpperCase() || "YP"}</AvatarFallback>
+                  <AvatarImage
+                    src={userProfileImageUrl || "/diverse-avatars.png"}
+                    alt="Your profile"
+                  />
+                  <AvatarFallback>
+                    {user?.username?.substring(0, 2).toUpperCase() || "YP"}
+                  </AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
@@ -128,17 +153,37 @@ export default function Header() {
               {isAuthenticated ? (
                 <>
                   <DropdownMenuItem>
-                    <Link href="/profile" className="flex items-center w-full">
+                    <Link href="/me" className="flex items-center w-full">
                       Profile
                     </Link>
                   </DropdownMenuItem>
+                  {/* <DropdownMenuItem>
+                    <Link href="/me/saved" className="flex items-center w-full">
+                      Saved Posts
+                    </Link>
+                  </DropdownMenuItem> */}
                   <DropdownMenuItem>
-                    <Link href="/settings/account" className="flex items-center w-full">
+                    <Link
+                      href="/me/collections"
+                      className="flex items-center w-full"
+                    >
+                      My Collections
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem>
+                    <Link
+                      href="/me/settings"
+                      className="flex items-center w-full"
+                    >
                       Settings
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout} disabled={isLoggingOut} className="cursor-pointer">
+                  <DropdownMenuItem
+                    onClick={handleLogout}
+                    disabled={isLoggingOut}
+                    className="cursor-pointer"
+                  >
                     {isLoggingOut ? "Logging out..." : "Log out"}
                   </DropdownMenuItem>
                 </>
@@ -156,5 +201,5 @@ export default function Header() {
         </div>
       </div>
     </header>
-  )
+  );
 }

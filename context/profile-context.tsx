@@ -18,12 +18,13 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const { token, user } = useAuth()
+  const { user, isAuthenticated, refreshUser } = useAuth()
 
   // Fetch profile data
   const fetchProfile = useCallback(
     async (forceRefresh = false) => {
-      if (!token) {
+      if (!isAuthenticated) {
+        setProfile(null)
         setIsLoading(false)
         return null
       }
@@ -32,8 +33,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       setError(null)
 
       try {
-        // Pass forceRefresh to getProfile
-        const profileData = await ProfileService.getProfile(token, forceRefresh)
+        const profileData = await ProfileService.getProfile(forceRefresh)
         setProfile(profileData)
         return profileData
       } catch (err) {
@@ -44,7 +44,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         setIsLoading(false)
       }
     },
-    [token],
+    [isAuthenticated],
   )
 
   // Refresh profile data
@@ -55,15 +55,14 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   // Update profile
   const updateProfile = useCallback(
     async (profileData: UpdateProfileInput): Promise<UserProfile | null> => {
-      if (!token) return null
-
       setIsLoading(true)
       setError(null)
 
       try {
-        const updatedProfile = await ProfileService.updateProfile(token, profileData)
+        const updatedProfile = await ProfileService.updateProfile(profileData)
         if (updatedProfile) {
           setProfile(updatedProfile)
+          await refreshUser()
         }
         return updatedProfile
       } catch (err) {
@@ -74,13 +73,21 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         setIsLoading(false)
       }
     },
-    [token],
+    [refreshUser],
   )
 
   // Fetch profile on mount or when token changes
   useEffect(() => {
     fetchProfile()
-  }, [fetchProfile])
+  }, [fetchProfile, isAuthenticated])
+
+  useEffect(() => {
+    if (user) {
+      setProfile(user as UserProfile)
+    } else {
+      setProfile(null)
+    }
+  }, [user])
 
   const value = {
     profile,

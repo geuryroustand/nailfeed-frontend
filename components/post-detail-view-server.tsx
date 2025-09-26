@@ -1,7 +1,7 @@
 import { Suspense } from "react"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { EnhancedAvatar } from "@/components/ui/enhanced-avatar"
 import type { Post } from "@/lib/post-data"
 import { EnhancedMediaGallery } from "./enhanced-media-gallery"
 import PostDetailClientWrapper from "./post-detail-client-wrapper"
@@ -117,10 +117,13 @@ export default function PostDetailView({ post, relatedPosts = [] }: PostDetailVi
         <div className="p-4 sm:p-6 border-b">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <Avatar className="h-12 w-12 sm:h-14 sm:w-14">
-                <AvatarImage src={post.userImage || "/placeholder.svg"} alt={post.username} />
-                <AvatarFallback>{post.username.substring(0, 2).toUpperCase()}</AvatarFallback>
-              </Avatar>
+              <EnhancedAvatar
+                src={post.userImage}
+                alt={post.username}
+                fallbackText={post.username}
+                size="lg"
+                className="h-12 w-12 sm:h-14 sm:w-14"
+              />
               <div className="ml-3">
                 <p className="text-base sm:text-lg font-medium">{post.username}</p>
                 <p className="text-sm text-gray-500">{post.timestamp}</p>

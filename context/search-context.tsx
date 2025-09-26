@@ -9,8 +9,12 @@ interface Post {
   userImage: string
   image: string
   description: string
-  likes: number
-  comments: any[]
+  // Use backend calculated counts
+  likesCount?: number
+  commentsCount?: number
+  // Legacy fields for backward compatibility
+  likes?: number
+  comments?: any[]
   timestamp: string
   tags?: string[]
   colors?: string[]

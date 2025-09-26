@@ -1,5 +1,5 @@
-import { cookies } from "next/headers"
 import { NextResponse, type NextRequest } from "next/server"
+import { verifySession } from "@/lib/auth/session"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
 const SERVER_API_TOKEN = process.env.API_TOKEN || ""
@@ -22,9 +22,9 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData()
 
-    // Determine Authorization header: JWT cookie > server token
-    const cookieStore = cookies()
-    const jwt = cookieStore.get("jwt")?.value || cookieStore.get("authToken")?.value
+    // Determine Authorization header: session JWT > server token
+    const session = await verifySession()
+    const jwt = session?.strapiJWT as string | undefined
     const headers: HeadersInit = {}
     if (jwt) headers["Authorization"] = `Bearer ${jwt}`
     else if (SERVER_API_TOKEN) headers["Authorization"] = `Bearer ${SERVER_API_TOKEN}`

@@ -1,13 +1,13 @@
 # CLAUDE.md
 
-This document guides AI/code assistants contributing to this repository. It intentionally contains no API keys, tokens, or sensitive environment variable names or values.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Development Commands
 
-- pnpm dev — Start development server
-- pnpm build — Build production application
-- pnpm start — Start production server
-- pnpm lint — Run ESLint (linting is not blocking builds)
+- npm run dev — Start development server
+- npm run build — Build production application
+- npm run start — Start production server
+- npm run lint — Run ESLint (linting is not blocking builds)
 
 ## Architecture Overview
 

@@ -1,8 +1,11 @@
-import { cookies } from "next/headers"
-import config from "@/lib/config"
-import type { UserProfileResponse } from "@/lib/services/user-service"
-import { processUserForProfile, processPostsForGallery } from "@/lib/post-data-processors"
-import qs from "qs"
+import { cookies } from "next/headers";
+import config from "@/lib/config";
+import type { UserProfileResponse } from "@/lib/services/user-service";
+import {
+  processUserForProfile,
+  processPostsForGallery,
+} from "@/lib/post-data-processors";
+import qs from "qs";
 
 /**
  * Fetches user profile data using a single optimized API call
@@ -11,23 +14,27 @@ import qs from "qs"
  */
 export async function fetchUserProfile(username: string) {
   try {
-    console.log(`Fetching optimized profile data for username: ${username}`)
+    console.log(`Fetching optimized profile data for username: ${username}`);
 
-    // Get authentication token from cookies or server config only
-    const cookieToken = cookies().get("jwt")?.value || cookies().get("authToken")?.value
-    const configToken = config.api.getApiToken()
-    const serverToken = process.env.API_TOKEN // Only use server-side API_TOKEN
+    // Get authentication token from cookies or server config only - await for Next.js 15
+    const cookieStore = await cookies()
+    const cookieToken =
+      cookieStore.get("jwt")?.value || cookieStore.get("authToken")?.value;
+    const configToken = config.api.getApiToken();
+    const serverToken = process.env.API_TOKEN; // Only use server-side API_TOKEN
 
-    const token = cookieToken || configToken || serverToken
-    const isAuthenticated = !!cookieToken
+    const token = cookieToken || configToken || serverToken;
+    const isAuthenticated = !!cookieToken;
 
     if (!token) {
-      console.error("No API token available for fetching profile data")
-      return { error: true, message: "No API token available" }
+      console.error("No API token available for fetching profile data");
+      return { error: true, message: "No API token available" };
     }
 
     // Construct the optimized API URL with all required data in a single request
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
+    const apiUrl =
+      process.env.NEXT_PUBLIC_API_URL ||
+      "https://nailfeed-backend-production.up.railway.app";
 
     // Use qs to construct the query parameters
     const query = qs.stringify(
@@ -47,11 +54,7 @@ export async function fetchUserProfile(username: string) {
               },
             },
             populate: {
-              mediaItems: {
-                populate: {
-                  file: true,
-                },
-              },
+              media: true, // Simplified populate for Strapi v5
             },
           },
           followers: {
@@ -90,13 +93,21 @@ export async function fetchUserProfile(username: string) {
       },
       {
         encodeValuesOnly: true, // Don't encode the keys, only the values
-      },
-    )
+      }
+    );
 
-    const url = `${apiUrl}/api/users?${query}`
+    const url = `${apiUrl}/api/users?${query}`;
 
-    console.log(`Fetching from optimized endpoint: ${url}`)
-    console.log(`Using token type: ${cookieToken ? "user JWT" : configToken ? "server config" : "fallback API token"}`)
+    console.log(`Fetching from optimized endpoint: ${url}`);
+    console.log(
+      `Using token type: ${
+        cookieToken
+          ? "user JWT"
+          : configToken
+          ? "server config"
+          : "fallback API token"
+      }`
+    );
 
     // Make the API request with proper error handling
     const response = await fetch(url, {
@@ -106,60 +117,66 @@ export async function fetchUserProfile(username: string) {
       },
       cache: "no-store",
       next: { revalidate: 0 },
-    })
+    });
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => "Failed to get error text")
-      console.error(`Failed to fetch profile data: ${response.status} - ${errorText}`)
+      const errorText = await response
+        .text()
+        .catch(() => "Failed to get error text");
+      console.error(
+        `Failed to fetch profile data: ${response.status} - ${errorText}`
+      );
 
       if (response.status === 401 || response.status === 403) {
-        console.log(`Authentication failed for profile ${username}, but continuing with limited access`)
+        console.log(
+          `Authentication failed for profile ${username}, but continuing with limited access`
+        );
         // Don't return error immediately, let it fall through to handle as not found
       }
 
-      return { error: true, message: `API error: ${response.status}` }
+      return { error: true, message: `API error: ${response.status}` };
     }
 
     // Parse the response data with error handling
-    let responseData
+    let responseData;
     try {
-      responseData = await response.json()
+      responseData = await response.json();
     } catch (parseError) {
-      console.error("Failed to parse API response:", parseError)
-      return { error: true, message: "Invalid API response format" }
+      console.error("Failed to parse API response:", parseError);
+      return { error: true, message: "Invalid API response format" };
     }
 
     // Handle both array response and object with data property
     const usersArray = Array.isArray(responseData)
       ? responseData
       : responseData.data && Array.isArray(responseData.data)
-        ? responseData.data
-        : null
+      ? responseData.data
+      : null;
 
     if (!usersArray || usersArray.length === 0) {
-      console.error(`No user found with username: ${username}`)
-      return { notFound: true }
+      console.error(`No user found with username: ${username}`);
+      return { notFound: true };
     }
 
     // Get the first user from the array
-    const userData = usersArray[0]
+    const userData = usersArray[0];
 
     if (!userData || !userData.username) {
-      console.error(`Invalid user data for username: ${username}`)
-      return { notFound: true }
+      console.error(`Invalid user data for username: ${username}`);
+      return { notFound: true };
     }
 
     // Process the user data using the new processors
-    const processedUser = processUserForProfile(userData)
+    const processedUser = processUserForProfile(userData);
 
     // Process followers and following data
-    const followers = processFollowers(userData.followers || [])
-    const following = processFollowing(userData.following || [])
+    const followers = processFollowers(userData.followers || []);
+    const following = processFollowing(userData.following || []);
 
     // Process posts data with media items using the new processor
-    const posts = processPostsForGallery(userData.posts || [])
+    const posts = processPostsForGallery(userData.posts || []);
 
-    let isFollowing = false
+    let isFollowing = false;
     if (isAuthenticated && cookieToken) {
       try {
         const currentUserResponse = await fetch(`${apiUrl}/api/users/me`, {
@@ -168,13 +185,15 @@ export async function fetchUserProfile(username: string) {
             Authorization: `Bearer ${cookieToken}`,
           },
           cache: "no-store",
-        })
+        });
 
         if (currentUserResponse.ok) {
-          const currentUserData = await currentUserResponse.json()
-          const currentUserId = currentUserData.id
+          const currentUserData = await currentUserResponse.json();
+          const currentUserId = currentUserData.id;
 
-          console.log(`[v0] Checking if user ${currentUserId} is following ${userData.username} (ID: ${userData.id})`)
+          console.log(
+            `[v0] Checking if user ${currentUserId} is following ${userData.username} (ID: ${userData.id})`
+          );
 
           // Check if current user is following this profile user
           const followsQuery = qs.stringify(
@@ -198,25 +217,30 @@ export async function fetchUserProfile(username: string) {
                 ],
               },
             },
-            { encodeValuesOnly: true },
-          )
+            { encodeValuesOnly: true }
+          );
 
-          const followCheckResponse = await fetch(`${apiUrl}/api/follows?${followsQuery}`, {
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${cookieToken}`,
-            },
-            cache: "no-store",
-          })
+          const followCheckResponse = await fetch(
+            `${apiUrl}/api/follows?${followsQuery}`,
+            {
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${cookieToken}`,
+              },
+              cache: "no-store",
+            }
+          );
 
           if (followCheckResponse.ok) {
-            const followCheckData = await followCheckResponse.json()
-            isFollowing = !!(followCheckData.data?.length > 0 || followCheckData.length > 0)
-            console.log(`Follow status for ${username}: ${isFollowing}`)
+            const followCheckData = await followCheckResponse.json();
+            isFollowing = !!(
+              followCheckData.data?.length > 0 || followCheckData.length > 0
+            );
+            console.log(`Follow status for ${username}: ${isFollowing}`);
           }
         }
       } catch (error) {
-        console.error("Error checking follow status:", error)
+        console.error("Error checking follow status:", error);
         // Continue with isFollowing = false
       }
     }
@@ -233,27 +257,36 @@ export async function fetchUserProfile(username: string) {
       following: following,
       posts: posts,
       isFollowing: isFollowing,
-    }
+    };
 
-    console.log(`Successfully fetched optimized profile data for ${username}`)
+    console.log(`Successfully fetched optimized profile data for ${username}`);
     console.log(
-      `Profile stats: ${transformedUser.stats.posts} posts, ${transformedUser.stats.followers} followers, ${transformedUser.stats.following} following`,
-    )
+      `Profile stats: ${transformedUser.stats.posts} posts, ${transformedUser.stats.followers} followers, ${transformedUser.stats.following} following`
+    );
     console.log(
-      `Posts with media items: ${posts.filter((post) => post.mediaItems && post.mediaItems.length > 0).length}`,
-    )
+      `Posts with media items: ${
+        posts.filter((post) => post.mediaItems && post.mediaItems.length > 0)
+          .length
+      }`
+    );
 
     // Check if this is the current user's profile
-    const isOwnProfile = false // Default to false for public profiles
+    const isOwnProfile = false; // Default to false for public profiles
 
     return {
       user: transformedUser,
       isAuthenticated,
       isOwnProfile,
-    }
+    };
   } catch (error) {
-    console.error(`Error fetching optimized profile data for ${username}:`, error)
-    return { error: true, message: error instanceof Error ? error.message : "Unknown error" }
+    console.error(
+      `Error fetching optimized profile data for ${username}:`,
+      error
+    );
+    return {
+      error: true,
+      message: error instanceof Error ? error.message : "Unknown error",
+    };
   }
 }
 
@@ -261,42 +294,343 @@ export async function fetchUserProfile(username: string) {
  * Process followers data from API response
  */
 function processFollowers(followers: any[]): any[] {
-  if (!Array.isArray(followers)) return []
+  if (!Array.isArray(followers)) return [];
 
   return followers
     .map((item) => {
       // Extract follower data based on the API response structure
-      const followerData = item.follower || {}
+      const followerData = item.follower || {};
 
       return {
         id: followerData.id || item.id,
         username: followerData.username || "",
         displayName: followerData.displayName || followerData.username || "",
         profileImage: followerData.profileImage || null,
-      }
+      };
     })
-    .filter((follower) => follower.username) // Filter out invalid followers
+    .filter((follower) => follower.username); // Filter out invalid followers
 }
 
 /**
  * Process following data from API response
  */
 function processFollowing(following: any[]): any[] {
-  if (!Array.isArray(following)) return []
+  if (!Array.isArray(following)) return [];
 
   return following
     .map((item) => {
       // Extract following data based on the API response structure
-      const followingData = item.following || {}
+      const followingData = item.following || {};
 
       return {
         id: followingData.id || item.id,
         username: followingData.username || "",
         displayName: followingData.displayName || followingData.username || "",
         profileImage: followingData.profileImage || null,
-      }
+      };
     })
-    .filter((follow) => follow.username) // Filter out invalid following
+    .filter((follow) => follow.username); // Filter out invalid following
+}
+
+/**
+ * Fetches user profile data by documentId using a single optimized API call
+ * @param documentId The documentId to fetch profile data for (Strapi v5)
+ * @returns The profile data or an error/not found indicator
+ */
+export async function fetchUserProfileByDocumentId(documentId: string) {
+  try {
+    console.log(`Fetching optimized profile data for documentId: ${documentId}`);
+
+    // Get authentication token from cookies or server config only - await for Next.js 15
+    const cookieStore = await cookies()
+    const cookieToken =
+      cookieStore.get("jwt")?.value || cookieStore.get("authToken")?.value;
+    const configToken = config.api.getApiToken();
+    const serverToken = process.env.API_TOKEN; // Only use server-side API_TOKEN
+
+    const token = cookieToken || configToken || serverToken;
+    const isAuthenticated = !!cookieToken;
+
+    if (!token) {
+      console.error("No API token available for fetching profile data");
+      return { error: true, message: "No API token available" };
+    }
+
+    // Construct the optimized API URL with all required data in a single request
+    const apiUrl =
+      process.env.NEXT_PUBLIC_API_URL ||
+      "https://nailfeed-backend-production.up.railway.app";
+
+    // Use qs to construct the query parameters for Strapi v5 with documentId
+    const query = qs.stringify(
+      {
+        filters: {
+          documentId: {
+            $eq: documentId,
+          },
+        },
+        populate: {
+          profileImage: true,
+          coverImage: true,
+          posts: {
+            filters: {
+              publishedAt: {
+                $notNull: true,
+              },
+            },
+            populate: {
+              media: true, // Simplified populate for Strapi v5
+            },
+          },
+          followers: {
+            populate: {
+              follower: {
+                populate: {
+                  profileImage: true,
+                  coverImage: true,
+                },
+              },
+              following: {
+                populate: {
+                  profileImage: true,
+                  coverImage: true,
+                },
+              },
+            },
+          },
+          following: {
+            populate: {
+              follower: {
+                populate: {
+                  profileImage: true,
+                  coverImage: true,
+                },
+              },
+              following: {
+                populate: {
+                  profileImage: true,
+                  coverImage: true,
+                },
+              },
+            },
+          },
+        },
+      },
+      {
+        encodeValuesOnly: true, // Don't encode the keys, only the values
+      }
+    );
+
+    const url = `${apiUrl}/api/users?${query}`;
+
+    console.log(`Fetching from optimized endpoint: ${url}`);
+    console.log(
+      `Using token type: ${
+        cookieToken
+          ? "user JWT"
+          : configToken
+          ? "server config"
+          : "fallback API token"
+      }`
+    );
+
+    // Make the API request with proper error handling
+    const response = await fetch(url, {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+      next: { revalidate: 0 },
+    });
+
+    if (!response.ok) {
+      const errorText = await response
+        .text()
+        .catch(() => "Failed to get error text");
+      console.error(
+        `Failed to fetch profile data: ${response.status} - ${errorText}`
+      );
+
+      if (response.status === 401 || response.status === 403) {
+        console.log(
+          `Authentication failed for profile ${documentId}, but continuing with limited access`
+        );
+        // Don't return error immediately, let it fall through to handle as not found
+      }
+
+      return { error: true, message: `API error: ${response.status}` };
+    }
+
+    // Parse the response data with error handling
+    let responseData;
+    try {
+      responseData = await response.json();
+    } catch (parseError) {
+      console.error("Failed to parse API response:", parseError);
+      return { error: true, message: "Invalid API response format" };
+    }
+
+    // Handle both array response and object with data property
+    const usersArray = Array.isArray(responseData)
+      ? responseData
+      : responseData.data && Array.isArray(responseData.data)
+      ? responseData.data
+      : null;
+
+    if (!usersArray || usersArray.length === 0) {
+      console.error(`No user found with documentId: ${documentId}`);
+      return { notFound: true };
+    }
+
+    // Get the first user from the array
+    const userData = usersArray[0];
+
+    if (!userData || !userData.username) {
+      console.error(`Invalid user data for documentId: ${documentId}`);
+      return { notFound: true };
+    }
+
+    // Process the user data using the new processors
+    const processedUser = processUserForProfile(userData);
+
+    // Process followers and following data
+    const followers = processFollowers(userData.followers || []);
+    const following = processFollowing(userData.following || []);
+
+    // Process posts data with media items using the new processor
+    const posts = processPostsForGallery(userData.posts || []);
+
+    let isFollowing = false;
+    if (isAuthenticated && cookieToken) {
+      try {
+        const currentUserResponse = await fetch(`${apiUrl}/api/users/me`, {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${cookieToken}`,
+          },
+          cache: "no-store",
+        });
+
+        if (currentUserResponse.ok) {
+          const currentUserData = await currentUserResponse.json();
+          const currentUserId = currentUserData.id;
+
+          console.log(
+            `[v0] Checking if user ${currentUserId} is following ${userData.username} (ID: ${userData.id})`
+          );
+
+          // Check if current user is following this profile user
+          const followsQuery = qs.stringify(
+            {
+              filters: {
+                $and: [
+                  {
+                    follower: {
+                      id: {
+                        $eq: currentUserId,
+                      },
+                    },
+                  },
+                  {
+                    following: {
+                      id: {
+                        $eq: userData.id,
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+            { encodeValuesOnly: true }
+          );
+
+          const followCheckResponse = await fetch(
+            `${apiUrl}/api/follows?${followsQuery}`,
+            {
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${cookieToken}`,
+              },
+              cache: "no-store",
+            }
+          );
+
+          if (followCheckResponse.ok) {
+            const followCheckData = await followCheckResponse.json();
+            isFollowing = !!(
+              followCheckData.data?.length > 0 || followCheckData.length > 0
+            );
+            console.log(`Follow status for ${userData.username}: ${isFollowing}`);
+          }
+        }
+      } catch (error) {
+        console.error("Error checking follow status:", error);
+        // Continue with isFollowing = false
+      }
+    }
+
+    // Transform the data to match the expected format
+    const transformedUser: UserProfileResponse = {
+      ...processedUser,
+      id: userData.id,
+      documentId: userData.documentId || "",
+      username: userData.username,
+      profileImage: userData.profileImage,
+      coverImage: userData.coverImage,
+      followers: followers,
+      following: following,
+      posts: posts,
+      isFollowing: isFollowing,
+    };
+
+    console.log(`Successfully fetched optimized profile data for ${userData.username} (${documentId})`);
+    console.log(
+      `Profile stats: ${transformedUser.stats.posts} posts, ${transformedUser.stats.followers} followers, ${transformedUser.stats.following} following`
+    );
+    console.log(
+      `Posts with media items: ${
+        posts.filter((post) => post.mediaItems && post.mediaItems.length > 0)
+          .length
+      }`
+    );
+
+    // Check if this is the current user's profile
+    let isOwnProfile = false;
+    if (isAuthenticated && cookieToken) {
+      try {
+        const currentUserResponse = await fetch(`${apiUrl}/api/users/me`, {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${cookieToken}`,
+          },
+          cache: "no-store",
+        });
+
+        if (currentUserResponse.ok) {
+          const currentUserData = await currentUserResponse.json();
+          isOwnProfile = currentUserData.documentId === documentId || currentUserData.id === userData.id;
+        }
+      } catch (error) {
+        console.error("Error checking if own profile:", error);
+      }
+    }
+
+    return {
+      user: transformedUser,
+      isAuthenticated,
+      isOwnProfile,
+    };
+  } catch (error) {
+    console.error(
+      `Error fetching optimized profile data for documentId ${documentId}:`,
+      error
+    );
+    return {
+      error: true,
+      message: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
 }
 
 /**
@@ -304,15 +638,15 @@ function processFollowing(following: any[]): any[] {
  */
 export type ProfileData =
   | {
-      user: UserProfileResponse
-      isAuthenticated: boolean
-      isOwnProfile: boolean
+      user: UserProfileResponse;
+      isAuthenticated: boolean;
+      isOwnProfile: boolean;
     }
   | {
-      notFound: boolean
-      message?: string
+      notFound: boolean;
+      message?: string;
     }
   | {
-      error: boolean
-      message?: string
-    }
+      error: boolean;
+      message?: string;
+    };

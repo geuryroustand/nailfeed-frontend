@@ -1,21 +1,20 @@
-import { ProfileGalleryClient } from "./profile-gallery-client"
+import { ProfileGalleryInfinite } from "./profile-gallery-infinite"
 import type { UserProfileResponse } from "@/lib/services/user-service"
-import { processPostsForGallery } from "@/lib/post-data-processors"
 
 interface ProfileGalleryProps {
-  user: UserProfileResponse
+  user: UserProfileResponse & { documentId: string }
 }
 
 export default function ProfileGallery({ user }: ProfileGalleryProps) {
-  // Ensure we have posts data
-  const posts = user.posts || []
-
-  // Process posts data on the server to optimize client-side rendering
-  const processedPosts = processPostsForGallery(posts)
+  console.log(`[ProfileGallery] Setting up infinite scrolling for ${user.username} (${user.documentId})`);
 
   return (
     <div className="p-4 md:p-6">
-      <ProfileGalleryClient posts={processedPosts} username={user.username} />
+      <ProfileGalleryInfinite
+        documentId={user.documentId}
+        username={user.username}
+        initialPostsCount={user.posts?.length || 0}
+      />
     </div>
   )
 }

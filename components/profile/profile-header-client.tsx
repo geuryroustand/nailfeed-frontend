@@ -1,147 +1,126 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
-import { Edit, Share2, Settings, PlusCircle } from "lucide-react"
-import { motion } from "framer-motion"
-import EditProfileModal from "@/components/profile/edit-profile-modal"
-import Link from "next/link"
-import { toggleFollow } from "@/lib/user-actions"
-import { useToast } from "@/hooks/use-toast"
-import type { UserProfileResponse } from "@/lib/services/user-service"
-import CreatePostModal from "@/components/create-post-modal"
-import { getFollowers, getFollowing } from "@/lib/services/user-network-service"
+import { useState, useEffect } from "react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Edit, Share2, Settings, PlusCircle } from "lucide-react";
+import { motion } from "framer-motion";
+import EditProfileModal from "@/components/profile/edit-profile-modal";
+import Link from "next/link";
+import { toggleFollow } from "@/lib/user-actions";
+import { useToast } from "@/hooks/use-toast";
+import type { UserProfileResponse } from "@/lib/services/user-service";
+import CreatePostModal from "@/components/create-post-modal";
+import { useRouter } from "next/navigation";
 
 interface ProfileHeaderClientProps {
   userData: UserProfileResponse & {
-    profileImageUrl: string
-    coverImageUrl: string
-    isFollowing?: boolean
-    followersCount: number
-    followingCount: number
-  }
-  isOtherUser: boolean
+    profileImageUrl: string;
+    coverImageUrl: string;
+    isFollowing?: boolean;
+    followersCount: number;
+    followingCount: number;
+  };
+  isOtherUser: boolean;
 }
 
-export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClientProps) {
-  const [isFollowing, setIsFollowing] = useState(userData.isFollowing || false)
-  const [followerCount, setFollowerCount] = useState(0)
-  const [followingCount, setFollowingCount] = useState(0)
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [showCreatePostModal, setShowCreatePostModal] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const { toast } = useToast()
+export function ProfileHeaderClient({
+  userData,
+  isOtherUser,
+}: ProfileHeaderClientProps) {
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showCreatePostModal, setShowCreatePostModal] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
+  const router = useRouter();
+
+  // Use backend data directly instead of local state
+  const isFollowing = userData.isFollowing ?? false;
+  const followerCount = userData.followersCount || 0;
+  const followingCount = userData.followingCount || 0;
 
   useEffect(() => {
-    const fetchAccurateCounts = async () => {
-      try {
-        if (!userData.username) {
-          console.error("[v0] ProfileHeader: Username is undefined, cannot fetch counts")
-          setFollowerCount(Math.max(0, userData.followersCount || 0))
-          setFollowingCount(Math.max(0, userData.followingCount || 0))
-          return
-        }
-
-        console.log("[v0] ProfileHeader: Fetching accurate counts for", userData.username)
-
-        const [followersResult, followingResult] = await Promise.all([
-          getFollowers(userData.username, 1, 1), // Just get first page to get total
-          getFollowing(userData.username, 1, 1), // Just get first page to get total
-        ])
-
-        console.log("[v0] ProfileHeader: Followers result:", followersResult.total)
-        console.log("[v0] ProfileHeader: Following result:", followingResult.total)
-
-        setFollowerCount(followersResult.total)
-        setFollowingCount(followingResult.total)
-      } catch (error) {
-        console.error("[v0] ProfileHeader: Error fetching counts:", error)
-        // Fallback to original counts if fetch fails
-        setFollowerCount(Math.max(0, userData.followersCount || 0))
-        setFollowingCount(Math.max(0, userData.followingCount || 0))
-      }
-    }
-
-    fetchAccurateCounts()
-    setIsFollowing(userData.isFollowing || false)
-    console.log("[v0] ProfileHeader: Initial follow state:", userData.isFollowing)
-  }, [userData.username, userData.isFollowing, userData.followersCount, userData.followingCount])
+    console.log(
+      "[v0] ProfileHeader: Initial follow state:",
+      userData.isFollowing
+    );
+    console.log(
+      "[v0] ProfileHeader: Using backend counts - Followers:",
+      followerCount,
+      "Following:",
+      followingCount
+    );
+  }, [userData.isFollowing, followerCount, followingCount]);
 
   const handleFollowToggle = async () => {
-    if (!isOtherUser) return
+    if (!isOtherUser) return;
 
     if (!userData.username) {
-      console.error("[v0] ProfileHeader: Cannot follow/unfollow - username is undefined")
+      console.error(
+        "[v0] ProfileHeader: Cannot follow/unfollow - username is undefined"
+      );
       toast({
         title: "Error",
-        description: "Unable to process follow request - user data is incomplete",
+        description:
+          "Unable to process follow request - user data is incomplete",
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
 
-    setIsLoading(true)
-
-    const previousFollowState = isFollowing
-    const previousFollowerCount = followerCount
+    setIsLoading(true);
 
     try {
-      console.log(`[v0] ProfileHeader: Attempting to ${isFollowing ? "unfollow" : "follow"} ${userData.username}`)
-      const result = await toggleFollow(userData.username)
+      console.log(
+        `[v0] ProfileHeader: Attempting to ${
+          isFollowing ? "unfollow" : "follow"
+        } ${userData.username}`
+      );
+      const result = await toggleFollow(userData.username);
 
       if (!result.success) {
         toast({
           title: "Error",
           description: result.message || "Failed to update follow status",
           variant: "destructive",
-        })
+        });
       } else {
-        console.log(`[v0] ProfileHeader: Server returned isFollowing: ${result.isFollowing}`)
-        setIsFollowing(result.isFollowing)
-
-        if (result.newFollowerCount !== undefined) {
-          setFollowerCount(result.newFollowerCount)
-        } else {
-          setFollowerCount((prev) => (result.isFollowing ? prev + 1 : Math.max(0, prev - 1)))
-        }
-
         toast({
           title: result.isFollowing ? "Following" : "Unfollowed",
           description: result.isFollowing
-            ? `You are now following ${userData.displayName || userData.username}`
+            ? `You are now following ${
+                userData.displayName || userData.username
+              }`
             : `You unfollowed ${userData.displayName || userData.username}`,
-        })
+        });
 
-        setTimeout(() => {
-          console.log(`[v0] ProfileHeader: Final follow state: ${result.isFollowing}`)
-        }, 100)
+        // Refresh the page to get updated data from the backend
+        router.refresh();
       }
     } catch (error) {
-      console.error("[v0] ProfileHeader: Error in handleFollowToggle:", error)
+      console.error("[v0] ProfileHeader: Error in handleFollowToggle:", error);
       toast({
         title: "Error",
         description: "An unexpected error occurred",
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const handlePostCreated = (newPost: any) => {
     toast({
       title: "Post created!",
       description: "Your post has been published successfully.",
-    })
+    });
 
-    setTimeout(() => {
-      window.location.reload()
-    }, 1000)
-  }
+    // Close modal and rely on optimistic UI where available
+    setShowCreatePostModal(false);
+  };
 
   const hasRealContent = (field?: string): boolean => {
-    if (!field || field.trim() === "") return false
+    if (!field || field.trim() === "") return false;
 
     const placeholderTexts = [
       "Updated bio information",
@@ -152,23 +131,30 @@ export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClie
       "your bio",
       "your location",
       "add your",
-    ]
+    ];
 
-    return !placeholderTexts.some((text) => field.toLowerCase().includes(text.toLowerCase()))
-  }
+    return !placeholderTexts.some((text) =>
+      field.toLowerCase().includes(text.toLowerCase())
+    );
+  };
 
   useEffect(() => {
-    console.log("ProfileHeaderClient - userData:", userData)
-    console.log("ProfileHeaderClient - coverImageUrl:", userData.coverImageUrl)
-  }, [userData])
+    console.log("ProfileHeaderClient - userData:", userData);
+    console.log("ProfileHeaderClient - coverImageUrl:", userData.coverImageUrl);
+    console.log(
+      "ProfileHeaderClient - isFollowing from props:",
+      userData.isFollowing
+    );
+    console.log("ProfileHeaderClient - isOtherUser:", isOtherUser);
+  }, [userData, isOtherUser]);
 
   if (!userData.username) {
-    console.error("[v0] ProfileHeader: Cannot render - username is undefined")
+    console.error("[v0] ProfileHeader: Cannot render - username is undefined");
     return (
       <div className="p-4 text-center">
         <p className="text-red-500">Error: Unable to load profile data</p>
       </div>
-    )
+    );
   }
 
   return (
@@ -236,15 +222,23 @@ export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClie
                   <Edit className="h-4 w-4 mr-1" />
                   Edit
                 </Button>
-                <Link href="/settings/account">
-                  <Button variant="secondary" size="sm" className="bg-white/80 backdrop-blur-sm">
+                <Link href="/me/settings">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="bg-white/80 backdrop-blur-sm"
+                  >
                     <Settings className="h-4 w-4 mr-1" />
                     Settings
                   </Button>
                 </Link>
               </>
             )}
-            <Button variant="secondary" size="icon" className="h-8 w-8 bg-white/80 backdrop-blur-sm">
+            <Button
+              variant="secondary"
+              size="icon"
+              className="h-8 w-8 bg-white/80 backdrop-blur-sm"
+            >
               <Share2 className="h-4 w-4" />
             </Button>
           </div>
@@ -259,13 +253,23 @@ export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClie
           >
             <div className="rounded-full p-1 bg-white shadow-lg">
               <Avatar className="h-32 w-32 md:h-40 md:w-40 border-4 border-white">
-                <AvatarImage src={userData.profileImageUrl || ""} alt={userData.username} className="object-cover" />
-                <AvatarFallback>{userData.username.substring(0, 2).toUpperCase()}</AvatarFallback>
+                <AvatarImage
+                  src={userData.profileImageUrl || ""}
+                  alt={userData.username}
+                  className="object-cover"
+                />
+                <AvatarFallback>
+                  {userData.username.substring(0, 2).toUpperCase()}
+                </AvatarFallback>
               </Avatar>
             </div>
             {userData.isVerified && (
               <div className="absolute bottom-2 right-2 bg-pink-500 text-white rounded-full p-1 border-2 border-white">
-                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                <svg
+                  className="h-4 w-4"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                >
                   <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
                 </svg>
               </div>
@@ -277,7 +281,9 @@ export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClie
       <div className="h-16 md:h-20"></div>
 
       <div className="text-center px-4 pb-6">
-        <h1 className="text-2xl font-bold">{userData.displayName || userData.username}</h1>
+        <h1 className="text-2xl font-bold">
+          {userData.displayName || userData.username}
+        </h1>
         <p className="text-gray-500 text-sm">@{userData.username}</p>
 
         <div className="flex justify-center gap-6 mt-3">
@@ -290,17 +296,25 @@ export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClie
             <p className="text-xs text-gray-500">Following</p>
           </div>
           <div className="text-center">
-            <p className="font-semibold">{Math.max(0, userData.postsCount || 0).toLocaleString()}</p>
+            <p className="font-semibold">
+              {Math.max(0, userData.postsCount || 0).toLocaleString()}
+            </p>
             <p className="text-xs text-gray-500">Posts</p>
           </div>
         </div>
 
         <div className="mt-4 max-w-md mx-auto">
-          {hasRealContent(userData.bio) && <p className="text-sm whitespace-pre-wrap">{userData.bio}</p>}
+          {hasRealContent(userData.bio) && (
+            <p className="text-sm whitespace-pre-wrap">{userData.bio}</p>
+          )}
 
           {hasRealContent(userData.website) && (
             <a
-              href={userData.website.startsWith("http") ? userData.website : `https://${userData.website}`}
+              href={
+                userData.website.startsWith("http")
+                  ? userData.website
+                  : `https://${userData.website}`
+              }
               target="_blank"
               rel="noopener noreferrer"
               className="text-sm text-pink-500 font-medium mt-1 inline-block"
@@ -320,23 +334,42 @@ export function ProfileHeaderClient({ userData, isOtherUser }: ProfileHeaderClie
           <div className="mt-6 flex justify-center gap-2">
             <Button
               variant={isFollowing ? "outline" : "default"}
-              className={isFollowing ? "rounded-full px-6" : "rounded-full px-6 bg-pink-500 hover:bg-pink-600"}
+              className={
+                isFollowing
+                  ? "rounded-full px-6"
+                  : "rounded-full px-6 bg-pink-500 hover:bg-pink-600"
+              }
               onClick={handleFollowToggle}
               disabled={isLoading}
             >
-              {isLoading ? "Processing..." : isFollowing ? "Unfollow" : "Follow"}
+              {isLoading
+                ? "Processing..."
+                : isFollowing
+                ? "Following"
+                : "Follow"}
             </Button>
-            <Button variant="outline" className="rounded-full px-6 bg-transparent">
+            <Button
+              variant="outline"
+              className="rounded-full px-6 bg-transparent"
+            >
               Message
             </Button>
           </div>
         )}
       </div>
 
-      {showEditModal && <EditProfileModal user={userData} onClose={() => setShowEditModal(false)} />}
+      {showEditModal && (
+        <EditProfileModal
+          user={userData}
+          onClose={() => setShowEditModal(false)}
+        />
+      )}
       {showCreatePostModal && (
-        <CreatePostModal onClose={() => setShowCreatePostModal(false)} onPostCreated={handlePostCreated} />
+        <CreatePostModal
+          onClose={() => setShowCreatePostModal(false)}
+          onPostCreated={handlePostCreated}
+        />
       )}
     </>
-  )
+  );
 }

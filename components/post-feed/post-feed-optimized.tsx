@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import dynamic from "next/dynamic"
 import type { Post as PostType } from "@/lib/post-data"
-import { useAuth } from "@/context/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 import { useSearch } from "@/context/search-context"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
@@ -238,22 +238,33 @@ export default function PostFeedOptimized({
     const postWithDocumentId = {
       ...newPost,
       documentId: newPost.documentId || `post-${newPost.id}`,
-    }
+    } as any
 
-    setPosts((prevPosts) => [postWithDocumentId, ...prevPosts])
-    setIsCreatePostModalOpen(false)
+    setPosts((prev) => {
+      const tempId = (newPost as any).tempId as string | undefined
+      if (tempId) {
+        const idx = prev.findIndex((p) => (p as any).id === tempId || p.documentId === tempId)
+        if (idx !== -1) {
+          const next = [...prev]
+          next[idx] = { ...(postWithDocumentId as any), isOptimistic: false }
+          return next.filter((p, i) => i === idx || (p.id !== (postWithDocumentId as any).id && p.documentId !== (postWithDocumentId as any).documentId))
+        }
+      }
 
-    toast({
-      title: "Post created",
-      description: "Your post has been published successfully!",
-      variant: "default",
+      if ((newPost as any).isOptimistic) {
+        const exists = prev.some((p) => p.documentId === (postWithDocumentId as any).documentId || (p as any).id === (postWithDocumentId as any).id)
+        return exists ? prev : [postWithDocumentId, ...prev]
+      }
+
+      const duplicate = prev.some((p) => p.documentId === (postWithDocumentId as any).documentId || p.id === (postWithDocumentId as any).id)
+      return duplicate ? prev : [postWithDocumentId, ...prev]
     })
 
-    invalidateServiceWorkerCache()
+    setIsCreatePostModalOpen(false)
+    toast({ title: "Post created", description: "Your post has been published successfully!", variant: "default" })
 
-    setTimeout(() => {
-      loadInitialPosts()
-    }, 500)
+    // Keep client state as source of truth; skip immediate refetch.
+    invalidateServiceWorkerCache()
   }
 
   const handlePostDeleted = (postId: number) => {

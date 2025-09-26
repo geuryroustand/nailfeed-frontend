@@ -1,50 +1,81 @@
-"use client"
+"use client";
 
-import { useEffect } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { X, Home, Search, Heart, MessageCircle, PlusSquare, User, Bookmark, Palette, Lightbulb } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import Link from "next/link"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { useAuth } from "@/hooks/use-auth"
+import { useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  X,
+  Home,
+  Search,
+  Heart,
+  MessageCircle,
+  PlusSquare,
+  User,
+  Bookmark,
+  Palette,
+  Lightbulb,
+  Folder,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { normalizeImageUrl } from "@/lib/image-utils";
+import { useAuth } from "@/hooks/use-auth";
 
 interface MobileMenuProps {
-  isOpen: boolean
-  onClose: () => void
-  activeItem?: string
+  isOpen: boolean;
+  onClose: () => void;
+  activeItem?: string;
 }
 
-export default function MobileMenu({ isOpen, onClose, activeItem = "home" }: MobileMenuProps) {
-  const { isAuthenticated, user } = useAuth()
+export default function MobileMenu({
+  isOpen,
+  onClose,
+  activeItem = "home",
+}: MobileMenuProps) {
+  const { isAuthenticated, user } = useAuth();
+  const userProfileImageUrl = user?.profileImage?.url
+    ? normalizeImageUrl(user.profileImage.url)
+    : undefined;
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose()
-    }
+      if (e.key === "Escape") onClose();
+    };
 
     if (isOpen) {
-      document.addEventListener("keydown", handleEscape)
-      document.body.style.overflow = "hidden"
+      document.addEventListener("keydown", handleEscape);
+      document.body.style.overflow = "hidden";
     }
 
     return () => {
-      document.removeEventListener("keydown", handleEscape)
-      document.body.style.overflow = ""
-    }
-  }, [isOpen, onClose])
+      document.removeEventListener("keydown", handleEscape);
+      document.body.style.overflow = "";
+    };
+  }, [isOpen, onClose]);
 
   const menuItems = [
     { id: "home", icon: Home, label: "Home", href: "/" },
     { id: "search", icon: Search, label: "Search", href: "/" },
     // { id: "explore", icon: Compass, label: "Explore", href: "/explore" },
-    { id: "suggestions", icon: Lightbulb, label: "Community Ideas", href: "/suggestions" },
+    {
+      id: "suggestions",
+      icon: Lightbulb,
+      label: "Community Ideas",
+      href: "/suggestions",
+    },
     { id: "messages", icon: MessageCircle, label: "Messages", href: "/" },
     { id: "notifications", icon: Heart, label: "Notifications", href: "/" },
     { id: "create", icon: PlusSquare, label: "Create", href: "/" },
-    { id: "profile", icon: User, label: "Profile", href: "/profile" },
-    { id: "collections", icon: Bookmark, label: "Collections", href: "/collections" },
-    { id: "mood", icon: Palette, label: "Mood", href: "/mood" },
-  ]
+    { id: "profile", icon: User, label: "Profile", href: "/me" },
+    {
+      id: "collections",
+      icon: Bookmark,
+      label: "Collections",
+      href: "/collections",
+    },
+    ...(isAuthenticated ? [] : []),
+    // { id: "mood", icon: Palette, label: "Mood", href: "/mood" },
+  ];
 
   return (
     <AnimatePresence>
@@ -73,7 +104,12 @@ export default function MobileMenu({ isOpen, onClose, activeItem = "home" }: Mob
                   NailFeed
                 </h1>
               </Link>
-              <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onClose}
+                className="rounded-full"
+              >
                 <X className="h-5 w-5" />
                 <span className="sr-only">Close menu</span>
               </Button>
@@ -81,21 +117,28 @@ export default function MobileMenu({ isOpen, onClose, activeItem = "home" }: Mob
 
             <div className="flex-1 overflow-y-auto py-4">
               {menuItems.map((item) => {
-                const Icon = item.icon
-                const isActive = activeItem === item.id
+                const Icon = item.icon;
+                const isActive = activeItem === item.id;
 
                 return (
-                  <Link href={item.href} key={item.id} onClick={onClose} className="block">
+                  <Link
+                    href={item.href}
+                    key={item.id}
+                    onClick={onClose}
+                    className="block"
+                  >
                     <div
                       className={`flex items-center px-4 py-3 ${
                         isActive ? "text-pink-500 font-medium" : "text-gray-700"
                       }`}
                     >
-                      <Icon className={`h-6 w-6 ${isActive ? "text-pink-500" : ""}`} />
+                      <Icon
+                        className={`h-6 w-6 ${isActive ? "text-pink-500" : ""}`}
+                      />
                       <span className="ml-4">{item.label}</span>
                     </div>
                   </Link>
-                )
+                );
               })}
             </div>
 
@@ -103,11 +146,18 @@ export default function MobileMenu({ isOpen, onClose, activeItem = "home" }: Mob
               {isAuthenticated ? (
                 <div className="flex items-center">
                   <Avatar className="h-8 w-8">
-                    <AvatarImage src={user?.profileImage?.url || "/diverse-avatars.png"} alt="Your profile" />
-                    <AvatarFallback>{user?.username?.substring(0, 2).toUpperCase() || "YP"}</AvatarFallback>
+                    <AvatarImage
+                      src={userProfileImageUrl || "/diverse-avatars.png"}
+                      alt="Your profile"
+                    />
+                    <AvatarFallback>
+                      {user?.username?.substring(0, 2).toUpperCase() || "YP"}
+                    </AvatarFallback>
                   </Avatar>
                   <div className="ml-3">
-                    <p className="text-sm font-medium">{user?.displayName || user?.username || "Your Profile"}</p>
+                    <p className="text-sm font-medium">
+                      {user?.displayName || user?.username || "Your Profile"}
+                    </p>
                   </div>
                 </div>
               ) : (
@@ -129,5 +179,5 @@ export default function MobileMenu({ isOpen, onClose, activeItem = "home" }: Mob
         </>
       )}
     </AnimatePresence>
-  )
+  );
 }

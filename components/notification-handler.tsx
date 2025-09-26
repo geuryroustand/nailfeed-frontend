@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
-import { useAuth } from "@/context/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 import { createCommentNotification } from "@/lib/actions/notification-actions"
 
 export default function NotificationHandler() {

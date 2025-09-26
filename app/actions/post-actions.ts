@@ -1,64 +1,26 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
+import { validateSession } from "@/lib/auth/session";
 import type { ContentType, GalleryLayout } from "@/lib/services/post-service";
 import type { BackgroundType } from "@/components/post-background-selector";
 
 export async function createPost(formData: FormData) {
+  const startTime = Date.now();
   try {
-    console.log("[v0] Server Action: Starting post creation process");
+    console.log("[v0] Server Action: Starting optimized post creation process");
 
-    // Check if user is authenticated - try multiple sources
-    const cookieStore = await cookies();
-    let token =
-      cookieStore.get("jwt")?.value || cookieStore.get("authToken")?.value;
-    let userId = cookieStore.get("userId")?.value;
-    let userDocumentId: string | null = null;
+    const { user: authenticatedUser, session } = await validateSession();
 
-    // If no token in cookies, try to get it from the form data
-    if (!token) {
-      token = formData.get("jwt") as string;
-      console.log(
-        "[v0] Server Action: Using token from form data:",
-        token ? "Token found" : "No token"
-      );
-    }
-
-    if (!token) {
-      console.error(
-        "[v0] Server Action: No authentication token found in cookies or form data"
-      );
+    if (!authenticatedUser || !session?.strapiJWT) {
       return {
         success: false,
         error: "Authentication required. Please log in to create posts.",
       };
     }
 
-    console.log("[v0] Server Action: Token found, length:", token.length);
-    console.log(
-      "[v0] Server Action: Token starts with:",
-      token.substring(0, 20) + "..."
-    );
-
-    // Store the token in cookies for future requests
-    if (token) {
-      const cookieStoreInstance = await cookies();
-      cookieStoreInstance.set("jwt", token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-        path: "/",
-        maxAge: 7 * 24 * 60 * 60, // 7 days
-      });
-      cookieStoreInstance.set("authToken", token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-        path: "/",
-        maxAge: 7 * 24 * 60 * 60, // 7 days
-      });
-    }
+    const token = session.strapiJWT;
+    let userId: string | null = String(authenticatedUser.id);
+    let userDocumentId: string | null = null;
 
     // Try to get the user documentId from form data (preferred)
     userDocumentId = formData.get("userDocumentId") as string;
@@ -69,25 +31,22 @@ export async function createPost(formData: FormData) {
       }
     }
 
-    // Try to extract documentId from the full user object if available
+    // Extract user data from form (optimized parsing)
     const userObjectJson = formData.get("userObject") as string;
+    let userObject: any = null;
+
     if (userObjectJson) {
       try {
-        const userObject = JSON.parse(userObjectJson);
+        userObject = JSON.parse(userObjectJson);
+        userDocumentId =
+          userObject?.documentId || (formData.get("userDocumentId") as string);
+        userId = userId || userObject?.id?.toString();
 
-        if (userObject && userObject.documentId && !userDocumentId) {
-          userDocumentId = userObject.documentId;
-          console.log(
-            "[v0] Server Action: Extracted user document ID from user object:",
-            userDocumentId
-          );
-        } else if (userObject && userObject.id && !userId) {
-          userId = userObject.id.toString();
-          console.log(
-            "[v0] Server Action: Extracted user ID from user object:",
-            userId
-          );
-        }
+        console.log("[v0] Server Action: User data extracted:", {
+          documentId: userDocumentId,
+          userId: userId,
+          username: userObject?.username,
+        });
       } catch (e) {
         console.error("[v0] Server Action: Error parsing user object:", e);
       }
@@ -139,101 +98,52 @@ export async function createPost(formData: FormData) {
     console.log("[v0] Server Action: Tags from form data:", tags);
 
     // Prepare API URL and headers
-    const apiUrl =
-      process.env.API_URL ||
-      "https://nailfeed-backend-production.up.railway.app";
+    const apiUrl = process.env.API_URL;
+    if (!apiUrl) {
+      console.error(
+        "[v0] Server Action: API_URL environment variable is not set"
+      );
+      return {
+        success: false,
+        error: "Server configuration error: API_URL is not defined.",
+      };
+    }
     const headers: HeadersInit = {
       Authorization: `Bearer ${token}`,
     };
 
-    // STEP 1: Upload media files first if they exist
+    // STEP 1: Get uploaded files from form data (uploaded on client)
     let uploadedMediaItems: any[] = [];
-    const mediaFilesEntries = formData.getAll("mediaFiles");
-    const hasMediaFiles = mediaFilesEntries.length > 0;
+    let uploadedFiles: any[] = [];
 
-    if (hasMediaFiles) {
-      console.log("[v0] Server Action: Uploading media files first...");
+    // Get uploaded files data passed from client
+    const uploadedFilesJson = formData.get("uploadedFiles") as string;
 
+    if (uploadedFilesJson) {
       try {
-        // Upload files to Strapi upload endpoint
-        const uploadFormData = new FormData();
+        uploadedFiles = JSON.parse(uploadedFilesJson);
+        console.log("[v0] Server Action: Using pre-uploaded files:", uploadedFiles.length);
 
-        for (let i = 0; i < mediaFilesEntries.length; i++) {
-          const file = mediaFilesEntries[i] as File;
-          if (file instanceof File) {
-            uploadFormData.append("files", file, `${i}-${file.name}`);
-          }
-        }
-
-        const uploadUrl = `${apiUrl}/api/upload`;
-
-        console.log("[v0] Server Action: Upload URL:", uploadUrl);
-        console.log(
-          "[v0] Server Action: Upload headers - Authorization:",
-          `Bearer ${token.substring(0, 20)}...`
-        );
-
-        const uploadResponse = await fetch(uploadUrl, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          body: uploadFormData,
-        });
-
-        console.log(
-          "[v0] Server Action: Upload response status:",
-          uploadResponse.status
-        );
-        console.log(
-          "[v0] Server Action: Upload response headers:",
-          Object.fromEntries(uploadResponse.headers.entries())
-        );
-
-        if (!uploadResponse.ok) {
-          const errorText = await uploadResponse.text();
-          console.error(
-            "[v0] Server Action: Upload failed with status:",
-            uploadResponse.status
-          );
-          console.error(
-            "[v0] Server Action: Upload error response:",
-            errorText
-          );
-          throw new Error(
-            `File upload failed with status ${uploadResponse.status}: ${errorText}`
-          );
-        }
-
-        const uploadedFiles = await uploadResponse.json();
-        console.log(
-          "[v0] Server Action: Files uploaded successfully:",
-          uploadedFiles
-        );
-
-        // Create mediaItems array with uploaded file IDs
+        // Create mediaItems array with uploaded file data
         uploadedMediaItems = uploadedFiles.map((file: any, index: number) => ({
-          file: file.id, // Use the uploaded file ID
+          id: file.id,
+          file: file, // Use the complete file object
           type: file.mime.startsWith("image/") ? "image" : "video",
+          url: file.url, // Add the direct URL
           order: index + 1,
         }));
 
-        console.log(
-          "[v0] Server Action: Prepared media items:",
-          uploadedMediaItems
-        );
+        console.log("[v0] Server Action: Prepared media items:", uploadedMediaItems);
       } catch (error) {
-        console.error("[v0] Server Action: File upload failed:", error);
+        console.error("[v0] Server Action: Error parsing uploaded files:", error);
         return {
           success: false,
-          error: `File upload failed: ${
-            error instanceof Error ? error.message : "Unknown error"
-          }`,
+          error: "Invalid uploaded files data",
         };
       }
     }
 
-    // STEP 2: Create the post with uploaded media items
+    // STEP 2: Create optimized post with proper user association (Strapi v5 compatible)
     const postData: any = {
       data: {
         title: title || "",
@@ -241,27 +151,39 @@ export async function createPost(formData: FormData) {
         contentType,
         background,
         galleryLayout,
-        user: {
-          connect: userDocumentId
-            ? [userDocumentId]
-            : userId
-            ? [userId.toString()]
-            : [],
-        },
+        // Ensure proper user connection using documentId for Strapi v5
+        user: userDocumentId
+          ? { connect: [userDocumentId] }
+          : userId
+          ? { connect: [userId.toString()] }
+          : null,
         tags: tags,
-        mediaItems: uploadedMediaItems, // Include uploaded media items directly
+        media: uploadedFiles.map((file: any) => file.id), // Send only IDs to Strapi
+        // Set post status and counters with defaults
+        postStatus: "published",
+        likesCount: 0,
+        commentsCount: 0,
+        savesCount: 0,
+        viewsCount: 0,
+        shareCount: 0,
+        featured: false,
+        isReported: false,
       },
     };
+
+    // Don't send userInfo - it's not part of the Strapi schema
+    // User data will be populated through the relation
 
     console.log(
       "[v0] Server Action: Creating post with data:",
       JSON.stringify(postData, null, 2)
     );
 
+    // STEP 3: Create post with population to get user data back
     const postEndpoint = "/api/posts";
     const postUrl = `${apiUrl}${apiUrl.endsWith("/") ? "" : "/"}${
       postEndpoint.startsWith("/") ? postEndpoint.substring(1) : postEndpoint
-    }`;
+    }?populate[user][populate]=profileImage`; // Populate user data for response
 
     const postResponse = await fetch(postUrl, {
       method: "POST",
@@ -311,55 +233,28 @@ export async function createPost(formData: FormData) {
     const postId = result.data.id;
     const postDocumentId = result.data.documentId || `doc-${postId}`;
 
-    revalidatePath("/", "layout");
-    revalidatePath("/profile", "layout");
-    revalidatePath("/explore", "layout");
-    revalidatePath(`/post/${postId}`, "layout");
+    // Avoid triggering framework-wide revalidations or client SW cache invalidations here.
+    // The client feed performs an optimistic update using the returned payload.
 
-    // Trigger immediate cache invalidation via revalidation API
-    try {
-      const revalidateUrl = `${
-        process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
-      }/api/revalidate/post`;
-      await fetch(revalidateUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${
-            process.env.REVALIDATE_SECRET || "fallback-secret"
-          }`,
-        },
-        body: JSON.stringify({
-          paths: ["/"],
-          tags: ["posts", "feed"],
-          postId: postId,
-        }),
-      }).catch((error) => {
-        console.log("[v0] Server Action: Revalidation API call failed:", error);
-      });
+    const endTime = Date.now();
+    console.log(
+      `[v0] Server Action: Post creation completed successfully in ${
+        endTime - startTime
+      }ms`
+    );
 
-      // Send message to service worker to invalidate cache
-      if (typeof window !== "undefined" && "serviceWorker" in navigator) {
-        navigator.serviceWorker.ready
-          .then((registration) => {
-            registration.active?.postMessage({
-              type: "INVALIDATE_CACHE",
-            });
-          })
-          .catch((error) => {
-            console.log(
-              "[v0] Server Action: Service worker message failed:",
-              error
-            );
-          });
-      }
-    } catch (error) {
-      console.log("[v0] Server Action: Cache invalidation failed:", error);
-    }
+    // Extract user data from the populated response
+    const createdPostUser = result.data.user;
+    const userData = createdPostUser || userObject;
 
     console.log(
-      "[v0] Server Action: Post creation process completed successfully"
+      "[v0] Server Action: User data from response:",
+      createdPostUser
     );
+    console.log("[v0] Server Action: Final user data:", userData);
+
+
+    // Return optimized response with user data to prevent "unknown" display
     return {
       success: true,
       post: {
@@ -370,8 +265,27 @@ export async function createPost(formData: FormData) {
         contentType,
         background,
         galleryLayout,
-        mediaItems: uploadedMediaItems,
+        media: uploadedFiles, // Use the uploaded files directly
         tags,
+        // Extract user data from either populated response or original userObject
+        user: {
+          id: userData?.id || userObject?.id,
+          documentId: userData?.documentId || userObject?.documentId,
+          username: userData?.username || userObject?.username,
+          displayName:
+            userData?.displayName ||
+            userObject?.displayName ||
+            userData?.username ||
+            userObject?.username,
+          profileImage: userData?.profileImage || userObject?.profileImage,
+        },
+        createdAt:
+          result.data.createdAt ||
+          result.data.publishedAt ||
+          new Date().toISOString(),
+        // Fallback fields for immediate display
+        username: userData?.username || userObject?.username || "User",
+        userImage: userData?.profileImage?.url || userObject?.profileImage?.url,
       },
     };
   } catch (error) {

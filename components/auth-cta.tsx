@@ -4,7 +4,7 @@ import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Users, ImageIcon, Heart } from "lucide-react"
-import { useAuth } from "@/context/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 
 export default function AuthCTA() {
   const { isAuthenticated } = useAuth()

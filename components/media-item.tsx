@@ -1,27 +1,27 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { useState, useEffect, useRef } from "react"
-import Image from "next/image"
-import { ImageOff, Play } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { getAbsoluteImageUrl } from "@/lib/image-utils"
+import type React from "react";
+import { useState, useEffect, useRef } from "react";
+import Image from "next/image";
+import { ImageOff, Play } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { getAbsoluteImageUrl } from "@/lib/image-utils";
 
 interface MediaItemProps {
-  src: string
-  alt?: string
-  type?: "image" | "video"
-  objectFit?: "cover" | "contain"
-  priority?: boolean
-  width?: number
-  height?: number
-  className?: string
-  onClick?: () => void
-  onError?: () => void
-  showControls?: boolean
-  isActive?: boolean
-  aspectRatio?: "square" | "video" | "auto"
-  style?: React.CSSProperties
+  src: string;
+  alt?: string;
+  type?: "image" | "video";
+  objectFit?: "cover" | "contain";
+  priority?: boolean;
+  width?: number;
+  height?: number;
+  className?: string;
+  onClick?: () => void;
+  onError?: () => void;
+  showControls?: boolean;
+  isActive?: boolean;
+  aspectRatio?: "square" | "video" | "auto";
+  style?: React.CSSProperties;
 }
 
 export function MediaItem({
@@ -41,108 +41,115 @@ export function MediaItem({
   style,
   ...props
 }: MediaItemProps) {
-  const [absoluteSrc, setAbsoluteSrc] = useState<string>(src)
-  const [hasError, setHasError] = useState(false)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const isMounted = useRef(true)
+  const [absoluteSrc, setAbsoluteSrc] = useState<string>(src);
+  const [hasError, setHasError] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const isMounted = useRef(true);
 
   // Track component mount state to prevent state updates after unmount
   useEffect(() => {
-    isMounted.current = true
+    isMounted.current = true;
     return () => {
-      isMounted.current = false
-    }
-  }, [])
+      isMounted.current = false;
+    };
+  }, []);
 
   // Get the absolute URL for the image
   useEffect(() => {
+    console.log("[MediaItem] Processing src:", { src, type });
+
     if (!src) {
+      console.log("[MediaItem] No src provided, setting error");
       if (isMounted.current) {
-        setHasError(true)
+        setHasError(true);
       }
-      return
+      return;
     }
 
     // Handle blob URLs directly
     if (src.startsWith("blob:")) {
       if (isMounted.current) {
-        setAbsoluteSrc(src)
+        setAbsoluteSrc(src);
       }
-      return
+      return;
     }
 
     if (type === "video" && src.startsWith("http")) {
       if (isMounted.current) {
-        setAbsoluteSrc(src)
+        setAbsoluteSrc(src);
       }
-      return
+      return;
     }
 
     try {
       // Get the absolute URL for images only
-      const absolute = getAbsoluteImageUrl(src)
+      const absolute = getAbsoluteImageUrl(src);
+      console.log("[MediaItem] Generated absolute URL:", { src, absolute });
       if (isMounted.current) {
-        setAbsoluteSrc(absolute)
+        setAbsoluteSrc(absolute);
       }
     } catch (error) {
+      console.error("[MediaItem] Error getting absolute image URL:", error);
       if (isMounted.current) {
-        setHasError(true)
+        setHasError(true);
       }
     }
-  }, [src, type]) // Added type as dependency
+  }, [src, type]); // Added type as dependency
 
   // Handle image error
   const handleImageError = () => {
-    if (!isMounted.current) return
+    if (!isMounted.current) return;
 
     if (type === "video") {
-      return
+      return;
     }
 
     // Don't try to fix blob URLs
     if (src.startsWith("blob:")) {
-      setHasError(true)
-      if (onError) onError()
-      return
+      setHasError(true);
+      if (onError) onError();
+      return;
     }
 
     // Try to fix the URL if it's a relative path
     if (src.startsWith("/uploads/")) {
-      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
-      const fixedUrl = `${apiBaseUrl}${src}`
-      setAbsoluteSrc(fixedUrl)
-      return
+      const apiBaseUrl =
+        process.env.NEXT_PUBLIC_API_URL ||
+        "https://nailfeed-backend-production.up.railway.app";
+      const fixedUrl = `${apiBaseUrl}${src}`;
+      setAbsoluteSrc(fixedUrl);
+      return;
     }
 
-    setHasError(true)
-    if (onError) onError()
-  }
+    setHasError(true);
+    if (onError) onError();
+  };
 
   // Handle video error
   const handleVideoError = () => {
-    if (!isMounted.current) return
-    setHasError(true)
-    if (onError) onError()
-  }
+    if (!isMounted.current) return;
+    setHasError(true);
+    if (onError) onError();
+  };
 
   // Handle click
   const handleClick = () => {
     if (onClick) {
-      onClick()
+      onClick();
     }
-  }
+  };
 
   // Get aspect ratio class
   const getAspectRatioClass = () => {
     switch (aspectRatio) {
       case "square":
-        return "aspect-square"
+        return "aspect-square";
       case "video":
-        return "aspect-video"
+        return "aspect-video";
       default:
-        return "aspect-auto"
+        return "aspect-auto";
     }
-  }
+  };
 
   // Render error state
   if (hasError && type === "image") {
@@ -151,7 +158,7 @@ export function MediaItem({
         className={cn(
           "relative flex flex-col items-center justify-center bg-gray-100 w-full h-full",
           getAspectRatioClass(),
-          className,
+          className
         )}
         style={style}
         onClick={handleClick}
@@ -159,20 +166,27 @@ export function MediaItem({
         <ImageOff className="h-8 w-8 text-gray-400 mb-2" />
         <p className="text-sm text-gray-500">Image unavailable</p>
       </div>
-    )
+    );
   }
 
   // Render video
   if (type === "video") {
     return (
       <div
-        className={cn("relative w-full h-full", getAspectRatioClass(), className)}
+        className={cn(
+          "relative w-full h-full",
+          getAspectRatioClass(),
+          className
+        )}
         style={style}
         onClick={handleClick}
       >
         <video
           src={absoluteSrc}
-          className={cn("w-full h-full", objectFit === "cover" ? "object-cover" : "object-contain")}
+          className={cn(
+            "w-full h-full",
+            objectFit === "cover" ? "object-cover" : "object-contain"
+          )}
           controls={showControls}
           muted
           playsInline
@@ -192,7 +206,7 @@ export function MediaItem({
           </div>
         )}
       </div>
-    )
+    );
   }
 
   // Render image
@@ -202,14 +216,14 @@ export function MediaItem({
         className={cn(
           "relative flex flex-col items-center justify-center bg-gray-100 w-full h-full",
           getAspectRatioClass(),
-          className,
+          className
         )}
         style={style}
       >
         <ImageOff className="h-8 w-8 text-gray-400 mb-2" />
         <p className="text-sm text-gray-500">Image unavailable</p>
       </div>
-    )
+    );
   }
 
   return (
@@ -217,7 +231,7 @@ export function MediaItem({
       className={cn(
         "relative w-full h-full flex items-center justify-center bg-black",
         getAspectRatioClass(),
-        className,
+        className
       )}
       style={style}
       onClick={handleClick}
@@ -232,12 +246,11 @@ export function MediaItem({
           "w-full h-full",
           objectFit === "cover" ? "object-cover" : "object-contain",
           !isActive && "opacity-70",
-          onClick && "cursor-pointer",
+          onClick && "cursor-pointer"
         )}
         onError={handleImageError}
-        unoptimized={true}
         {...props}
       />
     </div>
-  )
+  );
 }

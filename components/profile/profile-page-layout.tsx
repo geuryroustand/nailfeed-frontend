@@ -31,14 +31,6 @@ export function ProfilePageLayout({ children, isOwnProfile, showGuestBanner = fa
               </Suspense>
             )}
 
-            {/* Create Post Button - Only show on own profile */}
-            {isOwnProfile && (
-              <div className="flex justify-center my-4">
-                <Suspense fallback={null}>
-                  <CreatePostButton />
-                </Suspense>
-              </div>
-            )}
 
             {/* Main Content */}
             {children}

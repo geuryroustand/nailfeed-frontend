@@ -1,5 +1,5 @@
-import { cookies } from "next/headers"
 import { type NextRequest, NextResponse } from "next/server"
+import { verifySession } from "@/lib/auth/session"
 
 // Server-only environment variables
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
@@ -23,10 +23,21 @@ function joinUrl(base: string, path: string) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}))
-    const { endpoint, method = "GET", data, headers: incomingHeaders = {}, authorizationOverride } = body || {}
+    const {
+      endpoint,
+      method = "GET",
+      data,
+      headers: incomingHeaders = {},
+      authorizationOverride,
+      useServerToken = false,
+    } = body || {}
 
     if (endpoint && endpoint.includes("/comments/")) {
       console.log("[v0] Auth proxy handling comment request:", { endpoint, method })
+    }
+
+    if (endpoint && endpoint.includes("/posts")) {
+      console.log("[v0] Auth proxy handling post request:", { endpoint, method })
     }
 
     if (!endpoint || typeof endpoint !== "string") {
@@ -56,44 +67,37 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const cookieStore = await cookies()
+    // ✅ SECURITY: Use secure session system instead of legacy cookies
+    const session = await verifySession()
+    let jwt: string | undefined
 
-    // Try multiple cookie names that might contain the JWT
-    const jwtCookie = cookieStore.get("jwt")
-    const authTokenCookie = cookieStore.get("authToken")
-    const auth_tokenCookie = cookieStore.get("auth_token")
+    if (!useServerToken && session) {
+      // Get the Strapi JWT from session - we'll need to store this during login
+      jwt = session.strapiJWT as string
 
-    // Debug logging for comment requests
-    if (endpoint && endpoint.includes("/comments/")) {
-      console.log("[v0] Cookie debug for comment request:", {
-        jwtCookie: jwtCookie ? `present (length: ${jwtCookie.value.length})` : "not found",
-        authTokenCookie: authTokenCookie ? `present (length: ${authTokenCookie.value.length})` : "not found",
-        auth_tokenCookie: auth_tokenCookie ? `present (length: ${auth_tokenCookie.value.length})` : "not found",
-        hasServerToken: !!SERVER_API_TOKEN,
-        authorizationOverride: authorizationOverride ? "provided" : "not provided",
-      })
+      if (endpoint && endpoint.includes("/posts")) {
+        console.log("[v0] Auth-proxy: Using JWT from secure session")
+      }
     }
-
-    const jwt = jwtCookie?.value ?? authTokenCookie?.value ?? auth_tokenCookie?.value
 
     if (jwt) {
       headers["Authorization"] = `Bearer ${jwt}`
-      if (endpoint && endpoint.includes("/comments/")) {
-        console.log("[v0] Using JWT from cookies for comment request, token length:", jwt.length)
+      if (endpoint && endpoint.includes("/posts")) {
+        console.log("[v0] Auth-proxy: Using JWT from cookies, token starts with:", jwt.substring(0, 20) + "...")
       }
     } else if (authorizationOverride && typeof authorizationOverride === "string") {
       headers["Authorization"] = authorizationOverride
-      if (endpoint && endpoint.includes("/comments/")) {
-        console.log("[v0] Using authorization override for comment request")
+      if (endpoint && endpoint.includes("/posts")) {
+        console.log("[v0] Auth-proxy: Using authorization override")
       }
     } else if (SERVER_API_TOKEN) {
       headers["Authorization"] = `Bearer ${SERVER_API_TOKEN}`
-      if (endpoint && endpoint.includes("/comments/")) {
-        console.log("[v0] Using server API token for comment request")
+      if (endpoint && endpoint.includes("/posts")) {
+        console.log("[v0] Auth-proxy: Using server API token")
       }
     } else {
-      if (endpoint && endpoint.includes("/comments/")) {
-        console.log("[v0] No authorization found for comment request - this will likely fail")
+      if (endpoint && endpoint.includes("/posts")) {
+        console.log("[v0] Auth-proxy: NO AUTHORIZATION FOUND - this will likely fail")
       }
     }
 
@@ -107,8 +111,8 @@ export async function POST(request: NextRequest) {
       fetchOptions.body = typeof data === "string" ? data : JSON.stringify(data)
     }
 
-    if (endpoint && endpoint.includes("/comments/")) {
-      console.log("[v0] Making request to Strapi:", {
+    if (endpoint && endpoint.includes("/posts")) {
+      console.log("[v0] Auth-proxy: Making request to Strapi:", {
         url,
         method,
         hasAuth: !!headers["Authorization"],
@@ -174,6 +178,104 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error("API proxy error:", error)
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+  }
+}
+
+/**
+ * GET /api/auth-proxy?endpoint={endpoint}&param1=value1&param2=value2
+ * Supports GET requests with query parameters for infinite scrolling and other use cases
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const endpoint = searchParams.get('endpoint')
+
+    if (!endpoint || typeof endpoint !== "string") {
+      return NextResponse.json(
+        {
+          error: {
+            code: "bad_request",
+            message: "Missing 'endpoint' query parameter.",
+          },
+        },
+        { status: 400 }
+      )
+    }
+
+    // Build query parameters (excluding 'endpoint')
+    const queryParams = new URLSearchParams()
+    for (const [key, value] of searchParams.entries()) {
+      if (key !== 'endpoint') {
+        queryParams.append(key, value)
+      }
+    }
+
+    // Check user session for JWT token
+    const sessionResult = await verifySession()
+    const userJwt = sessionResult?.strapiJWT || null
+
+    // Authorization priority: user JWT > server token
+    const token = userJwt || SERVER_API_TOKEN
+
+    if (!token) {
+      return NextResponse.json(
+        { error: { code: "unauthorized", message: "No authentication token available" } },
+        { status: 401 }
+      )
+    }
+
+    // Build final URL with query parameters
+    const finalUrl = joinUrl(API_BASE_URL, endpoint) + (queryParams.toString() ? `?${queryParams.toString()}` : '')
+
+    console.log(`[AuthProxy GET] Requesting: ${finalUrl}`)
+
+    const resp = await fetch(finalUrl, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        ...(userJwt && { "X-User-Context": "authenticated" }),
+      },
+    })
+
+    console.log(`[AuthProxy GET] Response status: ${resp.status}`)
+
+    if (!resp.ok) {
+      const errorText = await resp.text()
+      console.log(`[AuthProxy GET] Error response: ${errorText}`)
+
+      if (resp.status >= 400 && resp.status < 500) {
+        try {
+          const errorJson = JSON.parse(errorText)
+          return NextResponse.json(errorJson, { status: resp.status })
+        } catch {
+          return NextResponse.json({ error: errorText }, { status: resp.status })
+        }
+      }
+    }
+
+    // Return successful response
+    const contentType = resp.headers.get("content-type") || ""
+
+    if (contentType.includes("application/json")) {
+      try {
+        const json = await resp.json()
+        return NextResponse.json(json, { status: resp.status })
+      } catch (error) {
+        console.log("[AuthProxy GET] Failed to parse JSON response")
+        return new NextResponse(null, { status: resp.status })
+      }
+    }
+
+    const text = await resp.text()
+    return new NextResponse(text, {
+      status: resp.status,
+      headers: { 'Content-Type': contentType }
+    })
+
+  } catch (error) {
+    console.error("Auth proxy GET error:", error)
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }

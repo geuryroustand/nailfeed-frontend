@@ -1,73 +1,88 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { useState, useRef, useEffect, useMemo, useCallback } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { ImageIcon, Video, Smile, XCircle, MapPin, UserPlus, Palette, LayoutGrid, Hash } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
-import PostBackgroundSelector, { type BackgroundType } from "./post-background-selector"
-import MediaGallery from "./media-gallery"
-import type { MediaItem } from "@/types/media"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { useAuth } from "@/context/auth-context"
-import { useRouter } from "next/navigation"
-import type { ContentType, GalleryLayout } from "@/lib/services/post-service"
-import dynamic from "next/dynamic"
+import type React from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  ImageIcon,
+  Video,
+  Smile,
+  XCircle,
+  MapPin,
+  UserPlus,
+  Palette,
+  LayoutGrid,
+  Hash,
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import PostBackgroundSelector, {
+  type BackgroundType,
+} from "./post-background-selector";
+import MediaGallery from "./media-gallery";
+import type { MediaItem } from "@/types/media";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/hooks/use-auth";
+import { useRouter } from "next/navigation";
+import type { ContentType, GalleryLayout } from "@/lib/services/post-service";
+import dynamic from "next/dynamic";
 // Update the import at the top of the file
-import { containsProfanity, validateContent as validateContentText } from "@/lib/content-moderation"
+import {
+  containsProfanity,
+  validateContent as validateContentText,
+} from "@/lib/content-moderation";
+import { createPostBasic } from "@/app/actions/simple-post-actions";
+import { uploadPostMedia } from "@/lib/services/strapi-upload-service";
 
 // Dynamically import EmojiPicker to avoid SSR issues
 const EmojiPicker = dynamic(() => import("emoji-picker-react"), {
   ssr: false,
   loading: () => <div className="p-4 text-center">Loading emoji picker...</div>,
-})
-
-// Add this function after the imports
-async function fetchCompletePostData(postId: number) {
-  try {
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
-    const response = await fetch(`${API_URL}/api/posts/${postId}?populate=*`)
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch complete post data: ${response.status}`)
-    }
-
-    const data = await response.json()
-    return data.data
-  } catch (error) {
-    return null
-  }
-}
+});
 
 interface CreatePostModalProps {
-  onClose: () => void
-  onPostCreated: (post: any) => void
+  onClose: () => void;
+  onPostCreated: (post: any) => void;
+  onPostCreationFailed?: (optimisticPostId: string) => void; // For handling failed optimistic updates
 }
 
-export default function CreatePostModal({ onClose, onPostCreated }: CreatePostModalProps) {
-  const [content, setContent] = useState("")
-  const [mediaItems, setMediaItems] = useState<MediaItem[]>([])
-  const [background, setBackground] = useState<BackgroundType | null>(null)
-  const [showBackgroundSelector, setShowBackgroundSelector] = useState(false)
-  const [galleryLayout, setGalleryLayout] = useState<GalleryLayout>("grid")
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [submitError, setSubmitError] = useState<string | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const emojiPickerRef = useRef<HTMLDivElement>(null)
-  const { toast } = useToast()
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-  const MAX_MEDIA_ITEMS = 10
-  const { user, isAuthenticated, jwt } = useAuth()
-  const router = useRouter()
-  const [showTrendingTags, setShowTrendingTags] = useState(false)
-  const [cursorPosition, setCursorPosition] = useState(0)
-  const [isFocused, setIsFocused] = useState(false)
-  const mounted = useRef(true)
-  const [title, setTitle] = useState("")
-  const [showTitleInput, setShowTitleInput] = useState(false)
+export default function CreatePostModal({
+  onClose,
+  onPostCreated,
+  onPostCreationFailed,
+}: CreatePostModalProps) {
+  const [content, setContent] = useState("");
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
+  const [background, setBackground] = useState<BackgroundType | null>(null);
+  const [showBackgroundSelector, setShowBackgroundSelector] = useState(false);
+  const [galleryLayout, setGalleryLayout] = useState<GalleryLayout>("grid");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const MAX_MEDIA_ITEMS = 10;
+  const { user, isAuthenticated } = useAuth();
+  const router = useRouter();
+  const [showTrendingTags, setShowTrendingTags] = useState(false);
+  const [cursorPosition, setCursorPosition] = useState(0);
+  const [isFocused, setIsFocused] = useState(false);
+  const mounted = useRef(true);
+  const [title, setTitle] = useState("");
+  const [showTitleInput, setShowTitleInput] = useState(false);
 
   // Trending tags suggestion (mock data - could be fetched from API)
   const trendingTags = [
@@ -83,14 +98,17 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
     "mattenails",
     "ombrenails",
     "coffinnails",
-  ]
+  ];
 
+  // Use MediaItem type from "@/types/media" for type compatibility
   // Extract hashtags from content
   const extractedTags = useMemo(() => {
-    const hashtagRegex = /#(\w+)/g
-    const matches = [...content.matchAll(hashtagRegex)]
-    return matches.map((match) => match[1].toLowerCase()).filter((tag, index, self) => self.indexOf(tag) === index) // Remove duplicates
-  }, [content])
+    const hashtagRegex = /#(\w+)/g;
+    const matches = [...content.matchAll(hashtagRegex)];
+    return matches
+      .map((match) => match[1].toLowerCase())
+      .filter((tag, index, self) => self.indexOf(tag) === index); // Remove duplicates
+  }, [content]);
 
   // const [formData, setFormData] = useState({
   //   description: "",
@@ -106,25 +124,25 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
         title: "Authentication required",
         description: "Please log in to create posts",
         variant: "destructive",
-      })
-      onClose()
-      router.push("/auth")
+      });
+      onClose();
+      router.push("/auth");
     }
-  }, [isAuthenticated, onClose, router, toast])
+  }, [isAuthenticated, onClose, router, toast]);
 
   // Auto-resize textarea as content changes
   useEffect(() => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = "auto"
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
-      updateCursorPosition()
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+      updateCursorPosition();
     }
-  }, [content])
+  }, [content]);
 
   const handleMediaSelect = (type: "image" | "video") => {
     // If selecting media, clear background
     if (background) {
-      setBackground(null)
+      setBackground(null);
     }
 
     if (mediaItems.length >= MAX_MEDIA_ITEMS) {
@@ -132,180 +150,190 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
         title: `Maximum ${MAX_MEDIA_ITEMS} media items allowed`,
         description: `Please remove some media items before adding more.`,
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
 
     if (fileInputRef.current) {
-      fileInputRef.current.accept = type === "image" ? "image/*" : "video/*"
-      fileInputRef.current.click()
+      fileInputRef.current.accept = type === "image" ? "image/*" : "video/*";
+      fileInputRef.current.click();
     }
-  }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (!files || files.length === 0) return
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
     // Handle multiple files
-    const newMediaItems: MediaItem[] = []
+    const newMediaItems: MediaItem[] = [];
 
     Array.from(files).forEach((file) => {
-      if (mediaItems.length + newMediaItems.length >= MAX_MEDIA_ITEMS) return
+      if (mediaItems.length + newMediaItems.length >= MAX_MEDIA_ITEMS) return;
 
       // Create a local URL for the file preview
-      const objectUrl = URL.createObjectURL(file)
-      const type = file.type.startsWith("image/") ? "image" : "video"
+      const objectUrl = URL.createObjectURL(file);
+      const type = file.type.startsWith("image/") ? "image" : "video";
 
       newMediaItems.push({
         id: Date.now() + Math.random().toString(36).substring(2, 9),
         type,
         url: objectUrl,
         file: file, // Store the file reference for later upload
-      })
-    })
+      });
+    });
 
-    setMediaItems([...mediaItems, ...newMediaItems])
+    setMediaItems([...mediaItems, ...newMediaItems]);
 
     // Reset the input
     if (fileInputRef.current) {
-      fileInputRef.current.value = ""
+      fileInputRef.current.value = "";
     }
-  }
+  };
 
   const handleRemoveMedia = (id: string) => {
     setMediaItems((prev) => {
-      const itemToRemove = prev.find((item) => item.id === id)
-      if (itemToRemove && itemToRemove.url.startsWith("blob:")) {
-        URL.revokeObjectURL(itemToRemove.url)
+      const itemToRemove = prev.find((item) => item.id === id);
+      if (
+        itemToRemove &&
+        itemToRemove.url &&
+        itemToRemove.url.startsWith("blob:")
+      ) {
+        URL.revokeObjectURL(itemToRemove.url);
       }
-      return prev.filter((item) => item.id !== id)
-    })
-  }
+      return prev.filter((item) => item.id !== id);
+    });
+  };
 
   const handleEmojiSelect = (emojiData: any) => {
-    const textarea = textareaRef.current
-    if (!textarea) return
+    const textarea = textareaRef.current;
+    if (!textarea) return;
 
-    const emoji = emojiData.emoji
-    const cursorPos = textarea.selectionStart
+    const emoji = emojiData.emoji;
+    const cursorPos = textarea.selectionStart;
 
-    const textBefore = content.substring(0, cursorPos)
-    const textAfter = content.substring(cursorPos)
+    const textBefore = content.substring(0, cursorPos);
+    const textAfter = content.substring(cursorPos);
 
-    setContent(textBefore + emoji + textAfter)
+    setContent(textBefore + emoji + textAfter);
 
     // Focus back on textarea and set cursor position after inserted emoji
     setTimeout(() => {
-      textarea.focus()
-      const newCursorPos = cursorPos + emoji.length
-      textarea.setSelectionRange(newCursorPos, newCursorPos)
-      updateCursorPosition()
-    }, 0)
+      textarea.focus();
+      const newCursorPos = cursorPos + emoji.length;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+      updateCursorPosition();
+    }, 0);
 
     // Close emoji picker after selection
-    setShowEmojiPicker(false)
-  }
+    setShowEmojiPicker(false);
+  };
 
-  const handleBackgroundSelect = (selectedBackground: BackgroundType | null) => {
-    setBackground(selectedBackground)
+  const handleBackgroundSelect = (
+    selectedBackground: BackgroundType | null
+  ) => {
+    setBackground(selectedBackground);
 
     // If selecting a background, clear media
     if (selectedBackground && mediaItems.length > 0) {
       // Revoke all object URLs to prevent memory leaks
       mediaItems.forEach((item) => {
-        if (item.url.startsWith("blob:")) {
-          URL.revokeObjectURL(item.url)
+        if (item.url && item.url.startsWith("blob:")) {
+          URL.revokeObjectURL(item.url);
         }
-      })
-      setMediaItems([])
+      });
+      setMediaItems([]);
     }
-  }
+  };
 
   const insertHashtag = (tag: string) => {
     // Insert the hashtag at the current cursor position or at the end
-    const textarea = textareaRef.current
-    if (!textarea) return
+    const textarea = textareaRef.current;
+    if (!textarea) return;
 
-    const tagText = ` #${tag} `
-    const cursorPos = textarea.selectionStart
+    const tagText = ` #${tag} `;
+    const cursorPos = textarea.selectionStart;
 
-    const textBefore = content.substring(0, cursorPos)
-    const textAfter = content.substring(cursorPos)
+    const textBefore = content.substring(0, cursorPos);
+    const textAfter = content.substring(cursorPos);
 
-    setContent(textBefore + tagText + textAfter)
+    setContent(textBefore + tagText + textAfter);
 
     // Focus back on textarea and set cursor position after inserted tag
     setTimeout(() => {
-      textarea.focus()
-      const newCursorPos = cursorPos + tagText.length
-      textarea.setSelectionRange(newCursorPos, newCursorPos)
-      updateCursorPosition()
-    }, 0)
+      textarea.focus();
+      const newCursorPos = cursorPos + tagText.length;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+      updateCursorPosition();
+    }, 0);
 
-    setShowTrendingTags(false)
-  }
+    setShowTrendingTags(false);
+  };
 
   // Format content to highlight hashtags
   const formatContentWithHashtags = () => {
-    if (!content) return null
+    if (!content) return null;
 
-    const parts = content.split(/(#\w+)/g)
+    const parts = content.split(/(#\w+)/g);
     return parts.map((part, index) => {
       if (part.startsWith("#")) {
         return (
           <span key={index} className="text-pink-500 font-medium">
             {part}
           </span>
-        )
+        );
       }
-      return part
-    })
-  }
+      return part;
+    });
+  };
 
   useEffect(() => {
     // Handle click outside for emoji picker and trending tags
     const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement
+      const target = event.target as HTMLElement;
       if (
         showEmojiPicker &&
         emojiPickerRef.current &&
         !emojiPickerRef.current.contains(target) &&
         !target.closest(".emoji-button")
       ) {
-        setShowEmojiPicker(false)
+        setShowEmojiPicker(false);
       }
-      if (showTrendingTags && !target.closest(".trending-tags-container") && !target.closest(".hashtag-button")) {
-        setShowTrendingTags(false)
+      if (
+        showTrendingTags &&
+        !target.closest(".trending-tags-container") &&
+        !target.closest(".hashtag-button")
+      ) {
+        setShowTrendingTags(false);
       }
-    }
+    };
 
-    document.addEventListener("mousedown", handleClickOutside)
+    document.addEventListener("mousedown", handleClickOutside);
 
     // Clean up function
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside)
-    }
-  }, [showEmojiPicker, showTrendingTags])
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showEmojiPicker, showTrendingTags]);
 
   // Separate useEffect for cleaning up blob URLs to avoid unnecessary revocations
   useEffect(() => {
     return () => {
       // Revoke all object URLs to prevent memory leaks when component unmounts
       mediaItems.forEach((item) => {
-        if (item.url.startsWith("blob:")) {
-          URL.revokeObjectURL(item.url)
+        if (item.url && item.url.startsWith("blob:")) {
+          URL.revokeObjectURL(item.url);
         }
-      })
-    }
-  }, [])
+      });
+    };
+  }, []);
 
   // Track component mounting state
   useEffect(() => {
-    mounted.current = true
+    mounted.current = true;
     return () => {
-      mounted.current = false
-    }
-  }, [])
+      mounted.current = false;
+    };
+  }, []);
 
   // Update the validateContent function to use the imported function:
   const validateContent = (): { isValid: boolean; errorMessage?: string } => {
@@ -313,55 +341,58 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
     if (title && containsProfanity(title)) {
       return {
         isValid: false,
-        errorMessage: "Your title contains inappropriate language. Please revise it.",
-      }
+        errorMessage:
+          "Your title contains inappropriate language. Please revise it.",
+      };
     }
 
     // Check description for profanity
     if (content) {
-      return validateContentText(content)
+      return validateContentText(content);
     }
 
-    return { isValid: true }
-  }
+    return { isValid: true };
+  };
 
   const invalidateServiceWorkerCache = useCallback(() => {
     if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
       navigator.serviceWorker.controller.postMessage({
         type: "INVALIDATE_CACHE",
         pattern: "/api/posts",
-      })
+      });
     }
-  }, [])
+  }, []);
 
-  // Modify the handleSubmit function to include content validation
-  // Find the handleSubmit function and add this code at the beginning:
+  // Optimized handleSubmit with optimistic UI updates and better error handling
   const handleSubmit = async () => {
     // Reset previous errors
-    setSubmitError(null)
+    setSubmitError(null);
 
     // Validate content for profanity
-    const contentValidation = validateContent()
+    const contentValidation = validateContent();
     if (!contentValidation.isValid) {
-      setSubmitError(contentValidation.errorMessage || "Your post contains inappropriate content.")
+      setSubmitError(
+        contentValidation.errorMessage ||
+          "Your post contains inappropriate content."
+      );
       toast({
         title: "Content moderation",
         description: contentValidation.errorMessage,
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
 
     // Check if user is authenticated
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !user) {
       toast({
         title: "Authentication required",
         description: "Please log in to create posts",
         variant: "destructive",
-      })
-      onClose()
-      router.push("/auth")
-      return
+      });
+      onClose();
+      router.push("/auth");
+      return;
     }
 
     if (!content.trim() && mediaItems.length === 0) {
@@ -369,188 +400,314 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
         title: "Cannot create empty post",
         description: "Please add some text or media to your post.",
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
 
-    setIsSubmitting(true)
+    setIsSubmitting(true);
+
+    // Declare optimisticPost outside try-catch so it's accessible in catch
+    let optimisticPost: any = null;
 
     try {
-      // Get authentication token
-      const token = jwt
-      if (!token) {
-        setSubmitError("Authentication token not found. Please try logging in again.")
-        toast({
-          title: "Authentication error",
-          description: "Your login session may have expired. Please log in again.",
-          variant: "destructive",
-        })
-        setIsSubmitting(false)
-        return
-      }
-
       // Determine the content type based on what's being posted
-      let contentType: ContentType
+      let contentType: ContentType;
       if (mediaItems.length > 0) {
-        contentType = mediaItems.length === 1 ? (mediaItems[0].type === "image" ? "image" : "video") : "media-gallery"
+        contentType =
+          mediaItems.length === 1
+            ? mediaItems[0].type === "image"
+              ? "image"
+              : "video"
+            : "media-gallery";
       } else {
-        contentType = background ? "text-background" : "text"
+        contentType = background ? "text-background" : "text";
       }
 
-      // Prepare FormData for the server action
-      const formData = new FormData()
-
-      // Add basic post data
-      formData.append("title", title.trim())
-      formData.append("description", content)
-      formData.append("contentType", contentType)
-      formData.append("galleryLayout", galleryLayout)
-      formData.append("jwt", token)
-      formData.append("userDocumentId", user?.documentId || "")
-      formData.append("userObject", JSON.stringify(user))
-
-      // Add background if exists
-      if (background) {
-        formData.append("background", JSON.stringify(background))
-      }
-
-      // Add extracted hashtags
-      formData.append("tags", JSON.stringify(extractedTags))
-
-      // Add media files if they exist
-      if (mediaItems.length > 0) {
-        mediaItems.forEach((item) => {
-          if (item.file) {
-            formData.append("mediaFiles", item.file)
-          }
-        })
-      }
-
-      invalidateServiceWorkerCache()
-
-      // Call the server action with the new flow
-      const result = await fetch("/api/posts/create", {
-        method: "POST",
-        body: formData,
-        headers: {
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-        },
-      })
-
-      if (!result.ok) {
-        const errorData = await result.json()
-        throw new Error(errorData.error || "Failed to create post")
-      }
-
-      const responseData = await result.json()
-
-      if (!responseData.success) {
-        throw new Error(responseData.error || "Failed to create post")
-      }
-
-      invalidateServiceWorkerCache()
-
-      // Force a hard refresh of the page cache
-      if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-          type: "REFRESH_CACHE",
-        })
-      }
-
-      // Create a new post object for the UI
-      const newPost = {
-        id: responseData.post.id,
-        username: user?.username || "you",
-        userImage: user?.profileImage?.url || "/diverse-avatars.png",
+      // Create optimistic post data with unique temp ID
+      const tempId = `temp-${Date.now()}-${Math.random()
+        .toString(36)
+        .substr(2, 9)}`;
+      optimisticPost = {
+        id: tempId,
+        documentId: tempId,
+        username: user.username || user.displayName || "You",
+        userImage: user.profileImage?.url || "",
         title: title.trim(),
         description: content,
         likes: 0,
         comments: [],
+        comments_count: 0,
+        reactions: [],
         timestamp: "Just now",
+        createdAt: new Date().toISOString(),
         contentType,
-        mediaItems: responseData.post.mediaItems || [],
+        mediaItems: mediaItems.map((item, index) => ({
+          id: `temp-media-${index}`,
+          type: item.type,
+          url: item.url,
+          file: item.file,
+        })),
         galleryLayout,
         background: background || undefined,
         tags: extractedTags || [],
+        userId: user.id,
+        userDocumentId: user.documentId || user.id.toString(),
+        user: {
+          id: user.id,
+          documentId: user.documentId,
+          username: user.username,
+          displayName: user.displayName || user.username,
+          profileImage: user.profileImage,
+        },
+        isOptimistic: true, // Flag to identify optimistic posts
+      };
+
+      // Show optimistic UI immediately
+      onPostCreated(optimisticPost);
+      onClose();
+
+      // Show immediate success feedback
+      toast({
+        title: "Publishing post...",
+        description: "Your content is being shared with the community.",
+        duration: 2000,
+      });
+
+      // Prepare FormData for the server action
+      const formData = new FormData();
+
+      // Add basic post data
+      formData.append("title", title.trim());
+      formData.append("description", content);
+      formData.append("contentType", contentType);
+      formData.append("galleryLayout", galleryLayout);
+      formData.append("userDocumentId", user?.documentId || "");
+      formData.append(
+        "userObject",
+        JSON.stringify({
+          ...user,
+          username: user.username,
+          displayName: user.displayName || user.username,
+        })
+      );
+
+      // Add background if exists
+      if (background) {
+        formData.append("background", JSON.stringify(background));
       }
 
-      // Notify about successful post creation
-      toast({
-        title: "Post created successfully!",
-        description: "Your content has been shared with the community.",
-        duration: 3000,
+      // Add extracted hashtags
+      formData.append("tags", JSON.stringify(extractedTags));
+
+      // STEP 1: Create post with basic data only
+      console.log("[CreatePost] Creating post with basic data...")
+      const postResponse = await createPostBasic(formData);
+
+      if (!postResponse.success) {
+        throw new Error(postResponse.error || "Failed to create post")
+      }
+
+      const createdPost = postResponse.post
+      console.log("[CreatePost] Post created:", {
+        id: createdPost.id,
+        documentId: createdPost.documentId
       })
 
-      // Pass the new post to the parent component and close the modal
-      onPostCreated(newPost)
-      onClose()
+      // STEP 2: Upload media files with post references (if any)
+      if (mediaItems.length > 0) {
+        console.log("[CreatePost] Uploading media files to post...")
+
+        const filesToUpload = mediaItems
+          .map(item => item.file)
+          .filter(file => file instanceof File || file instanceof Blob) as File[]
+
+        if (filesToUpload.length > 0) {
+          // CRITICAL: Use numeric ID for Strapi relations, not documentId
+          const uploadResult = await uploadPostMedia(filesToUpload, createdPost.id)
+
+          if (!uploadResult.success) {
+            console.warn("[CreatePost] Media upload failed:", uploadResult.error)
+          } else {
+            console.log("[CreatePost] Media upload completed")
+
+            // STEP 3: Fetch updated post data with media relations
+            console.log("[CreatePost] Fetching updated post data with media...")
+            try {
+              // Use auth-proxy GET to handle authentication correctly
+              const endpoint = `/api/posts/${createdPost.documentId}`
+              const params = new URLSearchParams({
+                'populate[user][populate]': 'profileImage',
+                'populate': 'media'
+              })
+              const updatedPostUrl = `/api/auth-proxy?endpoint=${encodeURIComponent(endpoint)}&${params.toString()}`
+
+              console.log("[CreatePost] Fetching from:", updatedPostUrl)
+
+              const updatedPostResponse = await fetch(updatedPostUrl, {
+                method: 'GET',
+              })
+
+              if (updatedPostResponse.ok) {
+                const updatedPostData = await updatedPostResponse.json()
+                const updatedPost = updatedPostData.data
+
+                console.log("[CreatePost] Updated post data:", {
+                  id: updatedPost.id,
+                  mediaCount: updatedPost.media?.length || 0
+                })
+
+                // Update the created post with fresh media data
+                createdPost.media = updatedPost.media || []
+              } else {
+                console.warn("[CreatePost] Failed to fetch updated post data")
+              }
+            } catch (error) {
+              console.error("[CreatePost] Error fetching updated post:", error)
+            }
+          }
+        }
+      }
+
+      // Use the (potentially updated) post data for response
+      const responseData = postResponse;
+
+      if (!responseData.success) {
+        throw new Error(responseData.error || "Failed to create post");
+      }
+
+      // Create the real post with server data and preserve user info
+      const realPost = {
+        ...optimisticPost,
+        id: createdPost.id,
+        documentId: createdPost.documentId,
+        // Use uploaded media data when available, fallback to optimistic
+        media: createdPost.media || optimisticPost.mediaItems,
+        mediaItems: createdPost.media || optimisticPost.mediaItems,
+        createdAt: createdPost.createdAt || optimisticPost.createdAt,
+        // Preserve user data from context
+        username: user.username || user.displayName || "You",
+        userImage: user.profileImage?.url || "",
+        user: createdPost.user || {
+          id: user.id,
+          documentId: user.documentId,
+          username: user.username,
+          displayName: user.displayName || user.username,
+          profileImage: user.profileImage,
+        },
+        isOptimistic: false, // No longer optimistic
+        tempId: optimisticPost.id, // Keep reference to temp ID for replacement
+        // Add initial comment count to avoid API fetch
+        comments_count: 0,
+        comments: [],
+        // Default reaction count/state
+        likes: 0,
+        reactions: [],
+        // Add upload stats for debugging
+        uploadStats: responseData.post.uploadStats,
+      };
+
+      // Signal to replace optimistic post with real post
+      onPostCreated(realPost);
+
+      // Invalidate cache for fresh data
+      invalidateServiceWorkerCache();
+
+      // Show final success message with upload stats
+      const uploadStats = responseData.post.uploadStats;
+      const mediaMessage = uploadStats?.uploadedFiles
+        ? `${uploadStats.uploadedFiles} files uploaded successfully`
+        : "Content shared successfully";
+
+      toast({
+        title: "Post published successfully!",
+        description: mediaMessage,
+        duration: 3000,
+      });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred. Please try again."
-      setSubmitError(errorMessage)
+      // Handle optimistic post failure
+      if (onPostCreationFailed && optimisticPost) {
+        onPostCreationFailed(optimisticPost.id.toString());
+      }
+
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred. Please try again.";
+
+      setSubmitError(errorMessage);
       toast({
         title: "Error creating post",
         description: errorMessage,
         variant: "destructive",
-      })
-      setIsSubmitting(false)
+      });
+
+      // Reopen the modal so user can try again
+      // The optimistic post should be removed by the parent component
     } finally {
       if (mounted.current) {
-        setIsSubmitting(false)
+        setIsSubmitting(false);
       }
     }
-  }
+  };
 
-  const isPostButtonDisabled = (!content.trim() && mediaItems.length === 0) || isSubmitting
+  const isPostButtonDisabled =
+    (!content.trim() && mediaItems.length === 0) || isSubmitting;
 
   // If not authenticated, don't render the modal
   if (!isAuthenticated) {
-    return null
+    return null;
   }
 
   const getCursorPosition = () => {
-    if (!textareaRef.current) return 0
+    if (!textareaRef.current) return 0;
 
     // Create a temporary span to measure text width
-    const tempSpan = document.createElement("span")
-    tempSpan.style.font = window.getComputedStyle(textareaRef.current).font
-    tempSpan.style.position = "absolute"
-    tempSpan.style.visibility = "hidden"
-    tempSpan.style.whiteSpace = "pre"
-    document.body.appendChild(tempSpan)
+    const tempSpan = document.createElement("span");
+    tempSpan.style.font = window.getComputedStyle(textareaRef.current).font;
+    tempSpan.style.position = "absolute";
+    tempSpan.style.visibility = "hidden";
+    tempSpan.style.whiteSpace = "pre";
+    document.body.appendChild(tempSpan);
 
     // Get text before cursor
-    const cursorPos = textareaRef.current.selectionStart
-    const textBeforeCursor = content.substring(0, cursorPos)
+    const cursorPos = textareaRef.current.selectionStart;
+    const textBeforeCursor = content.substring(0, cursorPos);
 
     // Measure width
-    tempSpan.textContent = textBeforeCursor
-    const width = tempSpan.getBoundingClientRect().width
+    tempSpan.textContent = textBeforeCursor;
+    const width = tempSpan.getBoundingClientRect().width;
 
     // Clean up
-    document.body.removeChild(tempSpan)
+    document.body.removeChild(tempSpan);
 
-    return width
-  }
+    return width;
+  };
 
   const updateCursorPosition = () => {
     if (textareaRef.current) {
-      setCursorPosition(textareaRef.current.selectionStart)
+      setCursorPosition(textareaRef.current.selectionStart);
     }
-  }
+  };
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[500px] p-0 gap-0 max-h-[90vh] flex flex-col">
         <DialogHeader className="p-4 border-b flex-shrink-0">
-          <DialogTitle className="text-lg font-semibold text-center">Create Post</DialogTitle>
+          <DialogTitle className="text-lg font-semibold text-center">
+            Create Post
+          </DialogTitle>
         </DialogHeader>
 
         <div className="p-4 flex-shrink-0">
           <div className="flex items-center gap-3 mb-2">
             <Avatar className="h-10 w-10">
-              <AvatarImage src={user?.profileImage?.url || "/diverse-avatars.png"} alt="Your profile" />
-              <AvatarFallback>{user?.username?.substring(0, 2).toUpperCase() || "YO"}</AvatarFallback>
+              <AvatarImage
+                src={user?.profileImage?.url || "/diverse-user-avatars.png"}
+                alt="Your profile"
+              />
+              <AvatarFallback>
+                {user?.username?.substring(0, 2).toUpperCase() || "YO"}
+              </AvatarFallback>
             </Avatar>
             <div className="flex-1">
               <p className="font-semibold text-sm">{user?.username || "You"}</p>
@@ -567,11 +724,16 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
             )}
             {background ? (
               <div
-                className={`rounded-lg p-4 ${background.value} ${background.animation || ""} relative min-h-[200px] flex items-center justify-center`}
+                className={`rounded-lg p-4 ${background.value} ${
+                  background.animation || ""
+                } relative min-h-[200px] flex items-center justify-center`}
               >
                 <div
                   className={`w-full text-xl font-semibold border-none focus:outline-none focus:ring-0 p-0 bg-transparent text-center relative ${
-                    background.type === "color" || background.type === "gradient" ? "text-white" : "text-black"
+                    background.type === "color" ||
+                    background.type === "gradient"
+                      ? "text-white"
+                      : "text-black"
                   }`}
                 >
                   <div className="relative">
@@ -596,7 +758,10 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
                     onFocus={() => setIsFocused(true)}
                     onBlur={() => setIsFocused(false)}
                     className={`w-full text-xl font-semibold resize-none border-none focus:outline-none focus:ring-0 p-0 bg-transparent text-center absolute top-0 left-0 opacity-0 z-10 ${
-                      background.type === "color" || background.type === "gradient" ? "text-white" : "text-black"
+                      background.type === "color" ||
+                      background.type === "gradient"
+                        ? "text-white"
+                        : "text-black"
                     }`}
                     style={{ minHeight: "100px" }}
                   />
@@ -642,7 +807,10 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
             )}
 
             {showBackgroundSelector && mediaItems.length === 0 && (
-              <PostBackgroundSelector onSelect={handleBackgroundSelect} selectedBackground={background} />
+              <PostBackgroundSelector
+                onSelect={handleBackgroundSelect}
+                selectedBackground={background}
+              />
             )}
 
             {mediaItems.length > 0 && (
@@ -659,9 +827,21 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => setGalleryLayout("grid")}>Grid</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setGalleryLayout("carousel")}>Carousel</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setGalleryLayout("featured")}>Featured</DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => setGalleryLayout("grid")}
+                      >
+                        Grid
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => setGalleryLayout("carousel")}
+                      >
+                        Carousel
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => setGalleryLayout("featured")}
+                      >
+                        Featured
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
@@ -707,7 +887,10 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
         <div className="p-4 border-t flex-shrink-0">
           {showTitleInput && (
             <div className="mb-4 p-3 border rounded-lg">
-              <label htmlFor="post-title" className="block text-sm font-medium mb-2">
+              <label
+                htmlFor="post-title"
+                className="block text-sm font-medium mb-2"
+              >
                 Post Title:
               </label>
               <input
@@ -719,7 +902,9 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
                 className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent text-base font-medium"
                 maxLength={100}
               />
-              <p className="text-xs text-gray-500 mt-1">{title.length}/100 characters</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {title.length}/100 characters
+              </p>
             </div>
           )}
           <div className="rounded-lg border p-3 mb-4">
@@ -745,9 +930,13 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
                 variant="ghost"
                 size="icon"
                 className={`h-9 w-9 rounded-full ${
-                  showBackgroundSelector ? "bg-gray-200 text-pink-500" : "text-pink-500"
+                  showBackgroundSelector
+                    ? "bg-gray-200 text-pink-500"
+                    : "text-pink-500"
                 }`}
-                onClick={() => setShowBackgroundSelector(!showBackgroundSelector)}
+                onClick={() =>
+                  setShowBackgroundSelector(!showBackgroundSelector)
+                }
                 disabled={mediaItems.length > 0}
               >
                 <Palette className="h-5 w-5" />
@@ -756,11 +945,13 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
                 variant="ghost"
                 size="icon"
                 className={`h-9 w-9 rounded-full ${
-                  showEmojiPicker ? "bg-gray-200 text-yellow-500" : "text-yellow-500"
+                  showEmojiPicker
+                    ? "bg-gray-200 text-yellow-500"
+                    : "text-yellow-500"
                 } emoji-button`}
                 onClick={() => {
-                  setShowEmojiPicker(!showEmojiPicker)
-                  setShowTrendingTags(false)
+                  setShowEmojiPicker(!showEmojiPicker);
+                  setShowTrendingTags(false);
                 }}
               >
                 <Smile className="h-5 w-5" />
@@ -769,25 +960,37 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
                 variant="ghost"
                 size="icon"
                 className={`h-9 w-9 rounded-full ${
-                  showTrendingTags ? "bg-gray-200 text-purple-500" : "text-purple-500"
+                  showTrendingTags
+                    ? "bg-gray-200 text-purple-500"
+                    : "text-purple-500"
                 } hashtag-button`}
                 onClick={() => {
-                  setShowTrendingTags(!showTrendingTags)
-                  setShowEmojiPicker(false)
+                  setShowTrendingTags(!showTrendingTags);
+                  setShowEmojiPicker(false);
                 }}
               >
                 <Hash className="h-5 w-5" />
               </Button>
-              <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full text-red-500">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-full text-red-500"
+              >
                 <MapPin className="h-5 w-5" />
               </Button>
-              <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full text-purple-500">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-full text-purple-500"
+              >
                 <UserPlus className="h-5 w-5" />
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
-                className={`h-9 w-9 rounded-full ${showTitleInput ? "bg-gray-200 text-teal-500" : "text-teal-500"}`}
+                className={`h-9 w-9 rounded-full ${
+                  showTitleInput ? "bg-gray-200 text-teal-500" : "text-teal-500"
+                }`}
                 onClick={() => setShowTitleInput(!showTitleInput)}
               >
                 <svg
@@ -825,7 +1028,7 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
                   defaultCaption: "Pick your emoji...",
                 }}
                 skinTonesDisabled
-                theme="light"
+                theme={require("emoji-picker-react").Theme.LIGHT}
                 lazyLoadEmojis
               />
             </div>
@@ -850,7 +1053,13 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
             </div>
           )}
 
-          <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" multiple />
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            className="hidden"
+            multiple
+          />
 
           <Button
             onClick={handleSubmit}
@@ -862,5 +1071,5 @@ export default function CreatePostModal({ onClose, onPostCreated }: CreatePostMo
         </div>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

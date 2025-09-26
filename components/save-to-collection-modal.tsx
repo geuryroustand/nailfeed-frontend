@@ -13,7 +13,7 @@ import { Plus, Lock, Check, Loader2 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 
 interface SaveToCollectionModalProps {
-  postId: number
+  postId: string | number
   onClose: () => void
   postImage: string
 }
@@ -23,6 +23,8 @@ export default function SaveToCollectionModal({ postId, onClose, postImage }: Sa
   const [activeTab, setActiveTab] = useState<"existing" | "new">("existing")
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+
+  const normalizedPostId = String(postId)
 
   // New collection form state
   const [newCollectionName, setNewCollectionName] = useState("")
@@ -34,7 +36,7 @@ export default function SaveToCollectionModal({ postId, onClose, postImage }: Sa
 
     setIsLoading(true)
     try {
-      await saveToCollection(postId, selectedCollectionId)
+      await saveToCollection(normalizedPostId, selectedCollectionId)
       onClose()
     } catch (error) {
       console.error("Error saving to collection:", error)
@@ -53,7 +55,7 @@ export default function SaveToCollectionModal({ postId, onClose, postImage }: Sa
         newCollectionDescription.trim() || undefined,
         isPrivate,
       )
-      await saveToCollection(postId, newCollection.id)
+      await saveToCollection(normalizedPostId, newCollection.id)
       onClose()
     } catch (error) {
       console.error("Error creating collection:", error)
@@ -92,7 +94,7 @@ export default function SaveToCollectionModal({ postId, onClose, postImage }: Sa
                     collection={collection}
                     isSelected={selectedCollectionId === collection.id}
                     onSelect={() => setSelectedCollectionId(collection.id)}
-                    containsPost={collection.postIds.includes(postId)}
+                    containsPost={collection.postIds.includes(normalizedPostId)}
                   />
                 ))
               )}

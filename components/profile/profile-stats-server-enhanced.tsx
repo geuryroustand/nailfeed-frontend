@@ -34,7 +34,7 @@ async function ProfileStatsContent({ user }: { user: UserProfileResponse }) {
       },
     }
 
-    return <ProfileStatsClient stats={statsData} />
+    return <ProfileStatsClient stats={statsData} username={user.username} documentId={user.documentId} isOwnProfile={true} />
   } catch (error) {
     console.error("Error loading profile stats:", error)
 
@@ -46,7 +46,7 @@ async function ProfileStatsContent({ user }: { user: UserProfileResponse }) {
       engagement: { likes: 0, comments: 0, saves: 0 },
     }
 
-    return <ProfileStatsClient stats={basicStats} />
+    return <ProfileStatsClient stats={basicStats} username={user.username} documentId={user.documentId} isOwnProfile={true} />
   }
 }
 

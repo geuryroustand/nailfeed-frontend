@@ -170,10 +170,10 @@ export class UserService {
         },
       )
 
-      const apiUrl = getApiUrl()
-      console.log(`Making request to: ${apiUrl}/api/users/me?${query}`)
+      console.log(`Getting current user via auth-proxy`)
 
-      // Use cache: 'no-store' to ensure we get fresh data
+      // Use direct fetch with token for server-side call
+      const apiUrl = getApiUrl()
       const response = await fetch(`${apiUrl}/api/users/me?${query}`, {
         method: "GET",
         headers: {
@@ -458,7 +458,7 @@ export class UserService {
   }
 
   /**
-   * Update a user's profile
+   * Update a user's profile using /api/users/{userId} endpoint (Strapi v5)
    */
   static async updateProfile(
     token: string,
@@ -466,31 +466,21 @@ export class UserService {
     userData: UserUpdateInput,
   ): Promise<UserProfileResponse | null> {
     try {
-      console.log(`Updating user profile for user ID ${userId} with data:`, JSON.stringify(userData, null, 2))
-      console.log("Using token:", token.substring(0, 10) + "...")
+      console.log(`Updating user profile for userId ${userId} with data:`, JSON.stringify(userData, null, 2))
 
+      // Use /api/users/{userId} endpoint with numeric ID
       const apiUrl = getApiUrl()
-
-      // Use the correct endpoint structure with the user ID
       const url = `${apiUrl}/api/users/${userId}`
       console.log(`Making PUT request to: ${url}`)
 
-      // Create headers with the token
-      const headers = {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      }
-
-      console.log("Request headers:", JSON.stringify(headers, null, 2))
-      console.log("Request body:", JSON.stringify(userData, null, 2))
-
-      // Make the request with no caching
       const response = await fetch(url, {
         method: "PUT",
-        headers: headers,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(userData),
         cache: "no-store",
-        next: { revalidate: 0 },
       })
 
       if (!response.ok) {
@@ -514,11 +504,11 @@ export class UserService {
   }
 
   /**
-   * Upload a profile image
+   * Upload a profile image using numeric userId (Strapi v5)
    */
   static async uploadProfileImage(token: string, userId: number, file: File): Promise<boolean> {
     try {
-      console.log(`Uploading profile image for user ${userId}`)
+      console.log(`Uploading profile image for user ID ${userId}`)
       console.log("Using token:", token.substring(0, 10) + "...")
 
       const apiUrl = getApiUrl()
@@ -550,7 +540,7 @@ export class UserService {
 
       const fileId = uploadData[0].id
 
-      // Now update the user profile with the new profile image ID
+      // Now update the user profile with the new profile image ID using numeric userId
       const updateResponse = await fetch(`${apiUrl}/api/users/${userId}`, {
         method: "PUT",
         headers: {
@@ -577,11 +567,11 @@ export class UserService {
   }
 
   /**
-   * Upload a cover image
+   * Upload a cover image using numeric userId (Strapi v5)
    */
   static async uploadCoverImage(token: string, userId: number, file: File): Promise<boolean> {
     try {
-      console.log(`Uploading cover image for user ${userId}`)
+      console.log(`Uploading cover image for user ID ${userId}`)
       console.log("Using token:", token.substring(0, 10) + "...")
 
       const apiUrl = getApiUrl()
@@ -613,7 +603,7 @@ export class UserService {
 
       const fileId = uploadData[0].id
 
-      // Now update the user profile with the new cover image ID
+      // Now update the user profile with the new cover image ID using numeric userId
       const updateResponse = await fetch(`${apiUrl}/api/users/${userId}`, {
         method: "PUT",
         headers: {

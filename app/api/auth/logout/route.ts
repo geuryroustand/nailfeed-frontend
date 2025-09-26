@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server"
-import { cookies } from "next/headers"
+import { deleteSession } from "@/lib/auth/session"
 
 export async function POST() {
   try {
-    const cookiesToClear = ["authToken", "jwt", "auth_token", "userId", "pendingVerificationEmail", "user", "session"]
-
-    cookiesToClear.forEach((cookieName) => {
-      cookies().delete(cookieName)
-    })
+    // Delete secure session and cleanup legacy cookies
+    await deleteSession()
 
     return NextResponse.json({ success: true })
   } catch (error) {

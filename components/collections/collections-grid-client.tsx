@@ -132,7 +132,7 @@ export default function CollectionsGridClient({ initialCollections }: Collection
 
   // Handle view collection
   const handleViewCollection = (id: string) => {
-    router.push(`/collections/${id}`)
+    router.push(`/me/collections/${id}`)
   }
 
   // Handle edit button click

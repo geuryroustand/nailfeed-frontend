@@ -1,49 +1,86 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useActionState } from "react"
+import { FormEvent, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
-import { loginWithFormAction, type AuthActionState } from "@/app/auth/actions"
 import { Eye, EyeOff, Loader2 } from "lucide-react"
-import { useAuth } from "@/context/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 
-const initialState: AuthActionState = { status: "idle" }
+type FieldErrors = Record<string, string>
+
+type AuthState = {
+  status: "idle" | "success" | "error"
+  message?: string
+  fieldErrors?: FieldErrors
+}
+
+const initialState: AuthState = { status: "idle" }
 
 export default function LoginForm() {
   const router = useRouter()
-  const { checkAuthStatus } = useAuth()
-  const [state, action, isPending] = useActionState(loginWithFormAction, initialState)
+  const { login, checkAuthStatus } = useAuth()
 
-  // Controlled inputs to preserve values on error
   const [identifier, setIdentifier] = useState("")
   const [password, setPassword] = useState("")
   const [rememberMe, setRememberMe] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [state, setState] = useState<AuthState>(initialState)
+  const [isPending, setIsPending] = useState(false)
 
-  // Hydrate inputs from server-returned values on error
-  useEffect(() => {
-    if (state.status === "error" && state.values) {
-      if (state.values.identifier) setIdentifier(state.values.identifier)
-      if (state.values.rememberMe) setRememberMe(true)
-    }
-  }, [state])
+  const validateInputs = (): FieldErrors => {
+    const errors: FieldErrors = {}
 
-  useEffect(() => {
-    if (state.status === "success") {
-      setTimeout(async () => {
-        console.log("[v0] Login successful, refreshing auth state...")
-        await checkAuthStatus()
-        router.replace("/")
-        router.refresh()
-      }, 500)
+    if (!identifier.trim()) {
+      errors.identifier = "Email or username is required"
     }
-  }, [state.status, router, checkAuthStatus])
+
+    if (!password.trim()) {
+      errors.password = "Password is required"
+    }
+
+    return errors
+  }
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    const errors = validateInputs()
+    if (Object.keys(errors).length > 0) {
+      setState({
+        status: "error",
+        message: "Please fix the errors and try again.",
+        fieldErrors: errors,
+      })
+      return
+    }
+
+    setIsPending(true)
+    setState(initialState)
+
+    const result = await login({ identifier, password, rememberMe })
+
+    if (!result.success) {
+      setState({
+        status: "error",
+        message: result.error || "Invalid credentials",
+      })
+      setIsPending(false)
+      return
+    }
+
+    setState({ status: "success", message: "Login successful" })
+
+    await checkAuthStatus()
+    router.replace("/")
+    router.refresh()
+
+    setIsPending(false)
+  }
 
   return (
-    <form action={action} className="space-y-4" aria-describedby="login-form-status">
+    <form onSubmit={handleSubmit} className="space-y-4" aria-describedby="login-form-status">
       <div>
         <label htmlFor="identifier" className="block text-sm font-medium text-gray-700">
           Email or Username
@@ -77,12 +114,12 @@ export default function LoginForm() {
             type={showPassword ? "text" : "password"}
             placeholder="••••••••"
             autoComplete="current-password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            aria-invalid={Boolean(state.fieldErrors?.password)}
-            aria-errormessage={state.fieldErrors?.password ? "password-error" : undefined}
-          />
+          required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          aria-invalid={Boolean(state.fieldErrors?.password)}
+          aria-errormessage={state.fieldErrors?.password ? "password-error" : undefined}
+        />
           <Button
             type="button"
             variant="ghost"

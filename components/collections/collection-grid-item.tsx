@@ -14,6 +14,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import ShareCollectionModal from "@/components/share-collection-modal"
+import { getCollectionPlaceholder } from "@/lib/collection-placeholder"
+import { cn } from "@/lib/utils"
 
 interface CollectionGridItemProps {
   collection: Collection
@@ -24,6 +26,7 @@ interface CollectionGridItemProps {
 
 export default function CollectionGridItem({ collection, onView, onEdit, onDelete }: CollectionGridItemProps) {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
+  const placeholder = getCollectionPlaceholder(collection.name)
 
   const handleDelete = () => {
     if (window.confirm(`Are you sure you want to delete "${collection.name}"?`)) {
@@ -42,8 +45,17 @@ export default function CollectionGridItem({ collection, onView, onEdit, onDelet
             className="object-cover"
           />
         ) : (
-          <div className="w-full h-full bg-gray-100 flex items-center justify-center">
-            <span className="text-gray-400">No cover image</span>
+          <div
+            className={cn("flex h-full w-full items-center justify-center", placeholder.containerClass)}
+            style={placeholder.style}
+            role="img"
+            aria-label={placeholder.ariaLabel}
+          >
+            <span
+              className={cn("text-4xl font-semibold uppercase tracking-wide drop-shadow-sm", placeholder.textClass)}
+            >
+              {placeholder.initial}
+            </span>
           </div>
         )}
 

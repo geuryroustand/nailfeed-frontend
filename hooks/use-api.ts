@@ -1,67 +1,124 @@
 "use client"
 
 import { useCallback } from "react"
+import axios from "axios"
 import { apiClient } from "@/lib/api-client"
-import { useAuth } from "@/context/auth-context"
 
-type HttpMethod = "get" | "post" | "put" | "delete" | "upload"
+/**
+ * ⚠️ UPDATED: Simplified API hook for public requests only
+ *
+ * This hook is now designed for PUBLIC, UNAUTHENTICATED requests only.
+ * For authenticated requests, use:
+ * - Server Actions (recommended)
+ * - useAuthenticatedApi() hook for auth-proxy requests
+ */
+
+type HttpMethod = "get" | "post" | "put" | "delete"
 
 export function useApi() {
-  const { isAuthenticated, refreshToken } = useAuth()
-
-  const is401 = (err: unknown): boolean => {
-    if (!err) return false
-    const e = err as any
-    if (typeof e?.status === "number" && e.status === 401) return true
-    if (typeof e?.response?.status === "number" && e.response.status === 401) return true
-    if (typeof e?.cause?.status === "number" && e.cause.status === 401) return true
-    if (typeof e?.message === "string" && e.message.includes("401")) return true
-    return false
-  }
-
-  // Generic API request with authentication check
+  // Generic request method for public endpoints
   const request = useCallback(
-    async <T,>(method: HttpMethod, endpoint: string, data?: any, options?: RequestInit): Promise<T> => {
+    async <T,>(method: HttpMethod, endpoint: string, data?: any): Promise<T> => {
       try {
         switch (method) {
           case "get":
-            return await apiClient.get<T>(endpoint, options)
+            const getResponse = await apiClient.get(endpoint)
+            return getResponse.data
           case "post":
-            return await apiClient.post<T>(endpoint, data, options)
+            const postResponse = await apiClient.post(endpoint, data)
+            return postResponse.data
           case "put":
-            return await apiClient.put<T>(endpoint, data, options)
+            const putResponse = await apiClient.put(endpoint, data)
+            return putResponse.data
           case "delete":
-            return await apiClient.delete<T>(endpoint, options)
-          case "upload":
-            return await apiClient.upload<T>(endpoint, data as FormData, options)
+            const deleteResponse = await apiClient.delete(endpoint)
+            return deleteResponse.data
           default:
             throw new Error(`Unsupported method: ${method}`)
         }
       } catch (error) {
-        // If there's an authentication error, try to refresh the token
-        if (is401(error)) {
-          const success = await refreshToken()
-          if (success) {
-            // Retry the request after successful token refresh
-            return request<T>(method, endpoint, data, options)
-          }
+        if (axios.isAxiosError(error) && error.response?.status === 401) {
+          console.warn("Authentication required. Use server actions or auth-proxy for authenticated requests.")
         }
         throw error
       }
     },
-    [isAuthenticated, refreshToken],
+    []
   )
 
   return {
-    get: <T,>(endpoint: string, options?: RequestInit) => request<T>("get", endpoint, undefined, options),
+    // Public API methods
+    get: <T,>(endpoint: string) => request<T>("get", endpoint),
+    post: <T,>(endpoint: string, data?: any) => request<T>("post", endpoint, data),
+    put: <T,>(endpoint: string, data?: any) => request<T>("put", endpoint, data),
+    delete: <T,>(endpoint: string) => request<T>("delete", endpoint),
 
-    post: <T,>(endpoint: string, data: any, options?: RequestInit) => request<T>("post", endpoint, data, options),
-
-    put: <T,>(endpoint: string, data: any, options?: RequestInit) => request<T>("put", endpoint, data, options),
-
-    delete: <T,>(endpoint: string, options?: RequestInit) => request<T>("delete", endpoint, undefined, options),
-
-    upload: <T,>(endpoint: string, formData: FormData, options?: RequestInit) =>
-      request<T>("upload", endpoint, formData, options),
+    // Health check
+    testConnection: () => apiClient.testConnection(),
   }
 }
+
+/**
+ * ✅ NEW: Hook for authenticated requests via auth-proxy
+ * Use this for client-side authenticated operations
+ */
+export function useAuthenticatedApi() {
+  const request = useCallback(
+    async <T,>(method: HttpMethod, endpoint: string, data?: any): Promise<T> => {
+      const proxyEndpoint = "/api/auth-proxy"
+
+      const proxyData = {
+        endpoint,
+        method: method.toUpperCase(),
+        ...(data && { data }),
+      }
+
+      try {
+        const response = await fetch(proxyEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include", // Include session cookies
+          body: JSON.stringify(proxyData),
+        })
+
+        if (!response.ok) {
+          throw new Error(`Request failed: ${response.status} ${response.statusText}`)
+        }
+
+        return await response.json()
+      } catch (error) {
+        console.error("Authenticated API request failed:", error)
+        throw error
+      }
+    },
+    []
+  )
+
+  return {
+    // Authenticated API methods via auth-proxy
+    get: <T,>(endpoint: string) => request<T>("get", endpoint),
+    post: <T,>(endpoint: string, data?: any) => request<T>("post", endpoint, data),
+    put: <T,>(endpoint: string, data?: any) => request<T>("put", endpoint, data),
+    delete: <T,>(endpoint: string) => request<T>("delete", endpoint),
+  }
+}
+
+/**
+ * 📋 USAGE EXAMPLES:
+ *
+ * // ✅ Public requests
+ * const api = useApi()
+ * api.post("/api/auth/local/register", userData)
+ * api.post("/api/auth/forgot-password", { email })
+ *
+ * // ✅ Authenticated requests (client-side)
+ * const authApi = useAuthenticatedApi()
+ * authApi.get("/api/users/me")
+ * authApi.post("/api/posts", postData)
+ *
+ * // ✅ Preferred: Server actions (server-side)
+ * import { updateProfile } from "@/app/actions/user-actions"
+ * await updateProfile(profileData)
+ */

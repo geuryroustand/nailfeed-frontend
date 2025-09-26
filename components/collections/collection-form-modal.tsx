@@ -14,15 +14,22 @@ import { Switch } from "@/components/ui/switch"
 interface CollectionFormModalProps {
   mode: "create" | "edit"
   collection?: Collection
-  onSubmit: (name: string, description: string, isPrivate: boolean) => void
+  onSubmit: (
+    name: string,
+    description: string,
+    isPrivate: boolean,
+    coverImageFile?: File | null,
+  ) => void
   onCancel: () => void
 }
 
 export default function CollectionFormModal({ mode, collection, onSubmit, onCancel }: CollectionFormModalProps) {
   const [name, setName] = useState(collection?.name || "")
   const [description, setDescription] = useState(collection?.description || "")
-  const [isPrivate, setIsPrivate] = useState(collection?.isPrivate || false)
+  const [isPrivate, setIsPrivate] = useState(collection?.isPrivate ?? true)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [coverImageFile, setCoverImageFile] = useState<File | null>(null)
+  const [coverPreview, setCoverPreview] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -34,7 +41,7 @@ export default function CollectionFormModal({ mode, collection, onSubmit, onCanc
     setIsSubmitting(true)
 
     try {
-      await onSubmit(name.trim(), description.trim(), isPrivate)
+      await onSubmit(name.trim(), description.trim(), isPrivate, coverImageFile)
     } finally {
       setIsSubmitting(false)
     }
@@ -48,6 +55,41 @@ export default function CollectionFormModal({ mode, collection, onSubmit, onCanc
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-4">
+          <div className="space-y-2">
+            <Label htmlFor="cover">Cover image (optional)</Label>
+            {coverPreview ? (
+              <div className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={coverPreview} alt="Cover preview" className="w-full h-32 object-cover rounded-md" />
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  className="absolute top-2 right-2"
+                  onClick={() => { setCoverImageFile(null); setCoverPreview(null); }}
+                >
+                  Remove
+                </Button>
+              </div>
+            ) : (
+              <Input
+                id="cover"
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null
+                  setCoverImageFile(file)
+                  if (file) {
+                    const reader = new FileReader()
+                    reader.onload = (ev) => setCoverPreview(ev.target?.result as string)
+                    reader.readAsDataURL(file)
+                  } else {
+                    setCoverPreview(null)
+                  }
+                }}
+              />
+            )}
+          </div>
           <div className="space-y-2">
             <Label htmlFor="name">Name</Label>
             <Input

@@ -332,7 +332,7 @@ export async function toggleFollowStatus(
       if (!del.ok)
         throw new Error(`API Error: ${del.status} ${del.statusText}`);
 
-      revalidatePath(`/profile/${targetUsername}`);
+      revalidatePath(`/me/${targetUsername}`);
       return { success: true, isFollowing: false };
     } else {
       const create = await fetch(`${apiUrl}/api/follows`, {
@@ -345,7 +345,7 @@ export async function toggleFollowStatus(
       });
       if (!create.ok)
         throw new Error(`API Error: ${create.status} ${create.statusText}`);
-      revalidatePath(`/profile/${targetUsername}`);
+      revalidatePath(`/me/${targetUsername}`);
       return { success: true, isFollowing: true };
     }
   } catch (error) {

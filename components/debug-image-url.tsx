@@ -11,7 +11,7 @@ export default function DebugImageUrl() {
         // Fetch a single post with the exact URL structure we need
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
         const response = await fetch(
-          `${apiUrl}/api/posts?populate[mediaItems][populate][file][fields][0]=formats&populate[user][fields][0]=username&limit=1`,
+          `${apiUrl}/api/posts?populate[media][fields][0]=url&populate[media][fields][1]=formats&populate[user][fields][0]=username&limit=1`,
         )
 
         if (!response.ok) {
@@ -26,25 +26,23 @@ export default function DebugImageUrl() {
           // Extract the image URL information
           const imageInfo = {
             postId: post.id,
-            hasMediaItems: !!post.mediaItems && Array.isArray(post.mediaItems),
-            mediaItemsCount: post.mediaItems ? post.mediaItems.length : 0,
-            firstMediaItem: post.mediaItems && post.mediaItems.length > 0 ? post.mediaItems[0] : null,
-            fileInfo: null,
+            hasMedia: !!post.media && Array.isArray(post.media),
+            mediaCount: post.media ? post.media.length : 0,
+            firstMedia: post.media && post.media.length > 0 ? post.media[0] : null,
             formats: null,
             mediumUrl: null,
             constructedUrl: null,
           }
 
-          // If we have media items, extract more details
-          if (imageInfo.firstMediaItem) {
-            const mediaItem = post.mediaItems[0]
-            imageInfo.fileInfo = mediaItem.file || null
+          // If we have media, extract more details
+          if (imageInfo.firstMedia) {
+            const mediaItem = post.media[0]
 
-            if (mediaItem.file && mediaItem.file.formats) {
-              imageInfo.formats = Object.keys(mediaItem.file.formats)
+            if (mediaItem.formats) {
+              imageInfo.formats = Object.keys(mediaItem.formats)
 
               // Get the medium format URL
-              const mediumFormat = mediaItem.file.formats.medium
+              const mediumFormat = mediaItem.formats.medium
               if (mediumFormat) {
                 imageInfo.mediumUrl = mediumFormat.url
 

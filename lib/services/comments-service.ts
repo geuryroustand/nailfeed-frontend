@@ -1,5 +1,4 @@
-// All comment API calls are routed through a server proxy to ensure proper Authorization
-// without exposing secrets to the client.
+import { normalizeImageUrl } from "@/lib/image-utils"
 
 const PROXY_URL = "/api/auth-proxy"
 
@@ -8,46 +7,49 @@ type FetchRetryOptions = {
   retryDelay?: number
 }
 
-async function proxyRequest(
-  endpoint: string,
-  {
-    method = "GET",
-    data,
-  }: {
-    method?: string
-    data?: any
-  } = {},
-): Promise<Response> {
+type ProxyRequestOptions = {
+  method?: string
+  data?: any
+  useServerToken?: boolean
+}
+
+async function proxyRequest(endpoint: string, options: ProxyRequestOptions = {}): Promise<Response> {
+  const { method = "GET", data, useServerToken = false } = options
+
   const res = await fetch(PROXY_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     cache: "no-store",
-    body: JSON.stringify({ endpoint, method, data }),
+    body: JSON.stringify({ endpoint, method, data, useServerToken }),
   })
+
   return res
 }
 
 async function proxyRequestWithRetry(
   endpoint: string,
-  options: { method?: string; data?: any } = {},
+  options: ProxyRequestOptions = {},
   retryOptions: FetchRetryOptions = {},
 ): Promise<Response> {
   const { retries = 2, retryDelay = 500 } = retryOptions
+
   try {
     const response = await proxyRequest(endpoint, options)
-    // Let 404s pass through to caller to map to empty results
+
     if (!response.ok && response.status !== 404) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      throw new Error("HTTP error! status: " + response.status)
     }
+
     return response
   } catch (error) {
     if (retries > 0) {
-      await new Promise((r) => setTimeout(r, retryDelay))
+      await new Promise((resolve) => setTimeout(resolve, retryDelay))
       return proxyRequestWithRetry(endpoint, options, {
         retries: retries - 1,
         retryDelay,
       })
     }
+
     throw error
   }
 }
@@ -59,30 +61,23 @@ export interface CommentAuthor {
   avatar?: string
 }
 
+export interface CommentAttachment {
+  id: string
+  url: string
+  formats?: Record<string, { url?: string }>
+}
+
 export interface Comment {
   id: number
-  content: string
-  author: { id: string; name: string; email?: string; avatar?: string }
+  documentId: string
+  content: string | null
+  author: CommentAuthor
   createdAt: string
   updatedAt: string
-  children?: Comment[]
-  blocked?: boolean
-  blockedThread?: boolean
-  threadOf?: {
-    id: number
-    content?: string
-    author?: { id: string; name: string; avatar?: string }
-  } | null
-  attachment?: {
-    id: number
-    url: string
-    formats?: {
-      thumbnail?: { url: string }
-      small?: { url: string }
-      medium?: { url: string }
-      large?: { url: string }
-    }
-  }
+  children: Comment[]
+  parentDocumentId?: string | null
+  attachment?: CommentAttachment | null
+  replies?: Comment[]
 }
 
 export interface PaginationInfo {
@@ -97,13 +92,116 @@ export interface CommentsResponse {
   pagination: PaginationInfo
 }
 
-const buildBaseEndpoint = (postId: string | number, documentId?: string) => {
-  const identifier = documentId || postId
-  const contentType = "api::post.post"
-  return `/api/comments/${contentType}:${identifier}`
+const resolvePostDocumentId = (postId: string | number, documentId?: string): string => {
+  if (documentId) return documentId
+  if (postId === undefined || postId === null) return ""
+  return String(postId)
 }
 
-import { createCommentNotification, createReplyNotification } from "@/lib/actions/notification-actions"
+const resolveAuthorAvatar = (raw: any): string | undefined => {
+  if (!raw) return undefined
+
+  const candidateList: Array<string | undefined> = []
+
+  const profileImageEntity = raw.profileImage?.data?.attributes || raw.profileImage?.attributes || raw.profileImage
+  if (profileImageEntity) {
+    candidateList.push(profileImageEntity.url)
+    candidateList.push(profileImageEntity.formats?.thumbnail?.url)
+    candidateList.push(profileImageEntity.formats?.small?.url)
+    candidateList.push(profileImageEntity.formats?.medium?.url)
+  }
+
+  candidateList.push(raw.avatar?.url)
+  candidateList.push(raw.avatar)
+
+  const resolved = candidateList.find((value) => typeof value === "string" && value.trim().length > 0)
+  return resolved ? normalizeImageUrl(resolved) : undefined
+}
+
+const toAuthor = (raw: any): CommentAuthor => {
+  const id = raw && (raw.documentId || raw.id)
+  const username = raw && (raw.username || raw.displayName)
+  const email = raw && raw.email
+
+  return {
+    id: id ? String(id) : "unknown",
+    name: username || email || "Anonymous",
+    email: email || undefined,
+    avatar: resolveAuthorAvatar(raw),
+  }
+}
+
+const toAttachment = (raw: any): CommentAttachment | null => {
+  if (!raw) return null
+
+  const node = raw.data?.attributes || raw
+  const id = node && (node.documentId || node.id)
+  const formats = node?.formats
+  let url = node?.url
+
+  if (!url) {
+    url =
+      node?.formats?.medium?.url ||
+      node?.formats?.small?.url ||
+      node?.formats?.thumbnail?.url
+  }
+
+  if (!url) return null
+
+  return {
+    id: id ? String(id) : "attachment",
+    url: normalizeImageUrl(url),
+    formats,
+  }
+}
+
+const transformComment = (raw: any): Comment => {
+  const childrenArray = Array.isArray(raw?.children) ? raw.children : []
+  const children = childrenArray.map(transformComment)
+  const author = toAuthor(raw?.author || {})
+  const attachment = toAttachment(raw?.image)
+
+  return {
+    id: Number(raw?.id ?? 0),
+    documentId: String(raw?.documentId || raw?.id || ""),
+    content: raw?.content ?? null,
+    author,
+    createdAt: raw?.createdAt || new Date().toISOString(),
+    updatedAt: raw?.updatedAt || raw?.createdAt || new Date().toISOString(),
+    children,
+    parentDocumentId: raw?.parent?.documentId || null,
+    attachment,
+    replies: children,
+  }
+}
+
+const buildPagination = (meta: any, fallback: { page: number; pageSize: number }): PaginationInfo => {
+  if (meta?.pagination) {
+    return {
+      page: Number(meta.pagination.page ?? fallback.page),
+      pageSize: Number(meta.pagination.pageSize ?? fallback.pageSize),
+      pageCount: Number(meta.pagination.pageCount ?? 1),
+      total: Number(meta.pagination.total ?? 0),
+    }
+  }
+
+  return {
+    page: fallback.page,
+    pageSize: fallback.pageSize,
+    pageCount: 1,
+    total: 0,
+  }
+}
+
+const parseErrorResponse = async (response: Response): Promise<string> => {
+  try {
+    const data = await response.json()
+    return data?.error?.message || data?.message || response.statusText || "Unknown error"
+  } catch (error) {
+    const text = await response.text().catch(() => "")
+    return text || "HTTP " + response.status
+  }
+}
 
 export class CommentsService {
   static async getComments(
@@ -111,19 +209,31 @@ export class CommentsService {
     documentId?: string,
     page = 1,
     pageSize = 5,
+    depth = 5,
   ): Promise<CommentsResponse> {
     try {
-      if (!postId && !documentId) {
+      const postDocumentId = resolvePostDocumentId(postId, documentId)
+
+      if (!postDocumentId) {
         return {
           data: [],
           pagination: { page: 1, pageSize, pageCount: 1, total: 0 },
         }
       }
 
-      const base = buildBaseEndpoint(postId, documentId)
-      const endpoint = `${base}?pagination[page]=${page}&pagination[pageSize]=${pageSize}&sort=createdAt:desc`
+      const searchParams = new URLSearchParams({
+        page: String(page),
+        pageSize: String(pageSize),
+        sort: "createdAt:desc",
+        depth: String(depth),
+      })
 
-      const response = await proxyRequestWithRetry(endpoint, { method: "GET" }, { retries: 2, retryDelay: 500 })
+      const endpoint = "/api/comments/post/" + encodeURIComponent(postDocumentId) + "?" + searchParams.toString()
+      const response = await proxyRequestWithRetry(
+        endpoint,
+        { method: "GET", useServerToken: true },
+        { retries: 2, retryDelay: 500 },
+      )
 
       if (response.status === 404) {
         return {
@@ -133,48 +243,21 @@ export class CommentsService {
       }
 
       if (!response.ok) {
-        const errorText = await response.text().catch(() => "")
-        console.error("Error fetching comments:", errorText || `HTTP ${response.status}`)
+        const errorText = await parseErrorResponse(response)
+        console.error("Error fetching comments:", errorText)
         return {
           data: [],
           pagination: { page: 1, pageSize, pageCount: 1, total: 0 },
         }
       }
 
-      const responseData = await response.json().catch(() => ({}) as any)
-
-      if (responseData.data && responseData.meta?.pagination) {
-        return {
-          data: responseData.data,
-          pagination: {
-            page: responseData.meta.pagination.page,
-            pageSize: responseData.meta.pagination.pageSize,
-            pageCount: responseData.meta.pagination.pageCount,
-            total: responseData.meta.pagination.total,
-          },
-        }
-      } else if (Array.isArray(responseData)) {
-        return {
-          data: responseData,
-          pagination: {
-            page,
-            pageSize,
-            pageCount: Math.ceil(responseData.length / pageSize),
-            total: responseData.length,
-          },
-        }
-      } else if (responseData.data && responseData.pagination) {
-        return responseData as CommentsResponse
-      }
+      const payload = await response.json().catch(() => ({ data: [] }))
+      const comments = Array.isArray(payload?.data) ? payload.data.map(transformComment) : []
+      const pagination = buildPagination(payload?.meta, { page, pageSize })
 
       return {
-        data: Array.isArray(responseData) ? responseData : [responseData],
-        pagination: {
-          page,
-          pageSize,
-          pageCount: 1,
-          total: Array.isArray(responseData) ? responseData.length : 1,
-        },
+        data: comments,
+        pagination,
       }
     } catch (error) {
       console.error("Error in getComments:", error instanceof Error ? error.message : error)
@@ -187,122 +270,56 @@ export class CommentsService {
 
   static countTotalComments(comments: Comment[] | undefined): number {
     if (!comments || !Array.isArray(comments)) return 0
-    let count = 0
-    for (const c of comments) {
-      if (!c) continue
-      count++
-      if (c.children && Array.isArray(c.children)) count += this.countTotalComments(c.children)
-    }
-    return count
+
+    return comments.reduce((total, comment) => {
+      const childCount = comment.children ? CommentsService.countTotalComments(comment.children) : 0
+      return total + 1 + childCount
+    }, 0)
   }
 
   static async addComment(
     postId: string | number,
     documentId: string | undefined,
     content: string,
-    threadOf?: number,
-    attachment?: number,
-  ) {
+    parentDocumentId?: string,
+  ): Promise<{ success: boolean; comment?: Comment; error?: string }> {
     try {
-      if (!postId && !documentId) throw new Error("No postId or documentId provided to addComment")
+      const postDocumentId = resolvePostDocumentId(postId, documentId)
 
-      const base = buildBaseEndpoint(postId, documentId)
-      const endpoint = base
+      if (!postDocumentId) {
+        return { success: false, error: "Missing post identifier" }
+      }
 
-      const body: Record<string, any> = { content }
-      if (threadOf) body.threadOf = threadOf
-      if (attachment) body.attachment = attachment
+      const payload: Record<string, any> = {
+        postId: postDocumentId,
+      }
 
-      const response = await proxyRequest(endpoint, {
+      if (content && content.trim().length > 0) {
+        payload.content = content.trim()
+      }
+
+      if (parentDocumentId) {
+        payload.parentId = parentDocumentId
+      }
+
+
+      const response = await proxyRequest("/api/comments", {
         method: "POST",
-        data: body,
+        data: payload,
       })
 
       if (!response.ok) {
-        const errorText = await response.text().catch(() => "")
-        console.error("Error adding comment:", errorText || `HTTP ${response.status}`)
-        return {
-          success: false,
-          error: errorText || `HTTP ${response.status}`,
-        }
+        const errorMessage = await parseErrorResponse(response)
+        return { success: false, error: errorMessage }
       }
 
-      const result = await response.json()
+      const result = await response.json().catch(() => null)
+      const createdComment = result ? transformComment(result.data || result) : undefined
 
-      try {
-        // Get the comment data from the response
-        const commentData = result.data || result
-        const commentAuthor = commentData.author
-
-        if (commentAuthor && commentAuthor.id) {
-          console.log("[v0] Comment created successfully, triggering notifications:", {
-            postId: documentId || postId,
-            threadOf,
-            commentAuthorId: commentAuthor.id,
-            commentAuthorName: commentAuthor.name,
-          })
-
-          if (threadOf) {
-            // This is a reply to an existing comment
-            console.log("[v0] Creating reply notification for comment:", threadOf)
-
-            // We need to get the parent comment author ID
-            // For now, we'll need to fetch the parent comment to get its author
-            // This could be optimized by including parent comment data in the response
-            try {
-              const parentComments = await this.getComments(postId, documentId?.toString(), 1, 100)
-              const findParentComment = (comments: Comment[], targetId: number): Comment | null => {
-                for (const comment of comments) {
-                  if (comment.id === targetId) return comment
-                  if (comment.children) {
-                    const found = findParentComment(comment.children, targetId)
-                    if (found) return found
-                  }
-                }
-                return null
-              }
-
-              const parentComment = findParentComment(parentComments.data, threadOf)
-              if (parentComment && parentComment.author.id !== commentAuthor.id) {
-                await createReplyNotification(
-                  (documentId || postId).toString(),
-                  threadOf.toString(),
-                  parentComment.author.id, // Comment author who should receive notification
-                  commentAuthor.id,
-                  commentAuthor.name || "Someone",
-                  content,
-                )
-                console.log("[v0] Reply notification created successfully")
-              } else {
-                console.log("[v0] Skipping reply notification - replying to own comment or parent not found")
-              }
-            } catch (parentError) {
-              console.error("[v0] Error fetching parent comment for reply notification:", parentError)
-            }
-          } else {
-            // This is a new comment on the post
-            console.log("[v0] Creating comment notification for post:", documentId || postId)
-
-            // We need to get the post author ID
-            // The notification function will handle fetching the post author
-            await createCommentNotification(
-              (documentId || postId).toString(),
-              "", // Post author ID will be fetched in the notification function
-              commentAuthor.id,
-              commentAuthor.name || "Someone",
-              content,
-            )
-            console.log("[v0] Comment notification created successfully")
-          }
-        } else {
-          console.log("[v0] No comment author data available for notifications")
-        }
-      } catch (notificationError) {
-        // Don't fail the comment creation if notification fails
-        console.error("[v0] Error creating comment notification:", notificationError)
+      return {
+        success: true,
+        comment: createdComment,
       }
-
-      return result
     } catch (error) {
       return {
         success: false,
@@ -312,31 +329,43 @@ export class CommentsService {
   }
 
   static async updateComment(
-    postId: string | number,
-    documentId: string | undefined,
-    commentId: number,
-    content: string,
-  ) {
+    commentDocumentId: string,
+    content?: string,
+    imageDocumentId?: string | number | null,
+  ): Promise<{ success: boolean; comment?: Comment; error?: string }> {
     try {
-      if (!commentId) throw new Error("No commentId provided to updateComment")
+      if (!commentDocumentId) {
+        return { success: false, error: "Missing comment identifier" }
+      }
 
-      const base = buildBaseEndpoint(postId, documentId)
-      const endpoint = `${base}/comment/${commentId}`
+      const payload: Record<string, any> = {}
 
-      const res = await proxyRequest(endpoint, {
+      if (typeof content === "string") {
+        payload.content = content.trim()
+      }
+
+      if (imageDocumentId !== undefined) {
+        payload.imageId = imageDocumentId ? String(imageDocumentId) : null
+      }
+
+      const endpoint = "/api/comments/" + encodeURIComponent(commentDocumentId)
+      const response = await proxyRequest(endpoint, {
         method: "PUT",
-        data: { content },
+        data: payload,
       })
 
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}))
-        return {
-          success: false,
-          error: errorData.error?.message || `HTTP ${res.status}`,
-          details: errorData,
-        }
+      if (!response.ok) {
+        const errorMessage = await parseErrorResponse(response)
+        return { success: false, error: errorMessage }
       }
-      return await res.json()
+
+      const result = await response.json().catch(() => null)
+      const updatedComment = result ? transformComment(result.data || result) : undefined
+
+      return {
+        success: true,
+        comment: updatedComment,
+      }
     } catch (error) {
       return {
         success: false,
@@ -345,105 +374,22 @@ export class CommentsService {
     }
   }
 
-  static async deleteComment(
-    postId: string | number,
-    documentId: string | undefined,
-    commentId: number | string, // Accept both number and string for backward compatibility
-    authorId: string | number,
-  ) {
+  static async deleteComment(commentDocumentId: string): Promise<{ success: boolean; error?: string }> {
     try {
-      if (!commentId) throw new Error("No commentId provided to deleteComment")
+      if (!commentDocumentId) {
+        return { success: false, error: "Missing comment identifier" }
+      }
 
-      const base = buildBaseEndpoint(postId, documentId)
-      const numericAuthorId =
-        typeof authorId === "string" && /^\d+$/.test(authorId) ? Number.parseInt(authorId, 10) : authorId
-
-      // The endpoint should be: /api/comments/api::content-type:id/comment/commentId?authorId=authorId
-      const endpoint = `${base}/comment/${commentId}?authorId=${numericAuthorId}`
-
-      console.log("[v0] Attempting to delete comment:", {
-        postId: documentId || postId,
-        commentId,
-        commentIdType: typeof commentId,
-        authorId: numericAuthorId,
-        endpoint,
-        baseEndpoint: base,
-        fullUrl: `${process.env.NEXT_PUBLIC_API_URL || "https://api.nailfeed.com"}${endpoint}`,
-      })
-
+      const endpoint = "/api/comments/" + encodeURIComponent(commentDocumentId)
       const response = await proxyRequest(endpoint, { method: "DELETE" })
 
-      console.log("[v0] Delete comment response:", {
-        status: response.status,
-        ok: response.ok,
-        statusText: response.statusText,
-      })
-
-      if (response.status === 404) {
-        console.error("[v0] Comment not found for deletion:", {
-          commentId,
-          endpoint,
-          authorId: numericAuthorId,
-        })
-        return {
-          success: false,
-          error: `Comment with ID ${commentId} not found. It may have already been deleted.`,
-        }
-      }
-
-      if (response.status === 403) {
-        console.error("[v0] Forbidden - user not authorized to delete comment:", {
-          commentId,
-          endpoint,
-          authorId: numericAuthorId,
-        })
-        return {
-          success: false,
-          error: "You are not authorized to delete this comment. You can only delete your own comments.",
-        }
-      }
-
-      if (response.status === 409) {
-        console.error("[v0] Conflict - comment deletion conflict:", {
-          commentId,
-          endpoint,
-          authorId: numericAuthorId,
-        })
-        return {
-          success: false,
-          error: "Unable to delete comment due to a conflict. Please try again.",
-        }
-      }
-
       if (!response.ok) {
-        const text = await response.text().catch(() => "")
-        console.error("[v0] Delete comment failed:", {
-          status: response.status,
-          statusText: response.statusText,
-          responseText: text,
-        })
-
-        let errorData: any
-        try {
-          errorData = text ? JSON.parse(text) : { error: { message: `HTTP error: ${response.status}` } }
-        } catch {
-          errorData = {
-            error: {
-              message: text || `HTTP error: ${response.status} ${response.statusText}`,
-            },
-          }
-        }
-        return {
-          success: false,
-          error: errorData.error?.message || `Failed to delete comment (${response.status})`,
-          details: errorData,
-        }
+        const errorMessage = await parseErrorResponse(response)
+        return { success: false, error: errorMessage }
       }
 
-      console.log("[v0] Comment deleted successfully:", commentId)
       return { success: true }
     } catch (error) {
-      console.error("[v0] Error in deleteComment:", error)
       return {
         success: false,
         error: error instanceof Error ? error.message : "An unknown error occurred",
@@ -452,51 +398,41 @@ export class CommentsService {
   }
 
   static async reportCommentAbuse(
-    postId: string | number,
-    documentId: string | undefined,
-    commentId: number,
+    commentDocumentId: string,
     reason: string,
     content: string,
-  ) {
+    reporterEmail?: string
+  ): Promise<{ success: boolean; error?: string }> {
     try {
-      if (!commentId) throw new Error("No commentId provided to reportCommentAbuse")
-      const base = buildBaseEndpoint(postId, documentId)
-      const endpoint = `${base}/comment/${commentId}/report-abuse`
+      if (!commentDocumentId) {
+        return { success: false, error: "Missing comment identifier" }
+      }
 
+      const endpoint = "/api/content-flags"
       const response = await proxyRequest(endpoint, {
         method: "POST",
-        data: { reason, content },
+        data: {
+          data: {
+            reportedComment: commentDocumentId,
+            reason,
+            description: content,
+            ...(reporterEmail && { reporterEmail })
+          }
+        },
       })
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        return {
-          success: false,
-          error: errorData.error?.message || `HTTP ${response.status}`,
-          details: errorData,
-        }
+        const errorMessage = await parseErrorResponse(response)
+        return { success: false, error: errorMessage }
       }
-      return { success: true, data: await response.json() }
+
+      return { success: true }
     } catch (error) {
       return {
         success: false,
         error: error instanceof Error ? error.message : "An unknown error occurred",
       }
     }
-  }
-
-  private static getJwtFromCookie(): string | undefined {
-    // Kept for backward compatibility if needed elsewhere,
-    // but proxy already prefers JWT from cookies when present.
-    if (typeof document !== "undefined") {
-      const cookies = document.cookie.split(";")
-      for (let i = 0; i < cookies.length; i++) {
-        const cookie = cookies[i].trim()
-        if (cookie.startsWith("jwt=")) return cookie.substring(4)
-        if (cookie.startsWith("authToken=")) return cookie.substring("authToken=".length)
-      }
-    }
-    return undefined
   }
 }
 
@@ -506,13 +442,18 @@ export const commentsService = {
     content: string,
     relatedTo: string,
     relatedId: string | number,
-    threadOf?: number,
-    attachment?: number,
+    parentDocumentId?: string,
   ) =>
-    CommentsService.addComment(relatedId, relatedTo === "posts" ? undefined : relatedTo, content, threadOf, attachment),
-  updateComment: (id: number, content: string) => CommentsService.updateComment("", undefined, id, content),
-  deleteComment: (id: number) => CommentsService.deleteComment("", undefined, id, ""),
-  reportCommentAbuse: (id: number, reason: string, content: string) =>
-    CommentsService.reportCommentAbuse("", undefined, id, reason, content),
+    CommentsService.addComment(
+      relatedId,
+      relatedTo === "posts" ? undefined : relatedTo,
+      content,
+      parentDocumentId,
+    ),
+  updateComment: (commentDocumentId: string, content?: string, imageDocumentId?: string | number | null) =>
+    CommentsService.updateComment(commentDocumentId, content, imageDocumentId ?? undefined),
+  deleteComment: (commentDocumentId: string) => CommentsService.deleteComment(commentDocumentId),
+  reportCommentAbuse: (commentDocumentId: string, reason: string, content: string, reporterEmail?: string) =>
+    CommentsService.reportCommentAbuse(commentDocumentId, reason, content, reporterEmail),
   countTotalComments: CommentsService.countTotalComments.bind(CommentsService),
 }

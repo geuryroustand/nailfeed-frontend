@@ -1,43 +1,64 @@
-"use client"
+"use client";
 
-import { Home, PlusSquare, User, Menu, Lightbulb } from "lucide-react"
-import { motion } from "framer-motion"
-import { useState, useEffect } from "react"
-import Link from "next/link"
-import MobileMenu from "./mobile-menu"
-import { useAuth } from "@/hooks/use-auth"
+import { Home, PlusSquare, User, Menu, Lightbulb } from "lucide-react";
+import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import MobileMenu from "./mobile-menu";
+import { useAuth } from "@/hooks/use-auth";
 
 interface BottomNavProps {
-  activeTab?: string
+  activeTab?: string;
 }
 
-export default function BottomNav({ activeTab: initialActiveTab = "home" }: BottomNavProps) {
-  const [activeTab, setActiveTab] = useState(initialActiveTab)
-  const { isAuthenticated } = useAuth()
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+export default function BottomNav({
+  activeTab: initialActiveTab = "home",
+}: BottomNavProps) {
+  const [activeTab, setActiveTab] = useState(initialActiveTab);
+  const { isAuthenticated } = useAuth();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Update active tab when prop changes
   useEffect(() => {
-    setActiveTab(initialActiveTab)
-  }, [initialActiveTab])
+    setActiveTab(initialActiveTab);
+  }, [initialActiveTab]);
 
   const tabs = [
-    { id: "menu", icon: Menu, label: "Menu", action: () => setIsMobileMenuOpen(true) },
+    {
+      id: "menu",
+      icon: Menu,
+      label: "Menu",
+      action: () => setIsMobileMenuOpen(true),
+    },
     { id: "home", icon: Home, label: "Home", href: "/" },
-    { id: "create", icon: PlusSquare, label: "Create", href: isAuthenticated ? "/" : "/auth" },
-    { id: "suggestions", icon: Lightbulb, label: "Ideas", href: "/suggestions" },
+    {
+      id: "create",
+      icon: PlusSquare,
+      label: "Create",
+      href: isAuthenticated ? "/" : "/auth",
+    },
+    {
+      id: "suggestions",
+      icon: Lightbulb,
+      label: "Ideas",
+      href: "/suggestions",
+    },
     // Conditionally change the profile tab to point to auth if not logged in
     {
       id: "profile",
       icon: User,
       label: isAuthenticated ? "Profile" : "Login",
-      href: isAuthenticated ? "/profile" : "/auth",
+      href: isAuthenticated ? "/me" : "/auth",
     },
-  ]
+  ];
 
   return (
     <>
-      <MobileMenu isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} activeItem={activeTab} />
+      <MobileMenu
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
+        activeItem={activeTab}
+      />
 
       <motion.div
         initial={{ y: 100 }}
@@ -47,8 +68,8 @@ export default function BottomNav({ activeTab: initialActiveTab = "home" }: Bott
       >
         <div className="container max-w-md mx-auto flex items-center justify-between px-4">
           {tabs.map((tab) => {
-            const Icon = tab.icon
-            const isActive = activeTab === tab.id && tab.id !== "menu"
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id && tab.id !== "menu";
 
             if (tab.id === "menu") {
               return (
@@ -61,7 +82,7 @@ export default function BottomNav({ activeTab: initialActiveTab = "home" }: Bott
                   <Icon className="h-6 w-6" />
                   <span className="text-xs mt-1">{tab.label}</span>
                 </motion.button>
-              )
+              );
             }
 
             return (
@@ -80,15 +101,19 @@ export default function BottomNav({ activeTab: initialActiveTab = "home" }: Bott
                       layoutId="bottomNavIndicator"
                       className="absolute -bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-pink-500 to-purple-500"
                       initial={false}
-                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 500,
+                        damping: 30,
+                      }}
                     />
                   )}
                 </motion.button>
               </Link>
-            )
+            );
           })}
         </div>
       </motion.div>
     </>
-  )
+  );
 }

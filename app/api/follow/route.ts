@@ -1,14 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { cookies } from "next/headers"
+import { validateSession } from "@/lib/auth/session"
 import { toggleFollowStatus } from "@/lib/services/user-network-service"
 
 export async function POST(request: NextRequest) {
   try {
-    // Check if user is authenticated
-    const cookieStore = cookies()
-    const token = cookieStore.get("jwt")?.value || cookieStore.get("authToken")?.value
+    const { user } = await validateSession()
 
-    if (!token) {
+    if (!user) {
       return NextResponse.json({ success: false, message: "Authentication required" }, { status: 401 })
     }
 

@@ -1,25 +1,25 @@
-"use server"
+"use server";
 
-import { revalidatePath } from "next/cache"
-import { getPosts, type Post } from "@/lib/post-data"
+import { revalidatePath } from "next/cache";
+import { getPosts, type Post } from "@/lib/post-data";
 
 export async function fetchPostsAction(
   limit = 6,
-  offset = 0,
+  offset = 0
 ): Promise<{
-  posts: Post[]
-  hasMore: boolean
-  nextPage?: number
+  posts: Post[];
+  hasMore: boolean;
+  nextPage?: number;
   error?: {
-    code: number | string
-    message: string
-  }
+    code: number | string;
+    message: string;
+  };
 }> {
   try {
-    const response = await getPosts(limit, offset)
-    return response
+    const response = await getPosts(limit, offset);
+    return response;
   } catch (error) {
-    console.error("Error in fetchPostsAction:", error)
+    console.error("Error in fetchPostsAction:", error);
     return {
       posts: [],
       hasMore: false,
@@ -27,29 +27,29 @@ export async function fetchPostsAction(
         code: "SERVER_ERROR",
         message: "Failed to fetch posts. Please try again later.",
       },
-    }
+    };
   }
 }
 
 export async function refreshPostsAction(): Promise<{
-  posts: Post[]
-  hasMore: boolean
-  nextPage?: number
+  posts: Post[];
+  hasMore: boolean;
+  nextPage?: number;
   error?: {
-    code: number | string
-    message: string
-  }
+    code: number | string;
+    message: string;
+  };
 }> {
   try {
     // Force revalidation of all post-related pages
-    revalidatePath("/")
-    revalidatePath("/profile")
-    revalidatePath("/explore")
+    revalidatePath("/");
+    revalidatePath("/me");
+    revalidatePath("/explore");
 
-    const response = await getPosts(6, 0)
-    return response
+    const response = await getPosts(6, 0);
+    return response;
   } catch (error) {
-    console.error("Error in refreshPostsAction:", error)
+    console.error("Error in refreshPostsAction:", error);
     return {
       posts: [],
       hasMore: false,
@@ -57,6 +57,6 @@ export async function refreshPostsAction(): Promise<{
         code: "SERVER_ERROR",
         message: "Failed to refresh posts. Please try again later.",
       },
-    }
+    };
   }
 }

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Bell, BellOff, X } from "lucide-react"
-import { useAuth } from "@/context/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 import { subscribeToPushNotifications } from "@/lib/actions/notification-actions"
 import { useToast } from "@/hooks/use-toast"
 

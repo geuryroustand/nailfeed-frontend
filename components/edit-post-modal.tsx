@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { X, ImageIcon, Video, Type, Palette, Loader2 } from "lucide-react"
+import { X, Type, Palette, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -16,6 +16,7 @@ import { validateContent } from "@/lib/content-moderation"
 interface EditPostModalProps {
   post: {
     id: number
+    documentId?: string
     description: string
     contentType?: "image" | "video" | "text" | "text-background" | "media-gallery"
     background?: BackgroundType
@@ -29,14 +30,25 @@ interface EditPostModalProps {
 
 export default function EditPostModal({ post, onClose, onPostUpdated }: EditPostModalProps) {
   const [description, setDescription] = useState(post.description || "")
-  const [contentType, setContentType] = useState<"text" | "text-background" | "media-gallery">(
-    post.contentType || "text",
+  const [contentType, setContentType] = useState<"text" | "text-background">(
+    post.contentType === "media-gallery" || post.contentType === "image" || post.contentType === "video"
+      ? "text"
+      : (post.contentType || "text"),
   )
   const [background, setBackground] = useState<BackgroundType | undefined>(post.background)
-  const [mediaItems, setMediaItems] = useState<MediaItem[]>(post.mediaItems || [])
-  const [galleryLayout, setGalleryLayout] = useState<MediaGalleryLayout>(post.galleryLayout || "grid")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { toast } = useToast()
+
+  // Read-only media items for display only
+  const existingMediaItems = post.mediaItems || post.media || []
+  const hasExistingMedia = existingMediaItems.length > 0
+
+  // Force contentType to "text" when there's existing media
+  useEffect(() => {
+    if (hasExistingMedia && contentType !== "text") {
+      setContentType("text")
+    }
+  }, [hasExistingMedia, contentType])
 
   // Close modal on escape key
   useEffect(() => {
@@ -55,6 +67,7 @@ export default function EditPostModal({ post, onClose, onPostUpdated }: EditPost
 
     return { isValid: true }
   }
+
 
   const handleSubmit = async () => {
     if (!description.trim()) {
@@ -81,22 +94,28 @@ export default function EditPostModal({ post, onClose, onPostUpdated }: EditPost
 
     try {
       const updatedPostData = {
-        id: post.id,
         description,
         contentType,
         background,
-        mediaItems,
-        galleryLayout,
       }
 
-      const result = await updatePost(updatedPostData)
+      // Use documentId for the update, fallback to id
+      const postIdentifier = post.documentId || post.id?.toString()
+      if (!postIdentifier) {
+        throw new Error("No post identifier found")
+      }
+
+      const result = await updatePost(postIdentifier, updatedPostData)
 
       if (result.success) {
         toast({
           title: "Post updated",
           description: "Your post has been updated successfully",
         })
-        onPostUpdated(result.post)
+        onPostUpdated({
+          ...post,
+          ...updatedPostData,
+        })
         onClose()
       } else {
         throw new Error(result.message)
@@ -136,102 +155,47 @@ export default function EditPostModal({ post, onClose, onPostUpdated }: EditPost
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
-          <Tabs value={contentType} onValueChange={(v) => setContentType(v as any)} className="mb-4">
-            <TabsList className="grid grid-cols-3 mb-4">
-              <TabsTrigger value="text" className="flex items-center gap-1">
-                <Type className="h-4 w-4" />
-                <span>Text</span>
-              </TabsTrigger>
-              <TabsTrigger value="text-background" className="flex items-center gap-1">
-                <Palette className="h-4 w-4" />
-                <span>Background</span>
-              </TabsTrigger>
-              <TabsTrigger value="media-gallery" className="flex items-center gap-1">
-                <ImageIcon className="h-4 w-4" />
-                <span>Media</span>
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          {!hasExistingMedia && (
+            <Tabs value={contentType} onValueChange={(v) => setContentType(v as any)} className="mb-4">
+              <TabsList className="grid grid-cols-2 mb-4">
+                <TabsTrigger value="text" className="flex items-center gap-1">
+                  <Type className="h-4 w-4" />
+                  <span>Text</span>
+                </TabsTrigger>
+                <TabsTrigger value="text-background" className="flex items-center gap-1">
+                  <Palette className="h-4 w-4" />
+                  <span>Background</span>
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          )}
 
-          {contentType === "text-background" && (
+          {hasExistingMedia && (
             <div className="mb-4">
-              <PostBackgroundSelector value={background} onChange={setBackground} />
+              <h3 className="text-sm font-medium text-gray-700 mb-2">Edit Text Only</h3>
+              <p className="text-xs text-gray-500">Posts with media can only have their text edited.</p>
             </div>
           )}
 
-          {contentType === "media-gallery" && (
+          {contentType === "text-background" && !hasExistingMedia && (
             <div className="mb-4">
-              <div className="mb-2">
-                <label className="block text-sm font-medium mb-1">Media Gallery</label>
-                <div className="flex gap-2 mb-2">
-                  <Button
-                    type="button"
-                    variant={galleryLayout === "grid" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setGalleryLayout("grid")}
-                    className="flex-1"
-                  >
-                    Grid
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={galleryLayout === "carousel" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setGalleryLayout("carousel")}
-                    className="flex-1"
-                  >
-                    Carousel
-                  </Button>
-                </div>
-              </div>
+              <PostBackgroundSelector onSelect={setBackground} selectedBackground={background} />
+            </div>
+          )}
 
-              {mediaItems.length > 0 && (
-                <div className="mb-4">
-                  <MediaGallery items={mediaItems} layout={galleryLayout} maxHeight={300} />
-                </div>
-              )}
-
-              <div className="flex gap-2 mb-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1 border-dashed"
-                  onClick={() => {
-                    // In a real app, this would open a file picker
-                    // For demo purposes, we'll just add a placeholder image
-                    setMediaItems([
-                      ...mediaItems,
-                      {
-                        id: `new-image-${Date.now()}`,
-                        type: "image",
-                        url: "/vibrant-geometric-nails.png",
-                      },
-                    ])
-                  }}
-                >
-                  <ImageIcon className="h-4 w-4 mr-2" />
-                  Add Image
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1 border-dashed"
-                  onClick={() => {
-                    // In a real app, this would open a file picker
-                    // For demo purposes, we'll just add a placeholder video
-                    setMediaItems([
-                      ...mediaItems,
-                      {
-                        id: `new-video-${Date.now()}`,
-                        type: "video",
-                        url: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
-                      },
-                    ])
-                  }}
-                >
-                  <Video className="h-4 w-4 mr-2" />
-                  Add Video
-                </Button>
+          {/* Display existing media (read-only) */}
+          {hasExistingMedia && (
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">Current Media (cannot be edited)</label>
+              <div className="p-3 bg-gray-50 rounded-lg border">
+                <MediaGallery
+                  items={existingMediaItems}
+                  layout={post.galleryLayout || "grid"}
+                  maxHeight={200}
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  Media files cannot be modified. You can only edit the text and background.
+                </p>
               </div>
             </div>
           )}
@@ -264,3 +228,4 @@ export default function EditPostModal({ post, onClose, onPostUpdated }: EditPost
     </motion.div>
   )
 }
+

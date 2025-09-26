@@ -7,7 +7,7 @@ import LoadMorePosts from "./load-more-posts"
 import CreatePostModal from "./create-post-modal"
 import { Button } from "@/components/ui/button"
 import { PlusCircle, Filter, AlertCircle, RefreshCw, WifiOff } from "lucide-react"
-import { useAuth } from "@/context/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 import { motion, AnimatePresence } from "framer-motion"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -180,6 +180,18 @@ export default function PostFeedOptimized({
       loadInitialPosts()
     }
   }, [initialPosts, initialError, loadInitialPosts])
+
+  // Refresh posts when authentication state changes (user logs in)
+  const previousAuthState = useRef(isAuthenticated)
+  useEffect(() => {
+    // Only refresh if user just logged in (went from false to true)
+    if (isAuthenticated && !previousAuthState.current && posts.length > 0) {
+      // User just logged in, refresh posts to get proper user data
+      console.log("[v0] User logged in, refreshing posts to load user data")
+      loadInitialPosts()
+    }
+    previousAuthState.current = isAuthenticated
+  }, [isAuthenticated, posts.length, loadInitialPosts])
 
   const loadMorePosts = async () => {
     if (!hasMore || isLoading || isOffline.current) return

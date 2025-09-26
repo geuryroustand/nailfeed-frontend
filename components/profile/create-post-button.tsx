@@ -22,9 +22,9 @@ export default function CreatePostButton({
   const [showCreateModal, setShowCreateModal] = useState(false)
 
   const handlePostCreated = (newPost: any) => {
-    // Refresh the page to show the new post
-    // This is a simple approach - a more sophisticated approach would update the state
-    window.location.reload()
+    // Close modal and rely on optimistic UI where available.
+    // Profile gallery can be refreshed manually or updated via future state hookup.
+    setShowCreateModal(false)
   }
 
   return (

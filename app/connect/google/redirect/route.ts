@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { cookies } from "next/headers"
+import { createSession } from "@/lib/auth/session"
 
 export async function GET(request: NextRequest) {
   try {
@@ -85,40 +85,9 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(new URL("/auth?error=no_jwt", request.url))
       }
 
-      // Set cookies for authentication
-      const cookieOptions = {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax" as const,
-        maxAge: 60 * 60 * 24 * 7, // 7 days
-        path: "/",
-      }
+      await createSession(data.user, data.jwt, false)
 
-      const cookieStore = await cookies()
-
-      // Set the main auth token (httpOnly for security)
-      cookieStore.set("auth_token", data.jwt, cookieOptions)
-
-      // Set client-accessible tokens for compatibility
-      cookieStore.set("jwt", data.jwt, {
-        ...cookieOptions,
-        httpOnly: false, // Allow client access
-      })
-
-      cookieStore.set("authToken", data.jwt, {
-        ...cookieOptions,
-        httpOnly: false, // Allow client access
-      })
-
-      // Store user ID if available
-      if (data.user?.id) {
-        cookieStore.set("userId", String(data.user.id), {
-          ...cookieOptions,
-          httpOnly: false, // Allow client access
-        })
-      }
-
-      console.log("Cookies set, redirecting to home")
+      console.log("Session created, redirecting to home")
       return NextResponse.redirect(new URL("/", request.url))
     } catch (fetchError) {
       console.error("Error calling Strapi:", fetchError)

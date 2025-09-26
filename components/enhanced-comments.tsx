@@ -3,13 +3,13 @@
 import type React from "react"
 
 import { useState, useRef } from "react"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { MessageCircle, CornerDownRight, X, Smile, Send, ChevronDown, ChevronUp } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { focusWithoutScroll } from "@/lib/focus-utils"
 import { useToast } from "@/hooks/use-toast"
+import { EnhancedAvatar } from "@/components/ui/enhanced-avatar"
 
 interface Comment {
   id: number | string
@@ -151,10 +151,13 @@ export function EnhancedComments({ postId, comments, onAddComment, onAddReaction
 
           <div className={cn("flex-1", depth > 0 && "pl-0")}>
             <div className="flex items-start">
-              <Avatar className="h-9 w-9 mr-2 shrink-0">
-                <AvatarImage src={comment.userImage || "/placeholder.svg"} alt={comment.username} />
-                <AvatarFallback>{comment.username.substring(0, 2).toUpperCase()}</AvatarFallback>
-              </Avatar>
+              <EnhancedAvatar
+                src={comment.userImage}
+                alt={comment.username}
+                fallbackText={comment.username}
+                size="sm"
+                className="h-9 w-9 mr-2 shrink-0"
+              />
 
               <div className="flex-1">
                 <div className="bg-gray-50 rounded-lg p-3 group-hover:bg-gray-100 transition-colors">

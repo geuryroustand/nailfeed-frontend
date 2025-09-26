@@ -7,8 +7,16 @@ export function processPostsForGallery(posts: any[]): any[] {
   if (!Array.isArray(posts)) return []
 
   return posts.map((post) => {
-    // Extract the first media item for gallery thumbnail
-    const firstMediaItem = getFirstMediaItem(post.mediaItems)
+    // In Strapi v5 with optimized queries, media is directly populated
+    const mediaItems = post.media || []
+    const firstMediaItem = getFirstMediaItem(mediaItems)
+
+    console.log(`[processPostsForGallery] Processing post ${post.id}:`, {
+      contentType: post.contentType,
+      hasMedia: !!post.media,
+      mediaCount: Array.isArray(mediaItems) ? mediaItems.length : 0,
+      firstMediaUrl: firstMediaItem?.file?.url || firstMediaItem?.url,
+    });
 
     return {
       id: post.id,
@@ -16,15 +24,17 @@ export function processPostsForGallery(posts: any[]): any[] {
       title: post.title || "",
       description: post.description || "",
       contentType: post.contentType || "media-gallery",
+      background: post.background,
       galleryLayout: post.galleryLayout || "grid",
       publishedAt: post.publishedAt || post.createdAt,
       likesCount: post.likesCount || 0,
       commentsCount: post.commentsCount || 0,
       savesCount: post.savesCount || 0,
-      thumbnailUrl: firstMediaItem?.file?.url || "",
-      mediaItemsCount: Array.isArray(post.mediaItems) ? post.mediaItems.length : 0,
-      // Keep full mediaItems for detailed view
-      mediaItems: post.mediaItems || [],
+      thumbnailUrl: firstMediaItem?.file?.url || firstMediaItem?.url || "",
+      mediaItemsCount: Array.isArray(mediaItems) ? mediaItems.length : 0,
+      // Keep full mediaItems for detailed view - use consistent naming
+      mediaItems: mediaItems,
+      user: post.user,
     }
   })
 }
@@ -33,49 +43,62 @@ export function processPostsForGallery(posts: any[]): any[] {
  * Get the first media item from a post for thumbnail display
  */
 function getFirstMediaItem(mediaItems: any): any | null {
-  if (!mediaItems) return null
+  if (!mediaItems) {
+    console.log('[getFirstMediaItem] No mediaItems provided');
+    return null;
+  }
 
-  // Handle different API response structures
-  const items = Array.isArray(mediaItems)
-    ? mediaItems
-    : mediaItems.data && Array.isArray(mediaItems.data)
-      ? mediaItems.data
-      : []
+  console.log('[getFirstMediaItem] Processing:', { mediaItems, isArray: Array.isArray(mediaItems) });
 
-  if (items.length === 0) return null
+  // Handle Strapi v5 optimized query response - media is directly an array
+  const items = Array.isArray(mediaItems) ? mediaItems : []
+
+  if (items.length === 0) {
+    console.log('[getFirstMediaItem] No items found after processing');
+    return null;
+  }
 
   const firstItem = items[0]
-  const mediaItemData = firstItem.attributes || firstItem
+  console.log('[getFirstMediaItem] First item raw:', firstItem);
 
-  return {
-    id: mediaItemData.id || firstItem.id,
-    type: mediaItemData.type || "image",
-    file: extractFileData(mediaItemData.file),
+  // In Strapi v5 optimized queries, media files come directly with selected fields
+  const result = {
+    id: firstItem.id,
+    type: firstItem.mime?.startsWith('video/') ? "video" : "image",
+    file: extractFileData(firstItem),
+    order: firstItem.order || 0,
+    mime: firstItem.mime,
+    // For backward compatibility, also include direct URL access
+    url: firstItem.url,
   }
+
+  console.log('[getFirstMediaItem] Processed result:', result);
+  return result;
 }
 
 /**
- * Extract file data from API response
+ * Extract file data from API response for Strapi v5
  */
 function extractFileData(file: any): any {
-  if (!file) return { url: "" }
+  console.log('[extractFileData] Input:', file);
 
-  // Case 1: Direct file object with url
-  if (file.url) {
-    return file
+  if (!file) {
+    console.log('[extractFileData] No file provided');
+    return { url: "" }
   }
 
-  // Case 2: Strapi data structure
-  if (file.data && file.data.attributes) {
-    return file.data.attributes
+  // In Strapi v5 optimized queries, files come with selected fields directly
+  const result = {
+    url: file.url || "",
+    formats: file.formats,
+    mime: file.mime,
+    name: file.name,
+    width: file.width,
+    height: file.height,
   }
 
-  // Case 3: Strapi data structure with just data
-  if (file.data) {
-    return file.data
-  }
-
-  return { url: "" }
+  console.log('[extractFileData] Optimized result:', result);
+  return result;
 }
 
 /**

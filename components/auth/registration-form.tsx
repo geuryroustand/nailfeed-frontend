@@ -1,64 +1,141 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
-import { useActionState } from "react"
+import { FormEvent, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
+import { z } from "zod"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
-import { registerWithFormAction, type AuthActionState } from "@/app/auth/actions"
 import { Eye, EyeOff, Loader2 } from "lucide-react"
 import { Progress } from "@/components/ui/progress"
-import { useAuth } from "@/context/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 
-const initialState: AuthActionState = { status: "idle" }
+type FieldErrors = Record<string, string>
+
+type AuthState = {
+  status: "idle" | "success" | "error"
+  message?: string
+  fieldErrors?: FieldErrors
+}
+
+const registerSchema = z
+  .object({
+    username: z
+      .string()
+      .min(3, { message: "Username must be at least 3 characters" })
+      .max(20, { message: "Username must be less than 20 characters" })
+      .regex(/^[a-zA-Z0-9_]+$/, {
+        message: "Username can only contain letters, numbers, and underscores",
+      }),
+    email: z
+      .string()
+      .min(1, { message: "Email is required" })
+      .email({ message: "Please enter a valid email address" }),
+    password: z
+      .string()
+      .min(8, { message: "Password must be at least 8 characters" })
+      .regex(/[A-Z]/, {
+        message: "Password must contain at least one uppercase letter",
+      })
+      .regex(/[a-z]/, {
+        message: "Password must contain at least one lowercase letter",
+      })
+      .regex(/[0-9]/, { message: "Password must contain at least one number" }),
+    confirmPassword: z
+      .string()
+      .min(1, { message: "Please confirm your password" }),
+    agreeTerms: z.literal(true, {
+      errorMap: () => ({
+        message: "You must agree to the terms and conditions",
+      }),
+    }),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  })
+
+const initialState: AuthState = { status: "idle" }
 
 export default function RegistrationForm() {
   const router = useRouter()
-  const { checkAuthStatus } = useAuth() // Added auth context hook
-  const [state, action, isPending] = useActionState(registerWithFormAction, initialState)
+  const { register, checkAuthStatus } = useAuth()
 
-  // Controlled inputs to preserve values on error
   const [username, setUsername] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [agree, setAgree] = useState(false)
-
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
-
-  // Hydrate inputs from server-returned values on error (we never echo passwords back)
-  useEffect(() => {
-    if (state.status === "error" && state.values) {
-      if (state.values.username) setUsername(state.values.username)
-      if (state.values.email) setEmail(state.values.email)
-    }
-  }, [state])
-
-  useEffect(() => {
-    if (state.status === "success") {
-      setTimeout(async () => {
-        console.log("[v0] Registration successful, refreshing auth state...")
-        await checkAuthStatus()
-        router.replace("/")
-        router.refresh()
-      }, 500)
-    }
-  }, [state.status, router, checkAuthStatus])
+  const [state, setState] = useState<AuthState>(initialState)
+  const [isPending, setIsPending] = useState(false)
 
   const passwordStrength = useMemo(() => {
     if (!password) return 0
-    let s = 0
-    if (password.length >= 8) s += 25
-    if (/[A-Z]/.test(password)) s += 25
-    if (/[a-z]/.test(password)) s += 25
-    if (/[0-9]/.test(password)) s += 25
-    return s
+    let strength = 0
+    if (password.length >= 8) strength += 25
+    if (/[A-Z]/.test(password)) strength += 25
+    if (/[a-z]/.test(password)) strength += 25
+    if (/[0-9]/.test(password)) strength += 25
+    return strength
   }, [password])
 
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    const parsed = registerSchema.safeParse({
+      username,
+      email,
+      password,
+      confirmPassword,
+      agreeTerms: agree,
+    })
+
+    if (!parsed.success) {
+      const fieldErrors: FieldErrors = {}
+      parsed.error.issues.forEach((issue) => {
+        const key = String(issue.path[0])
+        fieldErrors[key] = issue.message
+      })
+
+      setState({
+        status: "error",
+        message: "Please fix the errors and try again.",
+        fieldErrors,
+      })
+      return
+    }
+
+    setIsPending(true)
+    setState(initialState)
+
+    const result = await register({
+      username: parsed.data.username,
+      email: parsed.data.email,
+      password: parsed.data.password,
+    })
+
+    if (!result.success) {
+      setState({
+        status: "error",
+        message: result.error || "Registration failed",
+      })
+      setIsPending(false)
+      return
+    }
+
+    setState({ status: "success", message: "Registration successful" })
+
+    await checkAuthStatus()
+    router.replace("/")
+    router.refresh()
+
+    setIsPending(false)
+  }
+
   return (
-    <form action={action} className="space-y-4" aria-describedby="signup-form-status">
+    <form onSubmit={handleSubmit} className="space-y-4" aria-describedby="signup-form-status">
       <div>
         <label htmlFor="username" className="block text-sm font-medium text-gray-700">
           Username

@@ -1,6 +1,7 @@
 import { cookies } from "next/headers"
 import qs from "qs"
 import type { UserProfileResponse } from "@/lib/services/user-service"
+import { verifySession } from "@/lib/auth/session"
 
 /**
  * Fetches the current user's profile data using the /api/users/me endpoint
@@ -10,10 +11,11 @@ export async function fetchCurrentUserProfile() {
   try {
     console.log("Fetching current user profile data")
 
-    // Get authentication token from cookies
-    const token = cookies().get("jwt")?.value || cookies().get("authToken")?.value
+    // Get authentication token from secure session
+    const session = await verifySession()
+    const token = session?.strapiJWT
 
-    if (!token) {
+    if (!session || !token) {
       console.error("No authentication token available")
       return { error: true, message: "Authentication required", requiresAuth: true }
     }

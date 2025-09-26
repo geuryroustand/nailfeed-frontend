@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
+import { createSession } from "@/lib/auth/session";
 
 interface CallbackPageProps {
   params: {
@@ -34,15 +35,6 @@ export default async function CallbackPage({
       redirect("/auth?error=invalid_state");
     }
   }
-
-  const isProd = process.env.NODE_ENV === "production";
-  const cookieOpts = {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: "lax" as const,
-    path: "/",
-    maxAge: 60 * 60 * 24 * 7, // 1 week
-  };
 
   try {
     let strapiResponse: Response | null = null;
@@ -128,19 +120,7 @@ export default async function CallbackPage({
       redirect("/auth?error=no_token_received");
     }
 
-    // Set authentication cookies
-    const cookieStore = await cookies();
-    cookieStore.set("auth_token", data.jwt, cookieOpts);
-    cookieStore.set("jwt", data.jwt, { ...cookieOpts, httpOnly: false }); // Allow client access
-    cookieStore.set("authToken", data.jwt, { ...cookieOpts, httpOnly: false });
-
-    // Set user ID if available (for client-side convenience)
-    if (data?.user?.id) {
-      cookieStore.set("userId", String(data.user.id), {
-        ...cookieOpts,
-        httpOnly: false, // Allow client-side access
-      });
-    }
+    await createSession(data.user, data.jwt, false)
 
     console.log("Authentication successful, redirecting to home...");
 

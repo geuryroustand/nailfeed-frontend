@@ -56,8 +56,16 @@ export default function EditProfileModal({ user, onClose }: EditProfileModalProp
     }
   }, [profileImageBlob, coverImageBlob])
 
-  // Get the API base URL
-  const apiBaseUrl = "https://nailfeed-backend-production.up.railway.app"
+  // Get the API base URL - use same as other services
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:1337"
+
+  // Debug: Log user data to understand structure
+  console.log('[EditProfileModal] User data received:', {
+    hasUser: !!user,
+    profileImage: user.profileImage,
+    coverImage: user.coverImage,
+    username: user.username
+  })
 
   // Construct absolute URLs for profile and cover images
   const getFullImageUrl = (relativeUrl: string | undefined) => {
@@ -70,6 +78,12 @@ export default function EditProfileModal({ user, onClose }: EditProfileModalProp
 
   const profileImageUrl = getFullImageUrl(user.profileImage?.url)
   const coverImageUrl = getFullImageUrl(user.coverImage?.url)
+
+  console.log('[EditProfileModal] Image URLs constructed:', {
+    profileImageUrl,
+    coverImageUrl,
+    apiBaseUrl
+  })
 
   // Function to compress image before upload
   const compressImage = async (blob: Blob, maxWidth = 1200, maxHeight = 1200, quality = 0.8): Promise<Blob> => {

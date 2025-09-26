@@ -3,7 +3,7 @@ import type { UserProfileResponse } from "@/lib/services/user-service"
 import { getProfileImageUrl, getCoverImageUrl } from "@/lib/api-url-helper"
 
 interface ProfileHeaderProps {
-  user: UserProfileResponse
+  user: UserProfileResponse & { isFollowing?: boolean }
   isOtherUser?: boolean
 }
 
@@ -36,6 +36,8 @@ export default function ProfileHeader({ user, isOtherUser = false }: ProfileHead
     followersCount: user.followersCount || user.stats?.followers || 0,
     followingCount: user.followingCount || user.stats?.following || 0,
     postsCount: user.postsCount || user.stats?.posts || 0,
+    // Pass through the isFollowing status from the server
+    isFollowing: user.isFollowing,
   }
 
   return <ProfileHeaderClient userData={processedUser} isOtherUser={isOtherUser} />

@@ -2,6 +2,7 @@
 
 import qs from "qs"
 import { cache } from "react"
+import { PostService } from "@/lib/services/post-service"
 import type { Post } from "@/lib/post-data"
 import { normalizeImageUrl } from "@/lib/image-utils"
 
@@ -24,8 +25,8 @@ function transformStrapiPost(post: any): Post {
     const user = post.user?.data ? post.user.data.attributes : post.user || {}
     console.log("[v0] User data extracted:", user)
 
-    // Extract media items - handle both data array and direct array
-    const mediaItems = post.mediaItems?.data || post.mediaItems || []
+    // Extract media items - handle both new media field and legacy mediaItems
+    const mediaItems = post.media || post.mediaItems?.data || post.mediaItems || []
     console.log("[v0] Media items extracted:", mediaItems.length)
 
     // Extract tags - handle both data array and direct array
@@ -38,6 +39,39 @@ function transformStrapiPost(post: any): Post {
 
     const likes = post.likes?.data || post.likes || []
     console.log("[v0] Processing likes with user data:", likes)
+
+    const processedLikes = Array.isArray(likes)
+      ? likes.map((entry: any, index: number) => {
+          try {
+            const likeData = entry.attributes || entry
+            const likeUserData = likeData.user?.data ? likeData.user.data.attributes : likeData.user
+
+            return {
+              id: entry.id || likeData.id || likeData.documentId || `like-${index}`,
+              documentId: likeData.documentId || entry.documentId || `like-${index}`,
+              type: likeData.type || "like",
+              createdAt: likeData.createdAt,
+              user: likeUserData
+                ? {
+                    id: likeUserData.id || likeUserData.documentId,
+                    documentId: likeUserData.documentId || likeUserData.id,
+                    username: likeUserData.username,
+                    displayName: likeUserData.displayName || likeUserData.username,
+                    profileImage: likeUserData.profileImage?.data
+                      ? likeUserData.profileImage.data.attributes
+                      : likeUserData.profileImage,
+                  }
+                : null,
+            }
+          } catch (likeError) {
+            console.error(`[v0] Error processing like entry ${index}:`, likeError)
+            return null
+          }
+        }).filter(Boolean)
+      : []
+
+    const userReactionRaw = post.userReaction ?? null
+    const userReactionType = typeof userReactionRaw === "string" ? userReactionRaw : userReactionRaw?.type ?? null
 
     // Get the first media item URL or use a placeholder
     let imageUrl = "/intricate-nail-art.png"
@@ -98,32 +132,47 @@ function transformStrapiPost(post: any): Post {
     // Process media items to ensure they have proper URLs
     const processedMediaItems = mediaItems.map((item: any, index: number) => {
       try {
+        // Handle new direct media structure vs legacy mediaItems structure
         const itemData = item.attributes || item
-        const fileData = itemData.file?.data?.attributes || itemData.file
-        const mediaType = itemData.type || "image"
+        const fileData = itemData.file?.data?.attributes || itemData.file || item // Direct media has no file wrapper
+
+        // Determine media type from mime or legacy type field
+        const mediaType = item.mime?.startsWith('image/') ? 'image' :
+                         item.mime?.startsWith('video/') ? 'video' :
+                         itemData.type || "image"
 
         let url = ""
 
         if (mediaType === "video") {
           // For videos, use the direct URL
-          if (fileData?.url) {
+          if (item.url) { // Direct media structure
+            url = normalizeImageUrl(item.url)
+          } else if (fileData?.url) { // Legacy structure
             url = normalizeImageUrl(fileData.url)
           }
         } else {
           // For images, try different format sizes
-          if (fileData?.url) {
+          if (item.url) { // Direct media structure
+            url = normalizeImageUrl(item.url)
+          } else if (fileData?.url) { // Legacy structure
             url = normalizeImageUrl(fileData.url)
-          } else if (fileData?.formats?.medium?.url) {
+          } else if (item.formats?.medium?.url) { // Direct media formats
+            url = normalizeImageUrl(item.formats.medium.url)
+          } else if (fileData?.formats?.medium?.url) { // Legacy formats
             url = normalizeImageUrl(fileData.formats.medium.url)
+          } else if (item.formats?.small?.url) {
+            url = normalizeImageUrl(item.formats.small.url)
           } else if (fileData?.formats?.small?.url) {
             url = normalizeImageUrl(fileData.formats.small.url)
+          } else if (item.formats?.thumbnail?.url) {
+            url = normalizeImageUrl(item.formats.thumbnail.url)
           } else if (fileData?.formats?.thumbnail?.url) {
             url = normalizeImageUrl(fileData.formats.thumbnail.url)
           }
         }
 
         return {
-          id: item.id || `media-${index}`,
+          id: item.id || item.documentId || `media-${index}`,
           type: mediaType,
           url: url,
         }
@@ -137,6 +186,42 @@ function transformStrapiPost(post: any): Post {
       }
     })
 
+    const totalLikesCount =
+      typeof post.likesCount === "number"
+        ? post.likesCount
+        : Array.isArray(processedLikes)
+          ? processedLikes.length
+          : 0
+
+    // Compute reaction summaries from likes data
+    const reactionTypes = ["like", "love", "haha", "wow", "sad", "angry"]
+    const reactionEmojis = {
+      like: "👍",
+      love: "❤️",
+      haha: "😂",
+      wow: "😮",
+      sad: "😢",
+      angry: "😡"
+    }
+
+    const reactionCounts = reactionTypes.reduce((acc, type) => {
+      acc[type] = processedLikes.filter((like: any) => like.type === type).length
+      return acc
+    }, {} as Record<string, number>)
+
+    const reactionSummaries = reactionTypes
+      .filter(type => reactionCounts[type] > 0)
+      .map(type => ({
+        type,
+        emoji: reactionEmojis[type as keyof typeof reactionEmojis] || "👍",
+        label: type.charAt(0).toUpperCase() + type.slice(1),
+        count: reactionCounts[type],
+        users: processedLikes
+          .filter((like: any) => like.type === type)
+          .map((like: any) => like.user)
+          .filter(Boolean)
+      }))
+
     const transformedPost = {
       id: post.id,
       documentId: post.documentId || `post-${post.id}`,
@@ -146,16 +231,20 @@ function transformStrapiPost(post: any): Post {
       image: imageUrl,
       title: post.title || "",
       description: post.description || "",
-      likes: likes,
+      likes: totalLikesCount,
+      likesList: processedLikes as any,
+      reactions: reactionSummaries,
+      userReaction: userReactionType,
       comments: [],
       timestamp,
       tags,
-      mediaItems: processedMediaItems,
+      media: processedMediaItems, // New media field for Strapi v5
+      mediaItems: processedMediaItems, // Keep for backward compatibility
       contentType: post.contentType || "image",
+      background: post.background || null,
       galleryLayout: post.galleryLayout || "grid",
     }
 
-    console.log("[v0] Post transformation completed successfully")
     return transformedPost
   } catch (error) {
     console.error("[v0] Error transforming post data:", error)
@@ -191,122 +280,50 @@ function formatTimestamp(dateString: string): string {
   }
 }
 
-// Optimized function to fetch a post by ID using qs for query construction
+// Optimized function to fetch a post by ID using PostService
 export const fetchPostById = cache(async (id: string | number): Promise<Post | null> => {
   try {
-    console.log(`[v0] Fetching post with ID: ${id}`)
+    console.log(`[v0] Fetching post with ID or documentId: ${id}`)
 
-    // Build a structured query using qs - revised for Strapi v5 compatibility
-    const query = {
-      populate: {
-        user: {
-          populate: {
-            profileImage: {
-              fields: ["url", "formats"],
-            },
-          },
-        },
-        mediaItems: {
-          populate: {
-            file: {
-              fields: ["url", "formats"],
-            },
-          },
-        },
-        tags: true,
-      },
-    }
+    const response = await PostService.getPost(id)
 
-    // Convert the query to a string
-    const queryString = qs.stringify(query, { encodeValuesOnly: true })
-
-    // Determine if we're dealing with a numeric ID or a documentId string
-    const isNumericId = !isNaN(Number(id))
-
-    // Construct the endpoint based on whether we're using ID or documentId
-    const endpoint = isNumericId
-      ? `/api/posts/${id}?${queryString}`
-      : `/api/posts?filters[documentId][$eq]=${id}&${queryString}`
-
-    // Get the token from environment variable
-    const token = process.env.API_TOKEN || ""
-
-    // Prepare headers
-    const headers: HeadersInit = {
-      "Content-Type": "application/json",
-    }
-
-    // Add authorization header if token exists
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`
-    }
-
-    // Construct the full URL
-    const apiUrl = process.env.API_URL || "https://nailfeed-backend-production.up.railway.app"
-    const fullUrl = `${apiUrl}${apiUrl.endsWith("/") ? "" : "/"}${endpoint.startsWith("/") ? endpoint.substring(1) : endpoint}`
-
-    console.log(`[v0] Making request to: ${fullUrl}`)
-
-    // Make the request with AbortController for timeout
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
-
-    try {
-      const fetchResponse = await fetch(fullUrl, {
-        method: "GET",
-        headers,
-        signal: controller.signal,
-        next: { revalidate: 60 }, // Revalidate every minute
-      })
-
-      clearTimeout(timeoutId)
-
-      if (!fetchResponse.ok) {
-        const errorText = await fetchResponse.text()
-        console.error(`[v0] API error (${fetchResponse.status}): ${errorText}`)
-
-        if (fetchResponse.status === 404) {
-          return null
-        }
-
-        throw new Error(`API error (${fetchResponse.status}): ${errorText}`)
-      }
-
-      const response = await fetchResponse.json()
-      console.log(`[v0] Successfully fetched post ${id}`)
-      console.log(`[v0] Raw API response:`, JSON.stringify(response, null, 2))
-
-      // Transform the API response to our Post interface
-      if (response.data) {
-        if (Array.isArray(response.data) && response.data.length > 0) {
-          // Handle documentId case where we get an array
-          const postData = response.data[0].attributes || response.data[0]
-          return transformStrapiPost({
-            id: response.data[0].id,
-            ...postData,
-          })
-        } else {
-          // Handle numeric ID case where we get a single object
-          const postData = response.data.attributes || response.data
-          return transformStrapiPost({
-            id: response.data.id,
-            ...postData,
-          })
-        }
-      }
-
-      console.log("[v0] No data found in response")
+    if (!response) {
+      console.error('[v0] PostService returned no response for post fetch')
       return null
-    } catch (error) {
-      clearTimeout(timeoutId)
-
-      if (error.name === "AbortError") {
-        console.error(`[v0] Request timeout for post ${id}`)
-        throw new Error(`Request timeout for post ${id}`)
-      }
-
-      throw error
     }
+
+    const errorInfo = (response as any).error
+    if (errorInfo) {
+      console.error('[v0] API error while fetching post:', errorInfo)
+      const message = typeof errorInfo?.message === 'string' ? errorInfo.message : 'Unknown error'
+      throw new Error(`API error: ${message}`)
+    }
+
+    const rawData = (response as any).data
+    if (!rawData) {
+      console.warn('[v0] Post response did not include data:', response)
+      return null
+    }
+
+    const entry = Array.isArray(rawData) ? rawData[0] : rawData
+    if (!entry) {
+      console.warn('[v0] Post entry missing in response:', response)
+      return null
+    }
+
+    const flattenedEntry = entry.attributes
+      ? {
+          id: entry.id,
+          documentId: entry.documentId ?? entry.attributes?.documentId,
+          ...entry.attributes,
+        }
+      : entry
+
+    if (!flattenedEntry.documentId && entry.documentId) {
+      flattenedEntry.documentId = entry.documentId
+    }
+
+    return transformStrapiPost(flattenedEntry)
   } catch (error) {
     console.error(`[v0] Error fetching post ${id}:`, error)
     throw error

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { MoreHorizontal, MessageCircle, Bookmark, Share2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -8,7 +8,8 @@ import { ReactionSummary } from "@/components/reaction-summary"
 import { ReactionButton } from "@/components/reaction-button"
 import { ShareMenu } from "@/components/share-menu"
 import { useToast } from "@/hooks/use-toast"
-import { useAuth } from "@/context/auth-context"
+import type { ReactionType } from "@/lib/services/reaction-service"
+import { useAuth } from "@/hooks/use-auth"
 import { cn } from "@/lib/utils"
 import type { Post } from "@/lib/post-data"
 
@@ -19,7 +20,8 @@ interface PostClientActionsProps {
 export default function PostClientActions({ post }: PostClientActionsProps) {
   const [isBookmarked, setIsBookmarked] = useState(false)
   const { toast } = useToast()
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, user } = useAuth()
+
 
   // Generate the post URL
   const postUrl = useCallback(() => {
@@ -87,7 +89,16 @@ export default function PostClientActions({ post }: PostClientActionsProps) {
 
       {/* Reactions summary */}
       <div className="mb-4">
-        <ReactionSummary postId={post.id} totalCount={post.likes || 0} showViewButton={true} />
+        <ReactionSummary
+          postId={post.documentId || post.id}
+          totalCount={post.likesCount}
+          reactions={post.reactions?.map(r => ({
+            emoji: r.emoji,
+            label: r.label,
+            count: r.count
+          })) || []}
+          showViewButton={true}
+        />
       </div>
 
       {/* Action buttons */}
@@ -99,7 +110,14 @@ export default function PostClientActions({ post }: PostClientActionsProps) {
             postDocumentId={post.documentId}
             postAuthorId={post.userId || post.authorId || post.user?.id || post.user?.documentId}
             className="flex-1"
-            showCount={false}
+            showCount={true}
+            reactions={post.reactions?.map(r => ({
+              type: r.type,
+              emoji: r.emoji,
+              count: r.count
+            })) || []}
+            likesCount={post.likesCount}
+            userReaction={post.userReaction || null}
           />
         ) : (
           <Button
@@ -115,7 +133,7 @@ export default function PostClientActions({ post }: PostClientActionsProps) {
         <Button variant="ghost" className="flex-1 flex items-center justify-center gap-2" onClick={scrollToComments}>
           <MessageCircle className="h-5 w-5" />
           <span>Comment</span>
-          {post.comments?.length > 0 && <span className="text-sm">({post.comments.length})</span>}
+          {(post.commentsCount || post.comments?.length || 0) > 0 && <span className="text-sm">({post.commentsCount || post.comments?.length || 0})</span>}
         </Button>
 
         <ShareMenu

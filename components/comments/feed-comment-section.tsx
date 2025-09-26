@@ -2,14 +2,14 @@
 
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
-import { useAuth } from "@/context/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Loader2, AlertCircle, X, MessageCircle, Reply, Edit, Trash2, MoreVertical, ImageIcon } from "lucide-react"
+import { Loader2, AlertCircle, X, MessageCircle, Reply, Edit, Trash2, MoreVertical, ImageIcon, Flag } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { CommentsService, type Comment } from "@/lib/services/comments-service"
-import { MediaUploadService } from "@/lib/services/media-upload-service"
+import { commentsService, type Comment } from "@/lib/services/comments-service"
+import { OptimizedMediaUploadService } from "@/lib/services/optimized-media-upload-service"
 import Link from "next/link"
 import {
   AlertDialog,
@@ -22,6 +22,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { ReportContentModal } from "@/components/report-content-modal"
 
 interface FeedCommentSectionProps {
   postId: string | number
@@ -33,7 +34,7 @@ interface FeedCommentSectionProps {
 }
 
 // Valid report reason types for Strapi Comments plugin
-type ReportReason = "BAD_LANGUAGE" | "DISCRIMINATION" | "OTHER"
+import { type ReportReason } from "@/lib/services/content-flags-service"
 
 const getNameInitials = (name: string): string => {
   if (!name || name === "Anonymous") return "AN"
@@ -91,15 +92,16 @@ export default function FeedCommentSection({
   const [error, setError] = useState<string | null>(null)
   const [newComment, setNewComment] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [replyTo, setReplyTo] = useState<{ id: number; username: string } | null>(null)
-  const [commentToDelete, setCommentToDelete] = useState<number | null>(null)
+  const [replyTo, setReplyTo] = useState<{ documentId: string; username: string } | null>(null)
+  const [commentToDelete, setCommentToDelete] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [reportDialogOpen, setReportDialogOpen] = useState(false)
   const [totalComments, setTotalComments] = useState(0)
-  const [editingComment, setEditingComment] = useState<{ id: number; content: string } | null>(null)
-  const [optimisticComments, setOptimisticComments] = useState<Comment[]>([])
+  const [editingComment, setEditingComment] = useState<{ documentId: string; content: string } | null>(null)
   const [submittingCommentId, setSubmittingCommentId] = useState<string | null>(null)
   const [imageFile, setImageFile] = useState<File | null>(null)
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [reportingComment, setReportingComment] = useState<Comment | null>(null)
 
   const { toast } = useToast()
   const commentInputRef = useRef<HTMLTextAreaElement>(null)
@@ -113,6 +115,36 @@ export default function FeedCommentSection({
   const observerRef = useRef<IntersectionObserver | null>(null)
   const loadMoreRef = useRef<HTMLDivElement>(null)
   const initialFetchCompleted = useRef(false)
+
+  const replaceCommentInTree = (
+    tree: Comment[],
+    tempDocumentId: string,
+    replacement: Comment,
+  ): { updated: boolean; comments: Comment[] } => {
+    let updated = false
+
+    const mapped = tree.map((comment) => {
+      if (comment.documentId === tempDocumentId) {
+        updated = true
+        return { ...replacement }
+      }
+
+      if (comment.children && comment.children.length > 0) {
+        const result = replaceCommentInTree(comment.children, tempDocumentId, replacement)
+        if (result.updated) {
+          updated = true
+          return {
+            ...comment,
+            children: result.comments,
+          }
+        }
+      }
+
+      return comment
+    })
+
+    return { updated, comments: mapped }
+  }
 
   // Parse error message from various error formats
   const parseErrorMessage = (err: any): string => {
@@ -159,7 +191,7 @@ export default function FeedCommentSection({
       // Use the documentId if available, otherwise use numeric ID
       const identifier = documentId || postId
 
-      const response = await CommentsService.getComments(postId, identifier.toString(), pageNum, pageSize)
+      const response = await commentsService.getComments(postId, identifier.toString(), pageNum, pageSize)
       console.log("[v0] Fetched comments for page", pageNum, ":", response)
 
       const commentsData = response.data || []
@@ -169,11 +201,11 @@ export default function FeedCommentSection({
       if (pagination) {
         setHasMore(pagination.page < pagination.pageCount)
         // Calculate total comments including nested replies
-        const totalCount = CommentsService.countTotalComments(commentsData)
+        const totalCount = commentsService.countTotalComments(commentsData)
         setTotalComments(totalCount)
       } else {
         // If no pagination info, calculate total from the data
-        const total = CommentsService.countTotalComments(commentsData)
+        const total = commentsService.countTotalComments(commentsData)
         setTotalComments(total)
         setHasMore(false)
       }
@@ -184,8 +216,10 @@ export default function FeedCommentSection({
         setPage(1)
       } else {
         // Merge new comments with existing ones, avoiding duplicates
-        const existingIds = new Set(comments.map((comment) => comment.id))
-        const uniqueNewComments = commentsData.filter((comment: Comment) => !existingIds.has(comment.id))
+        const existingIds = new Set(comments.map((comment) => comment.documentId))
+        const uniqueNewComments = commentsData.filter(
+          (comment: Comment) => !existingIds.has(comment.documentId),
+        )
 
         setComments((prevComments) => [...prevComments, ...uniqueNewComments])
       }
@@ -306,59 +340,39 @@ export default function FeedCommentSection({
 
     const optimisticId = `temp-${Date.now()}`
     const optimisticComment: Comment = {
-      id: Number.parseInt(optimisticId.replace("temp-", "")),
+      id: Date.now(),
       documentId: optimisticId,
       content: newComment,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       author: {
-        id: user?.id || 0,
+        id: user?.id ? String(user.id) : "current-user",
         name: user?.username || user?.name || "You",
         email: user?.email || "",
         avatar: user?.avatar || "",
       },
       children: [],
-      threadOf: replyTo?.id || null,
+      parentDocumentId: replyTo?.documentId || null,
       attachment: imageFile
         ? {
-            id: 0,
+            id: "temp-attachment",
             url: URL.createObjectURL(imageFile),
             formats: {},
           }
         : undefined,
     }
 
+    const replyToData = replyTo
+
     try {
-      let attachmentId: number | undefined = undefined
-
-      if (imageFile) {
-        console.log("[v0] Uploading image before creating comment:", imageFile.name)
-        try {
-          const token = localStorage.getItem("authToken") || localStorage.getItem("jwt")
-          const uploadResult = await MediaUploadService.uploadFiles([imageFile], token || undefined)
-
-          if (uploadResult && uploadResult.length > 0 && uploadResult[0].id) {
-            attachmentId = uploadResult[0].id
-            console.log("[v0] Image uploaded successfully, file ID:", attachmentId)
-          } else {
-            throw new Error("Failed to get file ID from upload response")
-          }
-        } catch (uploadError) {
-          console.error("[v0] Image upload failed:", uploadError)
-          setError("Failed to upload image. Please try again.")
-          setIsSubmitting(false)
-          return
-        }
-      }
-
+      const fileForUpload = imageFile ?? null
       const commentContent = newComment
-      const replyToData = replyTo
 
       if (replyTo) {
         setComments((prevComments) => {
           const updateCommentReplies = (comments: Comment[]): Comment[] => {
             return comments.map((comment) => {
-              if (comment.id === replyTo.id) {
+              if (comment.documentId === replyTo.documentId) {
                 return {
                   ...comment,
                   children: [...(comment.children || []), optimisticComment],
@@ -391,8 +405,8 @@ export default function FeedCommentSection({
       setReplyTo(null)
 
       if (editingComment) {
-        console.log("[v0] Updating existing comment:", editingComment.id)
-        const response = await CommentsService.updateComment(postId, documentId, editingComment.id, commentContent)
+        console.log("[v0] Updating existing comment:", editingComment.documentId)
+        const response = await commentsService.updateComment(editingComment.documentId, commentContent)
 
         if (!response.success && response.error) {
           throw new Error(response.error)
@@ -422,16 +436,15 @@ export default function FeedCommentSection({
           postId,
           documentId,
           content: commentContent,
-          replyTo: replyToData?.id,
-          attachmentId,
+          replyTo: replyToData?.documentId,
         })
 
-        const response = await CommentsService.addComment(
-          postId,
-          documentId,
-          commentContent,
-          replyToData?.id,
-          attachmentId,
+        // Create comment first (with placeholder content if only image)
+        const response = await commentsService.addComment(
+          commentContent || (fileForUpload ? "📷" : ""), // Send placeholder if no content but has image
+          "posts",
+          documentId || postId,
+          replyToData?.documentId,
         )
 
         console.log("[v0] Comment creation response:", response)
@@ -440,12 +453,59 @@ export default function FeedCommentSection({
           throw new Error(response.error)
         }
 
+        let finalComment = response.comment ? { ...response.comment } : undefined
+
+        // Now upload image with proper relation if we have one
+        if (finalComment && fileForUpload) {
+          try {
+            const attachment = await OptimizedMediaUploadService.uploadCommentImage(finalComment.id, fileForUpload)
+            if (attachment) {
+              finalComment = { ...finalComment, attachment }
+
+              // If comment was created with placeholder content (just for image), clean it
+              if (!commentContent.trim() && finalComment.content?.trim() === "📷") {
+                try {
+                  await commentsService.updateComment(finalComment.documentId, "", attachment.id)
+                  finalComment = { ...finalComment, content: "" }
+                } catch (updateError) {
+                  console.warn("[v0] Failed to clean placeholder content:", updateError)
+                }
+              }
+            }
+          } catch (uploadError) {
+            console.error("[v0] Failed to upload comment image:", uploadError)
+            toast({
+              title: "Image upload failed",
+              description: "Your comment was posted without the image. Please try again.",
+              variant: "destructive",
+            })
+          }
+        }
+
         if (response && !response.error) {
+          if (finalComment) {
+            setComments((prevComments) => {
+              const { updated, comments: updatedTree } = replaceCommentInTree(
+                prevComments,
+                optimisticId,
+                finalComment as Comment,
+              )
+
+              if (updated) {
+                return updatedTree
+              }
+
+              return prevComments
+            })
+          } else {
+            await fetchComments(1, true)
+          }
+
           onCommentAdded?.()
 
           toast({
             title: "Comment posted!",
-            description: attachmentId
+            description: fileForUpload
               ? "Your comment with image has been posted successfully."
               : "Your comment has been posted successfully.",
           })
@@ -457,10 +517,10 @@ export default function FeedCommentSection({
       console.error("[v0] Error submitting comment:", error)
 
       setComments((prevComments) => {
-        if (replyTo) {
+        if (replyToData) {
           const removeOptimisticReply = (comments: Comment[]): Comment[] => {
             return comments.map((comment) => {
-              if (comment.id === replyTo.id) {
+              if (comment.documentId === replyToData.documentId) {
                 return {
                   ...comment,
                   children: comment.children?.filter((child) => child.documentId !== optimisticId) || [],
@@ -496,16 +556,16 @@ export default function FeedCommentSection({
     }
   }
 
-  const handleReplyToComment = (commentId: number, username: string) => {
-    setReplyTo({ id: commentId, username })
+  const handleReplyToComment = (comment: Comment) => {
+    setReplyTo({ documentId: comment.documentId, username: comment.author.name })
     setEditingComment(null)
     if (commentInputRef.current) {
       commentInputRef.current.focus()
     }
   }
 
-  const handleEditComment = (commentId: number, content: string) => {
-    setEditingComment({ id: commentId, content })
+  const handleEditComment = (commentDocumentId: string, content: string) => {
+    setEditingComment({ documentId: commentDocumentId, content })
     setNewComment(content)
     setReplyTo(null)
     if (commentInputRef.current) {
@@ -514,8 +574,8 @@ export default function FeedCommentSection({
   }
 
   // Confirm delete dialog
-  const confirmDeleteComment = (commentId: number) => {
-    setCommentToDelete(commentId)
+  const confirmDeleteComment = (commentDocumentId: string) => {
+    setCommentToDelete(commentDocumentId)
   }
 
   // Cancel delete
@@ -534,14 +594,14 @@ export default function FeedCommentSection({
   }
 
   // Helper function to find a comment by ID in the nested structure
-  const findCommentById = (comments: Comment[], id: number): Comment | null => {
+  const findCommentByDocumentId = (comments: Comment[], targetDocumentId: string): Comment | null => {
     for (const comment of comments) {
-      if (comment.id === id) {
+      if (comment.documentId === targetDocumentId) {
         return comment
       }
 
       if (comment.children && comment.children.length > 0) {
-        const found = findCommentById(comment.children, id)
+        const found = findCommentByDocumentId(comment.children, targetDocumentId)
         if (found) {
           return found
         }
@@ -552,7 +612,7 @@ export default function FeedCommentSection({
   }
 
   // Actual delete operation
-  const performDeleteComment = async (commentId: number) => {
+  const performDeleteComment = async (commentDocumentId: string) => {
     if (!isAuthenticated) {
       toast({
         title: "Authentication required",
@@ -565,12 +625,12 @@ export default function FeedCommentSection({
     setError(null)
 
     try {
-      console.log("[v0] Starting comment deletion process:", { commentId, postId, documentId })
+      console.log("[v0] Starting comment deletion process:", { commentDocumentId, postId, documentId })
 
-      const commentToDelete = findCommentById(comments, commentId)
+      const commentToDelete = findCommentByDocumentId(comments, commentDocumentId)
 
       if (!commentToDelete) {
-        console.error("[v0] Comment not found in local state:", commentId)
+        console.error("[v0] Comment not found in local state:", commentDocumentId)
         await fetchComments(1, true)
         throw new Error("Comment not found in local state. Comments have been refreshed.")
       }
@@ -589,37 +649,11 @@ export default function FeedCommentSection({
         },
       })
 
-      const authorId = commentToDelete.author?.id
-
-      if (!authorId) {
-        console.error("[v0] Author ID not found in comment data:", commentToDelete)
-        throw new Error("Author ID not found in comment data")
-      }
-
-      const commentIdentifier = commentToDelete.id
-
-      console.log("[v0] Validation check before deletion:", {
-        postId,
-        documentId,
-        commentId,
-        commentIdentifier,
+      console.log("[v0] Calling commentsService.deleteComment with:", {
         commentDocumentId: commentToDelete.documentId,
-        authorId,
-        authorIdType: typeof authorId,
-        commentIdType: typeof commentId,
-        commentIdentifierType: typeof commentIdentifier,
-        isAuthorIdNumeric: /^\d+$/.test(String(authorId)),
-        isCommentIdNumeric: /^\d+$/.test(String(commentId)),
       })
 
-      console.log("[v0] Calling CommentsService.deleteComment with:", {
-        postId,
-        documentId,
-        commentIdentifier,
-        authorId,
-      })
-
-      const response = await CommentsService.deleteComment(postId, documentId, commentIdentifier, authorId)
+      const response = await commentsService.deleteComment(commentToDelete.documentId)
 
       if (!response.success) {
         console.error("[v0] Delete comment failed:", response.error)
@@ -665,31 +699,28 @@ export default function FeedCommentSection({
     }
   }
 
-  const handleReportComment = async (commentId: number, reason: string) => {
-    if (!isAuthenticated) {
-      toast({
-        title: "Authentication required",
-        description: "Please sign in to report comments",
-        variant: "destructive",
-      })
-      return
-    }
+  const handleReportComment = async (commentDocumentId: string, reason: string) => {
+    // Allow both authenticated and anonymous reporting
+    // No authentication check needed
 
     setError(null)
 
     try {
-      let validReason: ReportReason = "OTHER"
+      let validReason: ReportReason = "other"
 
-      if (["BAD_LANGUAGE", "DISCRIMINATION", "OTHER"].includes(reason)) {
-        validReason = reason as ReportReason
+      // Map old reason values to valid backend enum values
+      const reasonMap: Record<string, ReportReason> = {
+        "BAD_LANGUAGE": "offensive",
+        "DISCRIMINATION": "harassment",
+        "OTHER": "other"
       }
 
-      const response = await CommentsService.reportCommentAbuse(
-        postId,
-        documentId,
-        commentId,
+      validReason = reasonMap[reason] || "other"
+
+      const response = await commentsService.reportCommentAbuse(
+        commentDocumentId,
         validReason,
-        `User reported: ${reason}`,
+        "User reported: " + reason,
       )
 
       if (!response.success && response.error) {
@@ -778,7 +809,7 @@ export default function FeedCommentSection({
     })
 
     return (
-      <div key={comment.id} className={`mt-4 ${level > 0 ? "ml-6 border-l-2 border-gray-100 pl-4" : ""}`}>
+      <div key={comment.documentId || comment.id} className={`mt-4 ${level > 0 ? "ml-6 border-l-2 border-gray-100 pl-4" : ""}`}>
         <div className="flex items-start gap-3">
           <Avatar className="h-8 w-8 flex-shrink-0">
             <AvatarImage
@@ -805,7 +836,7 @@ export default function FeedCommentSection({
                     </div>
                   )}
                 </div>
-                {isAuthor && !isSubmittingThis && (
+{!isSubmittingThis && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
@@ -814,13 +845,27 @@ export default function FeedCommentSection({
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleEditComment(comment.id, comment.content)}>
-                        <Edit className="h-4 w-4 mr-2" />
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => confirmDeleteComment(comment.id)}>
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete
+                      {isAuthor && (
+                        <>
+                          <DropdownMenuItem onClick={() => handleEditComment(comment.documentId, comment.content || "") }>
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => confirmDeleteComment(comment.documentId)}>
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setReportingComment(comment)
+                          setShowReportModal(true)
+                        }}
+                        className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                      >
+                        <Flag className="h-4 w-4 mr-2" />
+                        Report
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -844,20 +889,12 @@ export default function FeedCommentSection({
                 <>
                   <span className="mx-2">•</span>
                   <button
-                    onClick={() => handleReplyToComment(comment.id, comment.author.name)}
+                    onClick={() => handleReplyToComment(comment)}
                     className="flex items-center hover:text-pink-500"
                   >
                     <Reply className="h-3 w-3 mr-1" />
                     Reply
                   </button>
-                  {!isAuthor && (
-                    <>
-                      <span className="mx-2">•</span>
-                      <button onClick={() => handleReportComment(comment.id, "OTHER")} className="hover:text-pink-500">
-                        Report
-                      </button>
-                    </>
-                  )}
                 </>
               )}
             </div>
@@ -1012,7 +1049,7 @@ export default function FeedCommentSection({
               <Button
                 type="submit"
                 size="icon"
-                disabled={isSubmitting || !newComment.trim() || !isAuthenticated}
+                disabled={isSubmitting || (!newComment.trim() && !imageFile) || !isAuthenticated}
                 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-8 w-8 rounded-full p-0"
                 aria-label={isSubmitting ? "Submitting comment" : "Submit comment"}
               >
@@ -1055,7 +1092,7 @@ export default function FeedCommentSection({
                     </button>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{imageFile.name}</p>
+                    <p className="text-sm font-medium text-gray-900 truncate">📷 Image attachment</p>
                     <p className="text-xs text-gray-500">{(imageFile.size / 1024 / 1024).toFixed(2)} MB</p>
                     <p className="text-xs text-green-600 mt-1">✓ Image ready to upload</p>
                   </div>
@@ -1126,6 +1163,18 @@ export default function FeedCommentSection({
       </div>
 
       {/* Delete confirmation dialog */}
+      {/* Report Comment Modal */}
+      {reportingComment && (
+        <ReportContentModal
+          isOpen={showReportModal}
+          onOpenChange={setShowReportModal}
+          contentType="comment"
+          contentId={reportingComment.documentId}
+          contentTitle={reportingComment.content || ""}
+          contentAuthor={reportingComment.author?.name}
+        />
+      )}
+
       <AlertDialog open={commentToDelete !== null} onOpenChange={(open) => !open && cancelDeleteComment()}>
         <AlertDialogContent>
           <AlertDialogHeader>

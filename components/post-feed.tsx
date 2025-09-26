@@ -7,7 +7,7 @@ import LoadMorePosts from "./load-more-posts"
 import CreatePostModal from "./create-post-modal"
 import { Button } from "@/components/ui/button"
 import { PlusCircle, Filter, AlertCircle, RefreshCw, WifiOff } from "lucide-react"
-import { useAuth } from "@/context/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 import { motion, AnimatePresence } from "framer-motion"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -41,7 +41,7 @@ export default function PostFeed({
   const [nextPage, setNextPage] = useState(initialNextPage)
   const [pageSize, setPageSize] = useState(6) // Add this line to track page size
   const [isCreatePostModalOpen, setIsCreatePostModalOpen] = useState(false)
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, user } = useAuth()
   const [viewMode, setViewMode] = useState<"cards" | "compact">("cards")
   const [apiError, setApiError] = useState<string | null>(initialError ? initialError.message : null)
   const [retryCount, setRetryCount] = useState(0)
@@ -107,7 +107,14 @@ export default function PostFeed({
     setIsConnectionError(false)
 
     try {
-      const response = await getPosts(6, 0)
+      const currentUserId = user?.id?.toString() || user?.documentId
+
+      console.log("[v0] PostFeed loadInitialPosts - Fetching posts", {
+        mode: isAuthenticated ? "authenticated" : "guest",
+        userId: currentUserId,
+      })
+      const response = await getPosts(6, 0, currentUserId)
+      console.log("[v0] PostFeed loadInitialPosts - Posts response:", response)
 
       // Handle errors
       if (response.error) {
@@ -175,7 +182,7 @@ export default function PostFeed({
     } finally {
       setIsLoading(false)
     }
-  }, [initialPosts, initialError, retryCount, toast])
+  }, [initialPosts, initialError, retryCount, toast, user, isAuthenticated])
 
   useEffect(() => {
     if (!initialPosts || initialPosts.length === 0 || initialError) {
@@ -183,13 +190,19 @@ export default function PostFeed({
     }
   }, [initialPosts, initialError, loadInitialPosts])
 
+    useEffect(() => {
+    loadInitialPosts()
+  }, [isAuthenticated, user?.id, loadInitialPosts])
+
+
   const loadMorePosts = async () => {
     if (!hasMore || isLoading || isOffline.current) return
 
     setIsLoading(true)
     try {
       const offset = (nextPage - 1) * 6 // Changed from 10 to 6
-      const response = await getPosts(6, offset) // Changed from 10 to 6
+      const response = await getPosts(6, offset, user?.id?.toString() || user?.documentId) // Changed from 10 to 6
+      console.log("[v0] PostFeed loadMorePosts - Posts response:", response)
 
       // Handle errors
       if (response.error) {
@@ -247,91 +260,70 @@ export default function PostFeed({
   }
 
   const handlePostCreated = (newPost: PostType) => {
-    // Ensure the new post has a documentId
+    // Normalize documentId
     const postWithDocumentId = {
       ...newPost,
       documentId: newPost.documentId || `post-${newPost.id}`,
     }
 
-    // Process mediaItems to ensure they have proper URLs
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
-
-    let processedMediaItems = []
-
-    if (newPost.mediaItems && newPost.mediaItems.length > 0) {
-      processedMediaItems = newPost.mediaItems.map((item) => {
-        // If the item already has a complete URL, use it
-        if (item.url && item.url.startsWith("http")) {
-          return item
+    const processedMediaItems = (newPost.mediaItems || []).map((item) => {
+      if (item.url && item.url.startsWith("http")) return item
+      if (item.file?.formats) {
+        const f = item.file.formats
+        const u = f.medium?.url || f.small?.url || f.thumbnail?.url || f.large?.url
+        if (u) return { ...item, url: u.startsWith("http") ? u : `${apiUrl}${u}` }
+      }
+      if (item.file?.url) {
+        const u = item.file.url
+        return { ...item, url: u.startsWith("http") ? u : `${apiUrl}${u}` }
+      }
+      if ((item as any).attributes?.url) {
+        const u = (item as any).attributes.url
+        return { ...item, url: u.startsWith("http") ? u : `${apiUrl}${u}` }
+      }
+      if ((item as any).data?.attributes) {
+        const attrs = (item as any).data.attributes
+        const fileData = attrs.file?.data?.attributes
+        if (fileData?.url) {
+          const u = fileData.url
+          return { id: (item as any).data.id, type: attrs.type || "image", url: u.startsWith("http") ? u : `${apiUrl}${u}` }
         }
+      }
+      return item
+    })
 
-        // If the item has a file with formats, extract the URL
-        if (item.file && item.file.formats) {
-          const formats = item.file.formats
-          const formatUrl = formats.medium?.url || formats.small?.url || formats.thumbnail?.url || formats.large?.url
-
-          if (formatUrl) {
-            return {
-              ...item,
-              url: formatUrl.startsWith("http") ? formatUrl : `${apiUrl}${formatUrl}`,
-            }
-          }
-        }
-
-        // If the item has a direct file URL
-        if (item.file && item.file.url) {
-          return {
-            ...item,
-            url: item.file.url.startsWith("http") ? item.file.url : `${apiUrl}${item.file.url}`,
-          }
-        }
-
-        // If the item has attributes with URL (for Strapi v4 structure)
-        if (item.attributes && item.attributes.url) {
-          return {
-            ...item,
-            url: item.attributes.url.startsWith("http") ? item.attributes.url : `${apiUrl}${item.attributes.url}`,
-          }
-        }
-
-        // If we have a data structure from Strapi v5
-        if (item.data && item.data.attributes) {
-          const attrs = item.data.attributes
-          const fileData = attrs.file && attrs.file.data ? attrs.file.data.attributes : null
-
-          if (fileData && fileData.url) {
-            return {
-              id: item.data.id,
-              type: attrs.type || "image",
-              url: fileData.url.startsWith("http") ? fileData.url : `${apiUrl}${fileData.url}`,
-            }
-          }
-        }
-
-        // Return the item as is if we couldn't process it
-        return item
-      })
-    }
-
-    // Create the final post object with processed media items
     const finalPost = {
       ...postWithDocumentId,
       mediaItems: processedMediaItems.length > 0 ? processedMediaItems : postWithDocumentId.mediaItems || [],
-    }
+    } as any
 
-    setPosts((prevPosts) => [finalPost, ...prevPosts])
-    setIsCreatePostModalOpen(false)
+    setPosts((prev) => {
+      // If this is the server-confirmed post, replace the optimistic one using tempId
+      const tempId = (newPost as any).tempId as string | undefined
+      if (tempId) {
+        const idx = prev.findIndex((p) => (p as any).id === tempId || p.documentId === tempId)
+        if (idx !== -1) {
+          const next = [...prev]
+          next[idx] = { ...(finalPost as any), isOptimistic: false }
+          // Remove any other duplicate with same real id or documentId
+          return next.filter((p, i) => i === idx || (p.id !== (finalPost as any).id && p.documentId !== (finalPost as any).documentId))
+        }
+      }
 
-    toast({
-      title: "Post created",
-      description: "Your post has been published successfully!",
-      variant: "default",
+      // If it's an optimistic post, avoid duplicates
+      if ((newPost as any).isOptimistic) {
+        const exists = prev.some((p) => p.documentId === (finalPost as any).documentId || (p as any).id === (finalPost as any).id)
+        return exists ? prev : [finalPost, ...prev]
+      }
+
+      // Server-confirmed but no optimistic found; prevent duplicate prepend
+      const duplicate = prev.some((p) => p.documentId === (finalPost as any).documentId || p.id === (finalPost as any).id)
+      return duplicate ? prev : [finalPost, ...prev]
     })
 
-    // Refresh the feed after a short delay to ensure images are loaded
-    setTimeout(() => {
-      loadInitialPosts()
-    }, 2000)
+    setIsCreatePostModalOpen(false)
+    toast({ title: "Post created", description: "Your post has been published successfully!", variant: "default" })
   }
 
   const handlePostDeleted = (postId: number) => {

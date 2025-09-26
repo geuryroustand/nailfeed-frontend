@@ -1,116 +1,34 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { revalidatePath } from "next/cache";
+import { validateSession, deleteSession } from "@/lib/auth/session";
 
-// Get the appropriate Strapi base URL based on auth type
-function getStrapiUrl(authType: "google" | "regular" = "regular") {
-  if (process.env.NODE_ENV === "development" && authType === "google") {
-    return "http://127.0.0.1:1337";
-  }
-
-  return (
-    process.env.API_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    "https://api.nailfeed.com"
-  );
+export interface AuthResponse {
+  success: boolean;
+  error?: string;
 }
 
-export async function getCurrentUser(
-  authType: "google" | "regular" = "regular"
-) {
+export async function getCurrentUser() {
   try {
-    const cookieStore = await cookies();
-
-    // Try different cookie names for auth token
-    const authToken =
-      cookieStore.get("authToken")?.value ||
-      cookieStore.get("jwt")?.value ||
-      cookieStore.get("auth_token")?.value;
-
-    if (!authToken) {
-      console.log("[v0] No auth token found in cookies");
-      return null;
-    }
-
-    console.log("[v0] Found auth token in cookies, length:", authToken.length);
-
-    const strapiUrl = getStrapiUrl(authType);
-    console.log("[v0] getCurrentUser using Strapi URL:", strapiUrl);
-
-    const response = await fetch(`${strapiUrl}/api/users/me?populate=*`, {
-      headers: {
-        Authorization: `Bearer ${authToken}`,
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!response.ok) {
-      console.error(
-        "[v0] Failed to fetch user data:",
-        response.status,
-        response.statusText
-      );
-      const errorText = await response.text();
-      console.error("[v0] Error response body:", errorText);
-      return null;
-    }
-
-    const contentType = response.headers.get("content-type");
-    if (!contentType || !contentType.includes("application/json")) {
-      console.error("[v0] Response is not JSON, content-type:", contentType);
-      const responseText = await response.text();
-      console.error("[v0] Non-JSON response body:", responseText);
-      return null;
-    }
-
-    try {
-      const userData = await response.json();
-      return {
-        ...userData,
-        _jwt: authToken, // Include the actual JWT token
-      };
-    } catch (jsonError) {
-      console.error("[v0] Failed to parse JSON response:", jsonError);
-      // Try to get the response text for debugging
-      const responseText = await response.text();
-      console.error("[v0] Invalid JSON response body:", responseText);
-      return null;
-    }
+    const { user } = await validateSession();
+    return user;
   } catch (error) {
-    console.error("[v0] Error fetching current user:", error);
+    console.error("[auth-actions] Failed to fetch current user:", error);
     return null;
   }
 }
 
-export async function getJwtToken() {
+export async function logoutAction(): Promise<AuthResponse> {
   try {
-    const cookieStore = await cookies();
-    const authToken =
-      cookieStore.get("authToken")?.value ||
-      cookieStore.get("jwt")?.value ||
-      cookieStore.get("auth_token")?.value;
+    await deleteSession();
 
-    console.log("[v0] getJwtToken - token found:", !!authToken);
-    return authToken || null;
-  } catch (error) {
-    console.error("[v0] Error getting JWT token:", error);
-    return null;
-  }
-}
-
-export async function logout() {
-  try {
-    const cookieStore = await cookies();
-
-    // Clear all auth-related cookies
-    cookieStore.delete("authToken");
-    cookieStore.delete("jwt");
-    cookieStore.delete("auth_token");
-    cookieStore.delete("userId");
+    revalidatePath("/", "layout");
+    revalidatePath("/me", "layout");
+    revalidatePath("/me/settings", "layout");
 
     return { success: true };
   } catch (error) {
-    console.error("Error during logout:", error);
+    console.error("[auth-actions] Logout action failed:", error);
     return { success: false, error: "Logout failed" };
   }
 }

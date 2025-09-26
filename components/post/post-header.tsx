@@ -22,7 +22,7 @@ export default function PostHeader({ post }: PostHeaderProps) {
       <div className="p-4 sm:p-6 border-b bg-white rounded-t-xl shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center">
-            <Link href={`/profile/${post.username}`} aria-label={`View ${post.username}'s profile`}>
+            <Link href={`/profile/${post.user?.documentId || post.username}`} aria-label={`View ${post.username}'s profile`}>
               <Avatar className="h-12 w-12 sm:h-14 sm:w-14 transition-transform hover:scale-105">
                 <AvatarImage
                   src={post.userImage || "/placeholder.svg"}
@@ -37,7 +37,7 @@ export default function PostHeader({ post }: PostHeaderProps) {
             </Link>
             <div className="ml-3">
               <Link
-                href={`/profile/${post.username}`}
+                href={`/profile/${post.user?.documentId || post.username}`}
                 className="text-base sm:text-lg font-medium hover:text-pink-600 transition-colors"
               >
                 {post.username}

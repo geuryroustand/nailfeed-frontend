@@ -54,7 +54,7 @@ export async function getFollowers(username: string, page = 1, pageSize = 10): P
     const token = getApiToken()
 
     // Check if user is authenticated (for follow button state)
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     const userToken = cookieStore.get("jwt")?.value || cookieStore.get("authToken")?.value
     const isAuthenticated = !!userToken
 
@@ -264,7 +264,7 @@ export async function getFollowing(username: string, page = 1, pageSize = 10): P
     const token = getApiToken()
 
     // Check if user is authenticated (for follow button state)
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     const userToken = cookieStore.get("jwt")?.value || cookieStore.get("authToken")?.value
     const isAuthenticated = !!userToken
 
@@ -473,7 +473,7 @@ export async function toggleFollowStatus(
   currentlyFollowing: boolean,
 ): Promise<{ success: boolean; isFollowing: boolean; message?: string }> {
   try {
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     const token = cookieStore.get("jwt")?.value || cookieStore.get("authToken")?.value
 
     if (!token) {

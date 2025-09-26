@@ -10,6 +10,9 @@ export interface MediaItem {
       large?: { url: string; width: number; height: number }
     }
   }
+  // For edit modal functionality
+  isUploading?: boolean
+  uploadFile?: File
 }
 
 // Update the MediaGalleryLayout type to match the Strapi enum

@@ -1,10 +1,10 @@
-import type React from "react"
+﻿import type React from "react"
 import type { Metadata, Viewport } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
-import { AuthProvider } from "@/context/auth-context"
+import AuthProviderServer from "@/components/auth/auth-provider-server"
 import { MoodProvider } from "@/context/mood-context"
 import { CollectionsProvider } from "@/context/collections-context"
 import { ProfileProvider } from "@/context/profile-context"
@@ -88,7 +88,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <QueryProvider>
-            <AuthProvider>
+            <AuthProviderServer>
               <ProfileProvider>
                 <CollectionsProvider>
                   <MoodProvider>
@@ -105,10 +105,11 @@ export default function RootLayout({
                   </MoodProvider>
                 </CollectionsProvider>
               </ProfileProvider>
-            </AuthProvider>
+            </AuthProviderServer>
           </QueryProvider>
         </ThemeProvider>
       </body>
     </html>
   )
 }
+

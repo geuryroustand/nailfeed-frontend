@@ -1,12 +1,17 @@
 import { Suspense } from "react"
+import { cookies } from "next/headers"
 import { getPosts } from "@/lib/post-data"
 import PostFeed from "./post-feed"
 import { FEATURES } from "@/lib/config"
 
 export default async function PostFeedServer() {
   try {
+    // For SSR, don't try to get user ID from cookies to avoid hydration mismatches
+    // Let the client handle user-specific data loading after authentication
+    const currentUserId = null;
+
     // Fetch initial posts on the server with a smaller limit to reduce chance of rate limiting
-    const { posts, hasMore, nextPage, error } = await getPosts(5, 0)
+    const { posts, hasMore, nextPage, error } = await getPosts(5, 0, currentUserId)
 
     // If we hit an error but have fallback posts, still show them
     if (error && posts.length > 0 && FEATURES.useFallbackData) {

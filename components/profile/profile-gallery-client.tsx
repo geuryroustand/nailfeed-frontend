@@ -5,16 +5,19 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import Link from "next/link"
-import { MessageSquare, Heart, ImageIcon, MoreHorizontal, Trash2, Type } from "lucide-react"
+import { MessageSquare, Heart, ImageIcon, MoreHorizontal, Trash2, Type, BookmarkPlus } from "lucide-react"
 import { ensureAbsoluteUrl } from "@/lib/api-url-helper"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { useToast } from "@/hooks/use-toast"
-import { useAuth } from "@/hooks/use-auth"
+import { useAuth } from "@/hooks/use-auth";
+import { useCollections } from "@/context/collections-context"
 import { deletePost } from "@/lib/post-management-actions"
 import { MediaItem } from "@/components/media-item"
-import { TextPostModal } from "@/components/text-post-modal"
+import { TextPostModal } from "@/components/text-post-modal";
+import AddToCollectionDialog from "@/components/collections/add-to-collection-dialog";
+import { cn } from "@/lib/utils"
 import type { BackgroundType } from "@/components/post-background-selector"
 
 interface Post {
@@ -54,6 +57,7 @@ export function ProfileGalleryClient({ posts: initialPosts, username }: ProfileG
   const [selectedTextPost, setSelectedTextPost] = useState<Post | null>(null)
   const { toast } = useToast()
   const { user, isAuthenticated } = useAuth()
+  const { isSaved } = useCollections()
 
   const isOwnProfile = isAuthenticated && user?.username === username
 
@@ -62,6 +66,14 @@ export function ProfileGalleryClient({ posts: initialPosts, username }: ProfileG
 
     const postsWithMedia = initialPosts.map((post) => {
       const mediaItems = Array.isArray(post.mediaItems) ? post.mediaItems : []
+
+      console.log(`[ProfileGalleryClient] Processing post ${post.id}:`, {
+        id: post.id,
+        contentType: post.contentType,
+        originalMediaItems: post.mediaItems,
+        processedMediaItems: mediaItems,
+        mediaCount: mediaItems.length
+      });
 
       return {
         ...post,
@@ -72,44 +84,95 @@ export function ProfileGalleryClient({ posts: initialPosts, username }: ProfileG
     setPosts(postsWithMedia)
   }, [initialPosts])
 
-  const getBestImageUrl = (mediaItem: MediaItem | undefined): string => {
-    if (!mediaItem || !mediaItem.file) {
+  const getBestImageUrl = (mediaItem: any): string => {
+    if (!mediaItem) {
+      console.log("[getBestImageUrl] No mediaItem provided");
       return ""
     }
 
-    if (mediaItem.file.formats) {
-      const url =
-        mediaItem.file.formats.medium?.url ||
-        mediaItem.file.formats.small?.url ||
-        mediaItem.file.formats.thumbnail?.url ||
-        mediaItem.file.url
+    console.log("[getBestImageUrl] Processing mediaItem:", mediaItem);
 
-      if (!url) {
-        return ""
+    // Handle new optimized API structure where media comes directly with url
+    if (mediaItem.url) {
+      console.log("[getBestImageUrl] Using direct URL:", mediaItem.url);
+      return ensureAbsoluteUrl(mediaItem.url)
+    }
+
+    // Handle legacy structure with file wrapper
+    if (mediaItem.file) {
+      if (mediaItem.file.formats) {
+        const url =
+          mediaItem.file.formats.medium?.url ||
+          mediaItem.file.formats.small?.url ||
+          mediaItem.file.formats.thumbnail?.url ||
+          mediaItem.file.url
+
+        if (url) {
+          console.log("[getBestImageUrl] Using legacy file URL:", url);
+          return ensureAbsoluteUrl(url)
+        }
       }
 
-      return ensureAbsoluteUrl(url)
+      if (mediaItem.file.url) {
+        console.log("[getBestImageUrl] Using legacy direct file URL:", mediaItem.file.url);
+        return ensureAbsoluteUrl(mediaItem.file.url)
+      }
     }
 
-    if (mediaItem.file.url) {
-      return ensureAbsoluteUrl(mediaItem.file.url)
-    }
-
+    console.log("[getBestImageUrl] No URL found");
     return ""
   }
 
-  const getFirstMediaItem = (post: Post): MediaItem | undefined => {
+  const getFirstMediaItem = (post: Post): any => {
     if (!post.mediaItems || !Array.isArray(post.mediaItems) || post.mediaItems.length === 0) {
+      console.log("[getFirstMediaItem] No media items found for post:", post.id);
       return undefined
     }
 
-    return [...post.mediaItems].sort((a, b) => (a.order || 0) - (b.order || 0))[0]
+    console.log("[getFirstMediaItem] Found media items:", post.mediaItems);
+    const firstItem = [...post.mediaItems].sort((a, b) => (a.order || 0) - (b.order || 0))[0];
+    console.log("[getFirstMediaItem] First media item:", firstItem);
+    return firstItem;
   }
 
   const getPlaceholderUrl = (post: Post): string => {
     const query = encodeURIComponent(post.description || "nail art")
     return `/placeholder.svg?height=400&width=400&query=${query}`
   }
+  const renderAddToCollectionButton = (post: Post) => {
+    if (!isAuthenticated) return null
+
+    const postIdentifier = post.documentId || (post.id != null ? String(post.id) : null)
+    if (!postIdentifier) return null
+
+    const saved = isSaved(postIdentifier)
+
+    return (
+      <div className="pointer-events-none absolute left-2 top-2 z-20">
+        <AddToCollectionDialog
+          postId={postIdentifier}
+          postTitle={post.description}
+          trigger={
+            <Button
+              type="button"
+              size="icon"
+              variant="secondary"
+              className={cn(
+                "pointer-events-auto h-8 w-8 rounded-full bg-white/90 text-gray-700 shadow-sm hover:bg-white",
+                saved && "bg-pink-500 text-white hover:bg-pink-500"
+              )}
+              onClick={(event) => event.stopPropagation()}
+              aria-label={saved ? "Post already saved to your collections" : "Add post to collection"}
+            >
+              <BookmarkPlus className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          }
+        />
+      </div>
+    )
+  }
+
+
 
   const isPostOwner = (post: Post) => {
     if (!user) return false
@@ -161,9 +224,20 @@ export function ProfileGalleryClient({ posts: initialPosts, username }: ProfileG
 
   const isTextPost = (post: Post): boolean => {
     return (
-      (post.contentType === "text" || post.contentType === "text-background") &&
-      (!post.mediaItems || post.mediaItems.length === 0)
+      post.contentType === "text" || post.contentType === "text-background"
     )
+  }
+
+  const isMediaPost = (post: Post): boolean => {
+    return (
+      post.contentType === "image" ||
+      post.contentType === "video" ||
+      post.contentType === "media-gallery"
+    )
+  }
+
+  const hasMediaItems = (post: Post): boolean => {
+    return post.mediaItems && Array.isArray(post.mediaItems) && post.mediaItems.length > 0;
   }
 
   const handleTextPostClick = (post: Post, e: React.MouseEvent) => {
@@ -200,8 +274,7 @@ export function ProfileGalleryClient({ posts: initialPosts, username }: ProfileG
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-semibold">Posts</h2>
+      <div className="flex justify-end items-center mb-6">
         <div className="flex space-x-2">
           <button
             onClick={() => setView("grid")}
@@ -264,9 +337,21 @@ export function ProfileGalleryClient({ posts: initialPosts, username }: ProfileG
             const placeholderUrl = getPlaceholderUrl(post)
             const canDelete = isOwnProfile || isPostOwner(post)
             const isTextOnlyPost = isTextPost(post)
+            const shouldShowMedia = isMediaPost(post) && hasMediaItems(post)
+
+            console.log(`[ProfileGalleryClient] Post ${post.id} rendering:`, {
+              contentType: post.contentType,
+              isTextOnlyPost,
+              shouldShowMedia,
+              hasMediaItems: hasMediaItems(post),
+              mediaItemsLength: post.mediaItems?.length || 0,
+              firstMediaItem,
+              imageUrl
+            });
 
             return (
               <div key={post.id} className="relative group">
+                {renderAddToCollectionButton(post)}
                 {isTextOnlyPost ? (
                   <div className="cursor-pointer" onClick={(e) => handleTextPostClick(post, e)}>
                     <div className="relative aspect-square rounded-xl overflow-hidden">
@@ -311,7 +396,7 @@ export function ProfileGalleryClient({ posts: initialPosts, username }: ProfileG
                         <MediaItem
                           src={imageUrl}
                           alt={post.description || "Post media"}
-                          type={firstMediaItem?.type === "video" ? "video" : "image"}
+                          type={firstMediaItem?.mime?.startsWith("video/") ? "video" : "image"}
                           objectFit="cover"
                           className="transition-transform group-hover:scale-105"
                           aspectRatio="square"
@@ -387,6 +472,7 @@ export function ProfileGalleryClient({ posts: initialPosts, username }: ProfileG
 
             return (
               <div key={post.id} className="relative group">
+                {renderAddToCollectionButton(post)}
                 {isTextOnlyPost ? (
                   <div className="cursor-pointer" onClick={(e) => handleTextPostClick(post, e)}>
                     <Card className="p-4 hover:shadow-md transition-shadow">
@@ -454,7 +540,7 @@ export function ProfileGalleryClient({ posts: initialPosts, username }: ProfileG
                             <MediaItem
                               src={imageUrl}
                               alt={post.description || "Post media"}
-                              type={firstMediaItem?.type === "video" ? "video" : "image"}
+                              type={firstMediaItem?.mime?.startsWith("video/") ? "video" : "image"}
                               objectFit="cover"
                               width={80}
                               height={80}
@@ -568,3 +654,11 @@ export function ProfileGalleryClient({ posts: initialPosts, username }: ProfileG
     </div>
   )
 }
+
+
+
+
+
+
+
+

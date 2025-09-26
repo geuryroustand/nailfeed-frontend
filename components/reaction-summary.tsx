@@ -1,17 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { cn } from "@/lib/utils"
 import { ReactionModal } from "./reaction-modal"
-import { ReactionService, type ReactionType } from "@/lib/services/reaction-service"
-import { useToast } from "@/components/ui/use-toast"
-
-interface ReactionUser {
-  id: string | number
-  username: string
-  displayName?: string
-  avatar?: string
-}
+import {
+  ReactionService,
+  type ReactionType,
+  REACTION_TYPES,
+} from "@/lib/services/reaction-service"
 
 interface ReactionSummaryProps {
   reactions?: {
@@ -25,16 +21,15 @@ interface ReactionSummaryProps {
   compact?: boolean
   postId: string | number // Make postId required
   showViewButton?: boolean
-  likes?: Array<{
-    id: number
-    documentId: string
-    type: string
-    user?: {
-      id: number
-      documentId: string
-      username: string
-      displayName?: string
-    }
+}
+
+type ReactionCountEntry = {
+  count: number
+  users: Array<{
+    id: string | number
+    username: string
+    displayName?: string
+    profileImage?: any
   }>
 }
 
@@ -45,26 +40,9 @@ export function ReactionSummary({
   compact = false,
   postId,
   showViewButton = false,
-  likes,
 }: ReactionSummaryProps) {
-  const [modalOpen, setModalOpen] = useState(false)
-  const [reactions, setReactions] = useState(initialReactions || [])
-  const [totalCount, setTotalCount] = useState(initialTotalCount || 0)
-  const [isLoading, setIsLoading] = useState(!initialReactions && !likes)
-  const [error, setError] = useState<string | null>(null)
-  const [refreshTrigger, setRefreshTrigger] = useState(0)
-  const { toast } = useToast()
 
-  console.log("[v0] ReactionSummary render:", {
-    postId,
-    totalCount,
-    reactions: reactions.length,
-    isLoading,
-    error,
-    hasLikesData: !!likes,
-    likesCount: likes?.length || 0,
-    refreshTrigger,
-  })
+  const [modalOpen, setModalOpen] = useState(false)
 
   // Map reaction types to emojis and labels
   const reactionEmojis: Record<ReactionType, string> = {
@@ -85,199 +63,14 @@ export function ReactionSummary({
     angry: "Angry",
   }
 
-  const processLikesData = (likesData: typeof likes) => {
-    if (!likesData || likesData.length === 0) {
-      setReactions([])
-      setTotalCount(0)
-      setIsLoading(false)
-      return
-    }
+  // Simplified - data comes from backend directly
 
-    console.log("[v0] ReactionSummary processing likes data:", likesData)
+  // Use data directly from backend - no complex calculations needed
+  const reactions = initialReactions || []
+  // Use backend's totalCount directly (backend already calculates correct total)
+  const totalCount = initialTotalCount || 0
 
-    // Group likes by type and count them
-    const reactionCounts: Record<string, { count: number; users: ReactionUser[] }> = {}
-
-    likesData.forEach((like) => {
-      const type = like.type as ReactionType
-      if (!reactionCounts[type]) {
-        reactionCounts[type] = { count: 0, users: [] }
-      }
-      reactionCounts[type].count++
-
-      if (like.user) {
-        reactionCounts[type].users.push({
-          id: like.user.id,
-          username: like.user.username,
-          displayName: like.user.displayName || like.user.username,
-          avatar: null, // Avatar not provided in likes data
-        })
-      }
-    })
-
-    // Transform into component format
-    const formattedReactions = Object.entries(reactionCounts)
-      .filter(([_, data]) => data.count > 0)
-      .map(([type, data]) => {
-        const reactionType = type as ReactionType
-        return {
-          emoji: reactionEmojis[reactionType] || "👍",
-          label: reactionLabels[reactionType] || "Like",
-          count: data.count,
-          users: data.users,
-        }
-      })
-
-    const total = Object.values(reactionCounts).reduce((sum, data) => sum + data.count, 0)
-
-    console.log("[v0] ReactionSummary processed likes data:", {
-      formattedReactions,
-      total,
-    })
-
-    setReactions(formattedReactions)
-    setTotalCount(total)
-    setIsLoading(false)
-  }
-
-  const refreshReactions = async () => {
-    if (!postId) return
-
-    try {
-      setIsLoading(true)
-      setError(null)
-
-      console.log("[v0] ReactionSummary manually refreshing data for postId:", postId)
-
-      const reactionData = await ReactionService.getReactionCounts(String(postId))
-
-      console.log("[v0] ReactionSummary manually refreshed data:", reactionData)
-
-      // Transform the reaction data into the format expected by the component
-      const formattedReactions = Object.entries(reactionData)
-        .filter(([_, data]) => data.count > 0)
-        .map(([type, data]) => {
-          const reactionType = type as ReactionType
-          return {
-            emoji: reactionEmojis[reactionType] || "👍",
-            label: reactionLabels[reactionType] || "Like",
-            count: data.count,
-            users: data.users || [],
-          }
-        })
-
-      const total = Object.values(reactionData).reduce((sum, data) => sum + data.count, 0)
-
-      console.log("[v0] ReactionSummary manually processed data:", {
-        formattedReactions,
-        total,
-      })
-
-      setReactions(formattedReactions)
-      setTotalCount(total)
-    } catch (err) {
-      console.error("[v0] ReactionSummary manual refresh error:", err)
-      setError("Failed to load reactions")
-      setReactions([])
-      setTotalCount(0)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    const handleReactionUpdate = (event: CustomEvent) => {
-      const { postId: updatedPostId } = event.detail || {}
-      if (updatedPostId === postId || updatedPostId === String(postId)) {
-        console.log("[v0] ReactionSummary received reaction update event for postId:", postId)
-        refreshReactions()
-      }
-    }
-
-    window.addEventListener("reactionUpdated", handleReactionUpdate as EventListener)
-
-    return () => {
-      window.removeEventListener("reactionUpdated", handleReactionUpdate as EventListener)
-    }
-  }, [postId])
-
-  useEffect(() => {
-    if (!postId) return
-
-    if (likes !== undefined && likes.length > 0) {
-      processLikesData(likes)
-      return
-    }
-
-    if (likes === undefined || likes.length === 0 || refreshTrigger > 0) {
-      const fetchReactionData = async () => {
-        try {
-          setIsLoading(true)
-          setError(null)
-
-          console.log("[v0] ReactionSummary fetching data for postId:", postId, "refreshTrigger:", refreshTrigger)
-
-          const reactionData = await ReactionService.getReactionCounts(String(postId))
-
-          console.log("[v0] ReactionSummary received data:", reactionData)
-
-          // Transform the reaction data into the format expected by the component
-          const formattedReactions = Object.entries(reactionData)
-            .filter(([_, data]) => data.count > 0)
-            .map(([type, data]) => {
-              // Make sure we have a valid type
-              const reactionType = type as ReactionType
-              return {
-                emoji: reactionEmojis[reactionType] || "👍",
-                label: reactionLabels[reactionType] || "Like",
-                count: data.count,
-                users: data.users || [], // Include user details if available
-              }
-            })
-
-          const total = Object.values(reactionData).reduce((sum, data) => sum + data.count, 0)
-
-          console.log("[v0] ReactionSummary processed data:", {
-            formattedReactions,
-            total,
-          })
-
-          setReactions(formattedReactions)
-          setTotalCount(total)
-        } catch (err) {
-          console.error("[v0] ReactionSummary error:", err)
-          setError("Failed to load reactions")
-          setReactions([])
-          setTotalCount(0)
-          // Don't show toast for API errors to avoid spam
-        } finally {
-          setIsLoading(false)
-        }
-      }
-
-      fetchReactionData()
-    } else {
-      setReactions([])
-      setTotalCount(0)
-      setIsLoading(false)
-    }
-  }, [postId, likes, refreshTrigger])
-
-  if (isLoading) {
-    console.log("[v0] ReactionSummary showing loading state")
-    return <div className="text-sm text-gray-500">Loading reactions...</div>
-  }
-
-  if (error) {
-    console.log("[v0] ReactionSummary had error but showing no reactions:", error)
-    // Fall through to show "No reactions yet" instead of error
-  }
-
-  console.log("[v0] ReactionSummary final render:", {
-    totalCount,
-    reactionsCount: reactions.length,
-    willShowReactions: totalCount > 0,
-  })
+  // No loading needed - data comes from backend directly
 
   return (
     <>
@@ -321,7 +114,6 @@ export function ReactionSummary({
       <ReactionModal
         open={modalOpen}
         onOpenChange={setModalOpen}
-        reactions={reactions.map((r) => ({ ...r, users: r.users || [] }))}
         totalCount={totalCount}
         postId={postId}
       />

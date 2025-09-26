@@ -1,3 +1,4 @@
+﻿import { getClientSessionStatus } from "@/lib/auth/client-session"
 import qs from "qs";
 
 export interface NetworkUser {
@@ -51,10 +52,7 @@ export async function getFollowers(
   pageSize = 10
 ): Promise<NetworkListResponse> {
   try {
-    const isAuthenticated =
-      typeof document !== "undefined" &&
-      (document.cookie.includes("jwt=") ||
-        document.cookie.includes("authToken="));
+    const isAuthenticated = await getClientSessionStatus()
 
     // Fetch all users (light populate)
     const usersQuery = qs.stringify(
@@ -151,10 +149,7 @@ export async function getFollowing(
   pageSize = 10
 ): Promise<NetworkListResponse> {
   try {
-    const isAuthenticated =
-      typeof document !== "undefined" &&
-      (document.cookie.includes("jwt=") ||
-        document.cookie.includes("authToken="));
+    const isAuthenticated = await getClientSessionStatus()
 
     // Optimized query
     const query = {
@@ -276,3 +271,4 @@ export async function toggleFollowStatus(
     };
   }
 }
+

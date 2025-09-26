@@ -1,33 +1,33 @@
-import { type NextRequest, NextResponse } from "next/server"
-import jwt from "jsonwebtoken"
+﻿import { NextResponse } from "next/server"
+import { validateSession } from "@/lib/auth/session"
 
-export async function GET(request: NextRequest) {
+/**
+ * GET /api/auth/session
+ * Validate current session and return user data
+ */
+export async function GET() {
   try {
-    const authToken =
-      request.cookies.get("auth_token")?.value ||
-      request.cookies.get("jwt")?.value ||
-      request.cookies.get("authToken")?.value
+    const { user, session } = await validateSession()
 
-    if (!authToken) {
-      return NextResponse.json({ user: null }, { status: 401 })
+    if (!user || !session) {
+      return NextResponse.json({ authenticated: false, user: null })
     }
 
-    // Try to verify with a server secret if available
-    const secret = process.env.REVALIDATE_SECRET || process.env.WEBHOOK_SECRET || process.env.API_TOKEN
-
-    if (secret) {
-      try {
-        const decoded = jwt.verify(authToken, secret) as any
-        return NextResponse.json({ user: decoded })
-      } catch (error) {
-        console.error("JWT verification failed:", error)
-      }
-    }
-
-    // If no secret or verification failed, return unauthorized
-    return NextResponse.json({ user: null }, { status: 401 })
+    return NextResponse.json({
+      authenticated: true,
+      user,
+      session: {
+        userId: session.userId,
+        email: session.email,
+        username: session.username,
+        expiresAt: session.expiresAt,
+      },
+    })
   } catch (error) {
-    console.error("Session check error:", error)
-    return NextResponse.json({ user: null }, { status: 500 })
+    console.error("Session validation error:", error)
+    return NextResponse.json(
+      { authenticated: false, user: null, error: "Session validation failed" },
+      { status: 500 }
+    )
   }
 }

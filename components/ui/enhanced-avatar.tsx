@@ -13,26 +13,36 @@ interface EnhancedAvatarProps {
   src?: string
   alt?: string
   fallback?: string
+  fallbackText?: string // For passing display name/username directly
+  size?: "sm" | "md" | "lg" // Size variants
   className?: string
   fallbackClassName?: string
 }
 
-export function EnhancedAvatar({ src, alt = "Avatar", fallback, className, fallbackClassName }: EnhancedAvatarProps) {
+export function EnhancedAvatar({ src, alt = "Avatar", fallback, fallbackText, size = "md", className, fallbackClassName }: EnhancedAvatarProps) {
   const [imageError, setImageError] = useState(false)
 
-  // Generate initials from the alt text (username or display name)
+  // Size classes
+  const sizeClasses = {
+    sm: "h-8 w-8 text-xs",
+    md: "h-10 w-10 text-sm",
+    lg: "h-12 w-12 text-base"
+  }
+
+  // Generate initials from fallbackText, alt text, or fallback
   const getInitials = () => {
     if (fallback) return fallback
 
-    if (alt && alt !== "Avatar") {
+    const nameToUse = fallbackText || alt
+    if (nameToUse && nameToUse !== "Avatar") {
       // If the name contains a space, use first letter of first and last name
-      if (alt.includes(" ")) {
-        const nameParts = alt.split(" ")
+      if (nameToUse.includes(" ")) {
+        const nameParts = nameToUse.split(" ")
         return `${nameParts[0].charAt(0)}${nameParts[nameParts.length - 1].charAt(0)}`.toUpperCase()
       }
 
       // If it's a single name or username, use up to 2 characters
-      return alt.substring(0, 2).toUpperCase()
+      return nameToUse.substring(0, 2).toUpperCase()
     }
 
     return "U" // Default fallback if no name is available
@@ -61,10 +71,12 @@ export function EnhancedAvatar({ src, alt = "Avatar", fallback, className, fallb
     return src
   }
 
+  const finalImageSrc = getImageSrc()
+
   return (
-    <Avatar className={className}>
-      {src && !imageError ? (
-        <AvatarImage src={getImageSrc() || "/placeholder.svg"} alt={alt} onError={() => setImageError(true)} />
+    <Avatar className={cn(sizeClasses[size], className)}>
+      {finalImageSrc && !imageError ? (
+        <AvatarImage src={finalImageSrc} alt={alt} onError={() => setImageError(true)} />
       ) : null}
       <AvatarFallback className={cn("bg-pink-100 text-pink-800", fallbackClassName)}>{getInitials()}</AvatarFallback>
     </Avatar>

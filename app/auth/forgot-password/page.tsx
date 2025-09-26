@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
-import { useAuth } from "@/context/auth-context"
+import { forgotPasswordAction } from "@/app/actions/auth-actions"
 
 const forgotPasswordSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address" }),
@@ -21,9 +21,9 @@ type ForgotPasswordFormValues = z.infer<typeof forgotPasswordSchema>
 
 export default function ForgotPasswordPage() {
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
-  const { forgotPassword, isLoading } = useAuth()
 
   const form = useForm<ForgotPasswordFormValues>({
     resolver: zodResolver(forgotPasswordSchema),
@@ -32,15 +32,33 @@ export default function ForgotPasswordPage() {
     },
   })
 
+  // ✅ SECURITY: Use server action for password reset
   const onSubmit = async (data: ForgotPasswordFormValues) => {
-    const success = await forgotPassword(data.email)
+    setIsLoading(true)
+    try {
+      const result = await forgotPasswordAction(data.email)
 
-    if (success) {
-      setIsSubmitted(true)
+      if (result.success) {
+        setIsSubmitted(true)
+        toast({
+          title: "Reset link sent",
+          description: "Please check your email for password reset instructions",
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to send reset link",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
       toast({
-        title: "Reset link sent",
-        description: "Please check your email for password reset instructions",
+        title: "Error",
+        description: "Something went wrong. Please try again.",
+        variant: "destructive",
       })
+    } finally {
+      setIsLoading(false)
     }
   }
 

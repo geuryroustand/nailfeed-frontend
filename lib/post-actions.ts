@@ -1,10 +1,10 @@
-"use server"
+"use server";
 
-import { revalidatePath } from "next/cache"
+import { revalidatePath } from "next/cache";
 
 // Comment out the fetch operations in fetchMorePosts
 export async function fetchMorePosts(cursor: number) {
-  console.log(`MOCK: Fetching more posts with cursor ${cursor}`)
+  console.log(`MOCK: Fetching more posts with cursor ${cursor}`);
 
   // Comment out the actual getPosts call
   /*
@@ -14,28 +14,32 @@ export async function fetchMorePosts(cursor: number) {
   // Create mock posts data
   const posts = Array.from({ length: 5 }).map((_, i) => ({
     id: cursor + i + 1,
-    image: `/placeholder.svg?height=400&width=400&query=nail+art+${cursor + i + 1}`,
+    image: `/placeholder.svg?height=400&width=400&query=nail+art+${
+      cursor + i + 1
+    }`,
     likes: Math.floor(Math.random() * 500),
     comments: Math.floor(Math.random() * 50),
     featured: Math.random() > 0.7,
     title: `Post ${cursor + i + 1}`,
-    createdAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-  }))
+    createdAt: new Date(
+      Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000
+    ).toISOString(),
+  }));
 
-  const nextCursor = cursor + 5
-  const hasMore = nextCursor < 50 // Limit to 50 mock posts
+  const nextCursor = cursor + 5;
+  const hasMore = nextCursor < 50; // Limit to 50 mock posts
 
-  return { posts, nextCursor, hasMore }
+  return { posts, nextCursor, hasMore };
 }
 
 // Comment out the fetch operations in refreshPosts
 export async function refreshPosts() {
   // Force revalidation of all post-related pages
-  revalidatePath("/")
-  revalidatePath("/profile")
-  revalidatePath("/explore")
+  revalidatePath("/");
+  revalidatePath("/me");
+  revalidatePath("/explore");
 
-  console.log("MOCK: Refreshing posts")
+  console.log("MOCK: Refreshing posts");
 
   // Comment out the actual getPosts call
   /*
@@ -51,19 +55,21 @@ export async function refreshPosts() {
     comments: Math.floor(Math.random() * 50),
     featured: Math.random() > 0.7,
     title: `Post ${i + 1}`,
-    createdAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-  }))
+    createdAt: new Date(
+      Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000
+    ).toISOString(),
+  }));
 
-  const nextCursor = 10
-  const hasMore = true
+  const nextCursor = 10;
+  const hasMore = true;
 
-  return { posts, nextCursor, hasMore }
+  return { posts, nextCursor, hasMore };
 }
 
 // Comment out the fetch operations in likePost
 export async function likePost(postId: number) {
   try {
-    console.log(`MOCK: Liking post ${postId}`)
+    console.log(`MOCK: Liking post ${postId}`);
 
     // Comment out the actual fetch request
     /*
@@ -79,26 +85,26 @@ export async function likePost(postId: number) {
       success: true,
       postId,
       newLikeCount: Math.floor(Math.random() * 100) + 200, // Simulate updated count
-    }
+    };
 
     // Revalidate the homepage to reflect the changes
-    revalidatePath("/")
+    revalidatePath("/");
 
-    return result
+    return result;
   } catch (error) {
-    console.error("Error liking post:", error)
+    console.error("Error liking post:", error);
     return {
       success: false,
       postId,
       message: "Failed to like post",
-    }
+    };
   }
 }
 
 // Comment out the fetch operations in addComment
 export async function addComment(postId: number, comment: string) {
   try {
-    console.log(`MOCK: Adding comment to post ${postId}: ${comment}`)
+    console.log(`MOCK: Adding comment to post ${postId}: ${comment}`);
 
     // Comment out the actual fetch request
     /*
@@ -115,30 +121,36 @@ export async function addComment(postId: number, comment: string) {
       username: "currentuser", // In a real app, this would be the current user
       text: comment,
       likes: 0,
-    }
+    };
 
     // Revalidate the homepage to reflect the changes
-    revalidatePath("/")
+    revalidatePath("/");
 
     return {
       success: true,
       postId,
       comment: newComment,
-    }
+    };
   } catch (error) {
-    console.error("Error adding comment:", error)
+    console.error("Error adding comment:", error);
     return {
       success: false,
       postId,
       message: "Failed to add comment",
-    }
+    };
   }
 }
 
 // Comment out the fetch operations in reactToComment
-export async function reactToComment(postId: number, commentId: number, reactionType: string) {
+export async function reactToComment(
+  postId: number,
+  commentId: number,
+  reactionType: string
+) {
   try {
-    console.log(`MOCK: Adding reaction ${reactionType} to comment ${commentId} on post ${postId}`)
+    console.log(
+      `MOCK: Adding reaction ${reactionType} to comment ${commentId} on post ${postId}`
+    );
 
     // Comment out the actual fetch request
     /*
@@ -156,19 +168,19 @@ export async function reactToComment(postId: number, commentId: number, reaction
       commentId,
       reactionType,
       newReactionCount: Math.floor(Math.random() * 10) + 1, // Simulate updated count
-    }
+    };
 
     // Revalidate the homepage to reflect the changes
-    revalidatePath("/")
+    revalidatePath("/");
 
-    return result
+    return result;
   } catch (error) {
-    console.error("Error reacting to comment:", error)
+    console.error("Error reacting to comment:", error);
     return {
       success: false,
       postId,
       commentId,
       message: "Failed to add reaction",
-    }
+    };
   }
 }

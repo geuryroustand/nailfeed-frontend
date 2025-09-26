@@ -1,5 +1,4 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { initiateSocialAuthAction } from "@/app/auth/actions"
 
 export async function POST(request: NextRequest, { params }: { params: { provider: string } }) {
   const provider = params.provider
@@ -9,8 +8,8 @@ export async function POST(request: NextRequest, { params }: { params: { provide
   }
 
   try {
-    const result = await initiateSocialAuthAction(provider)
-    return NextResponse.json(result)
+    // TODO: Implement social auth action
+    return NextResponse.json({ error: "Social authentication not yet implemented" }, { status: 501 })
   } catch (error) {
     console.error(`Error initiating ${provider} auth:`, error)
     return NextResponse.json({ error: "Failed to initiate social authentication" }, { status: 500 })
