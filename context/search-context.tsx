@@ -86,7 +86,7 @@ const samplePosts = [
   {
     id: 3,
     username: "artsynails",
-    userImage: "/diverse-avatars.png",
+    userImage: "/diverse-user-avatars.png",
     image: "/vibrant-floral-nails.png",
     description: "Spring is in the air! 🌸 Loving these floral designs for the season.",
     likes: 312,

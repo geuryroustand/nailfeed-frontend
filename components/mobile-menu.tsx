@@ -163,7 +163,7 @@ export default function MobileMenu({
                 <div className="flex items-center">
                   <Avatar className="h-8 w-8">
                     <AvatarImage
-                      src={userProfileImageUrl || "/diverse-avatars.png"}
+                      src={userProfileImageUrl }
                       alt="Your profile"
                     />
                     <AvatarFallback>

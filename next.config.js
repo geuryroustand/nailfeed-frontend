@@ -44,6 +44,24 @@ const nextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "X-DNS-Prefetch-Control", value: "on" },
+          {
+            key: "Content-Security-Policy",
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com",
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data: blob: https: http:",
+              "font-src 'self' data:",
+              "connect-src 'self' https://res.cloudinary.com https://nailfeed-backend-production.up.railway.app https://www.google-analytics.com",
+              "media-src 'self' blob: https:",
+              "object-src 'none'",
+              "base-uri 'self'",
+              "form-action 'self'",
+              "frame-ancestors 'none'",
+              "upgrade-insecure-requests"
+            ].join("; ")
+          },
         ],
       },
       {
@@ -58,8 +76,8 @@ const nextConfig = {
             value: "no-cache, no-store, must-revalidate",
           },
           {
-            key: "Content-Security-Policy",
-            value: "default-src 'self'; script-src 'self'",
+            key: "Service-Worker-Allowed",
+            value: "/"
           },
         ],
       },

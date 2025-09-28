@@ -641,7 +641,7 @@ export function ProfileGalleryClient({ posts: initialPosts, username }: ProfileG
             id: selectedTextPost.id,
             documentId: selectedTextPost.documentId,
             username: username,
-            userImage: user?.profileImage?.url || "/diverse-avatars.png",
+            userImage: user?.profileImage?.url || "/diverse-user-avatars.png",
             description: selectedTextPost.description,
             contentType: selectedTextPost.contentType,
             background: selectedTextPost.background,

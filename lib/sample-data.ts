@@ -6,7 +6,7 @@ const samplePosts: Post[] = [
     id: 1,
     documentId: "post-1",
     username: "nailartist",
-    userImage: "/serene-woman-gaze.png",
+    userImage: "/vibrant-artist-portrait.png",
     image: "/intricate-nail-art.png",
     description: "Loving these intricate floral designs! #nailart #florals",
     likes: 120,

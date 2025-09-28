@@ -139,10 +139,7 @@ export default function Header() {
                 className="rounded-full h-8 w-8 ml-1"
               >
                 <Avatar className="h-8 w-8">
-                  <AvatarImage
-                    src={userProfileImageUrl || "/diverse-avatars.png"}
-                    alt="Your profile"
-                  />
+                  <AvatarImage src={userProfileImageUrl} alt="Your profile" />
                   <AvatarFallback>
                     {user?.username?.substring(0, 2).toUpperCase() || "YP"}
                   </AvatarFallback>

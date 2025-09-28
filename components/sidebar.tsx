@@ -162,7 +162,6 @@ export default function Sidebar({ activeItem = "home" }: SidebarProps) {
                 )}
               >
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src="/diverse-avatars.png" alt="Your profile" />
                   <AvatarFallback>YP</AvatarFallback>
                 </Avatar>
                 {!collapsed && (
@@ -203,4 +202,3 @@ export default function Sidebar({ activeItem = "home" }: SidebarProps) {
     </div>
   );
 }
-

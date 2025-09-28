@@ -7,7 +7,7 @@ const featuredUsers = [
   {
     name: "Sophia Lee",
     username: "nailartist",
-    avatar: "/serene-woman-gaze.png",
+    avatar: "/vibrant-artist-portrait.png",
     followers: "24.8K",
   },
   {
