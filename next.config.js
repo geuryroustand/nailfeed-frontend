@@ -49,17 +49,16 @@ const nextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.googletagmanager.com https://*.google-analytics.com",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https: http:",
               "font-src 'self' data:",
-              "connect-src 'self' https://res.cloudinary.com https://nailfeed-backend-production.up.railway.app https://www.google-analytics.com",
+              "connect-src 'self' https: http:",
               "media-src 'self' blob: https:",
               "object-src 'none'",
               "base-uri 'self'",
               "form-action 'self'",
-              "frame-ancestors 'none'",
-              "upgrade-insecure-requests"
+              "frame-ancestors 'none'"
             ].join("; ")
           },
         ],
