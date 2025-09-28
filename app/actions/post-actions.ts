@@ -112,38 +112,21 @@ export async function createPost(formData: FormData) {
       Authorization: `Bearer ${token}`,
     };
 
-    // STEP 1: Get uploaded files from form data (uploaded on client)
-    let uploadedMediaItems: any[] = [];
-    let uploadedFiles: any[] = [];
+    // STEP 1: Get media files from form data for upload after post creation
+    const mediaFiles: File[] = [];
 
-    // Get uploaded files data passed from client
-    const uploadedFilesJson = formData.get("uploadedFiles") as string;
-
-    if (uploadedFilesJson) {
-      try {
-        uploadedFiles = JSON.parse(uploadedFilesJson);
-        console.log("[v0] Server Action: Using pre-uploaded files:", uploadedFiles.length);
-
-        // Create mediaItems array with uploaded file data
-        uploadedMediaItems = uploadedFiles.map((file: any, index: number) => ({
-          id: file.id,
-          file: file, // Use the complete file object
-          type: file.mime.startsWith("image/") ? "image" : "video",
-          url: file.url, // Add the direct URL
-          order: index + 1,
-        }));
-
-        console.log("[v0] Server Action: Prepared media items:", uploadedMediaItems);
-      } catch (error) {
-        console.error("[v0] Server Action: Error parsing uploaded files:", error);
-        return {
-          success: false,
-          error: "Invalid uploaded files data",
-        };
+    // Extract actual File objects from formData
+    const fileKeys = Array.from(formData.keys()).filter(key => key.startsWith('mediaFiles'));
+    for (const key of fileKeys) {
+      const file = formData.get(key) as File;
+      if (file && file instanceof File) {
+        mediaFiles.push(file);
       }
     }
 
-    // STEP 2: Create optimized post with proper user association (Strapi v5 compatible)
+    console.log("[v0] Server Action: Found media files for upload:", mediaFiles.length);
+
+    // STEP 2: Create post without media (will be attached via upload endpoint)
     const postData: any = {
       data: {
         title: title || "",
@@ -158,7 +141,7 @@ export async function createPost(formData: FormData) {
           ? { connect: [userId.toString()] }
           : null,
         tags: tags,
-        media: uploadedFiles.map((file: any) => file.id), // Send only IDs to Strapi
+        // Do NOT include media field - will be handled by upload endpoint
         // Set post status and counters with defaults
         postStatus: "published",
         likesCount: 0,
@@ -233,8 +216,81 @@ export async function createPost(formData: FormData) {
     const postId = result.data.id;
     const postDocumentId = result.data.documentId || `doc-${postId}`;
 
-    // Avoid triggering framework-wide revalidations or client SW cache invalidations here.
-    // The client feed performs an optimistic update using the returned payload.
+    console.log("[v0] Server Action: Post created successfully:", {
+      id: postId,
+      documentId: postDocumentId,
+    });
+
+    // STEP 3: Upload media files using Strapi's native upload endpoint with relations
+    let uploadedMedia: any[] = [];
+    if (mediaFiles.length > 0) {
+      console.log("[v0] Server Action: Uploading media files using native Strapi endpoint");
+
+      try {
+        const uploadFormData = new FormData();
+
+        // Add files to upload
+        mediaFiles.forEach((file, index) => {
+          uploadFormData.append("files", file, `${index}-${file.name}`);
+        });
+
+        // Strapi v5 relation parameters for automatic media attachment
+        uploadFormData.append("ref", "api::post.post");
+        uploadFormData.append("refId", postDocumentId); // Use documentId for Strapi v5
+        uploadFormData.append("field", "media");
+
+        console.log("[v0] Server Action: Upload relation parameters:", {
+          ref: "api::post.post",
+          refId: postDocumentId,
+          field: "media"
+        });
+
+        const uploadUrl = `${apiUrl}/api/upload`;
+        const uploadResponse = await fetch(uploadUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: uploadFormData,
+        });
+
+        if (!uploadResponse.ok) {
+          const errorText = await uploadResponse.text();
+          console.error("[v0] Server Action: Media upload failed:", errorText);
+          // Don't fail the entire operation - post is already created
+          console.log("[v0] Server Action: Continuing without media - post created successfully");
+        } else {
+          uploadedMedia = await uploadResponse.json();
+          console.log("[v0] Server Action: Media uploaded successfully:", uploadedMedia.length);
+        }
+      } catch (error) {
+        console.error("[v0] Server Action: Media upload error:", error);
+        // Post is already created, so we don't fail the entire operation
+      }
+    }
+
+    // STEP 4: Fetch complete post data with populated media relations
+    let finalPostData = result.data;
+    if (mediaFiles.length > 0) {
+      try {
+        const completePostUrl = `${apiUrl}/api/posts/${postDocumentId}?populate[user][populate]=profileImage&populate=media&populate=tags`;
+        const completePostResponse = await fetch(completePostUrl, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (completePostResponse.ok) {
+          const completePostResult = await completePostResponse.json();
+          finalPostData = completePostResult.data;
+          console.log("[v0] Server Action: Complete post data fetched with media");
+        }
+      } catch (error) {
+        console.error("[v0] Server Action: Failed to fetch complete post data:", error);
+        // Continue with basic post data
+      }
+    }
 
     const endTime = Date.now();
     console.log(
@@ -244,17 +300,12 @@ export async function createPost(formData: FormData) {
     );
 
     // Extract user data from the populated response
-    const createdPostUser = result.data.user;
+    const createdPostUser = finalPostData.user || result.data.user;
     const userData = createdPostUser || userObject;
 
-    console.log(
-      "[v0] Server Action: User data from response:",
-      createdPostUser
-    );
     console.log("[v0] Server Action: Final user data:", userData);
 
-
-    // Return optimized response with user data to prevent "unknown" display
+    // Return optimized response with populated media
     return {
       success: true,
       post: {
@@ -265,9 +316,9 @@ export async function createPost(formData: FormData) {
         contentType,
         background,
         galleryLayout,
-        media: uploadedFiles, // Use the uploaded files directly
+        media: finalPostData.media || uploadedMedia || [], // Use populated media first, fallback to upload response
         tags,
-        // Extract user data from either populated response or original userObject
+        // Extract user data from populated response
         user: {
           id: userData?.id || userObject?.id,
           documentId: userData?.documentId || userObject?.documentId,
@@ -280,12 +331,17 @@ export async function createPost(formData: FormData) {
           profileImage: userData?.profileImage || userObject?.profileImage,
         },
         createdAt:
-          result.data.createdAt ||
-          result.data.publishedAt ||
+          finalPostData.createdAt ||
+          finalPostData.publishedAt ||
           new Date().toISOString(),
         // Fallback fields for immediate display
         username: userData?.username || userObject?.username || "User",
         userImage: userData?.profileImage?.url || userObject?.profileImage?.url,
+        uploadStats: {
+          totalFiles: mediaFiles.length,
+          uploadedFiles: uploadedMedia.length,
+          uploadSuccess: uploadedMedia.length === mediaFiles.length,
+        },
       },
     };
   } catch (error) {

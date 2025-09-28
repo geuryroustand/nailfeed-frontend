@@ -59,19 +59,26 @@ export default function CollectionGridItem({ collection, onView, onEdit, onDelet
           </div>
         )}
 
-        {collection.isPrivate && (
-          <div className="absolute top-2 right-2 bg-black/70 text-white px-2 py-1 rounded-full text-xs flex items-center">
-            <EyeOff className="h-3 w-3 mr-1" />
-            Private
-          </div>
-        )}
+        <div className="absolute top-3 right-3 flex flex-col gap-1.5">
+          {collection.isPrivate ? (
+            <div className="bg-gray-900/80 text-white px-2.5 py-1 rounded-full text-xs font-medium flex items-center backdrop-blur-sm border border-white/20">
+              <EyeOff className="h-3 w-3 mr-1.5" />
+              Private
+            </div>
+          ) : (
+            <div className="bg-gradient-to-r from-pink-500/90 to-purple-500/90 text-white px-2.5 py-1 rounded-full text-xs font-medium flex items-center backdrop-blur-sm border border-white/20">
+              <Eye className="h-3 w-3 mr-1.5" />
+              Public
+            </div>
+          )}
 
-        {collection.isShared && (
-          <div className="absolute top-2 left-2 bg-blue-500/70 text-white px-2 py-1 rounded-full text-xs flex items-center">
-            <Share className="h-3 w-3 mr-1" />
-            Shared
-          </div>
-        )}
+          {collection.isShared && (
+            <div className="bg-purple-600/90 text-white px-2.5 py-1 rounded-full text-xs font-medium flex items-center backdrop-blur-sm border border-white/20">
+              <Share className="h-3 w-3 mr-1.5" />
+              Shared
+            </div>
+          )}
+        </div>
       </div>
 
       <CardContent className="p-4">

@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/auth/session"
 
 // Server-only environment variables
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.nailfeed.com"
 const SERVER_API_TOKEN = process.env.API_TOKEN || ""
 
 // Helper: normalize URL join

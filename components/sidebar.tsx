@@ -87,12 +87,8 @@ export default function Sidebar({ activeItem = "home" }: SidebarProps) {
           const Icon = item.icon;
           const isActive = activeItem === item.id;
 
-          const requiresAuth = [
-            "/me",
-            "/mood",
-            "/messages",
-            "/notifications",
-          ].some((path) => item.href.startsWith(path));
+          // Items that require authentication
+          const requiresAuth = ["messages", "notifications"].includes(item.id);
 
           if (!isAuthenticated && requiresAuth) {
             return null;

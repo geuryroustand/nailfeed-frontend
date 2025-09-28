@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { cookies } from "next/headers"
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.nailfeed.com"
 const SERVER_API_TOKEN = process.env.API_TOKEN || ""
 
 /**

@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     const strapiUrl =
       process.env.NODE_ENV === "development"
         ? "http://127.0.0.1:1337"
-        : process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
+        : process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "https://api.nailfeed.com"
 
     console.log("Using Strapi URL for Google auth:", strapiUrl)
 

@@ -63,19 +63,26 @@ export default function CollectionListItem({ collection, onView, onEdit, onDelet
         <div className="flex items-center">
           <h3 className="font-semibold">{collection.name}</h3>
 
-          {collection.isPrivate && (
-            <div className="ml-2 bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full text-xs flex items-center">
-              <EyeOff className="h-3 w-3 mr-1" />
-              Private
-            </div>
-          )}
+          <div className="ml-3 flex gap-2">
+            {collection.isPrivate ? (
+              <div className="bg-gray-100 text-gray-700 px-2.5 py-1 rounded-full text-xs font-medium flex items-center border border-gray-200">
+                <EyeOff className="h-3 w-3 mr-1.5" />
+                Private
+              </div>
+            ) : (
+              <div className="bg-gradient-to-r from-pink-50 to-purple-50 text-pink-700 px-2.5 py-1 rounded-full text-xs font-medium flex items-center border border-pink-200">
+                <Eye className="h-3 w-3 mr-1.5" />
+                Public
+              </div>
+            )}
 
-          {collection.isShared && (
-            <div className="ml-2 bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs flex items-center">
-              <Share className="h-3 w-3 mr-1" />
-              Shared
-            </div>
-          )}
+            {collection.isShared && (
+              <div className="bg-purple-50 text-purple-700 px-2.5 py-1 rounded-full text-xs font-medium flex items-center border border-purple-200">
+                <Share className="h-3 w-3 mr-1.5" />
+                Shared
+              </div>
+            )}
+          </div>
         </div>
 
         {collection.description && <p className="text-sm text-gray-500 line-clamp-1 mt-1">{collection.description}</p>}

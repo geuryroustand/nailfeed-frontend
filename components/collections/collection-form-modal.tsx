@@ -28,6 +28,7 @@ export default function CollectionFormModal({ mode, collection, onSubmit, onCanc
   const [description, setDescription] = useState(collection?.description || "")
   const [isPrivate, setIsPrivate] = useState(collection?.isPrivate ?? true)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'creating' | 'completed'>('idle')
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null)
   const [coverPreview, setCoverPreview] = useState<string | null>(null)
 
@@ -78,6 +79,25 @@ export default function CollectionFormModal({ mode, collection, onSubmit, onCanc
                 accept="image/*"
                 onChange={(e) => {
                   const file = e.target.files?.[0] || null
+
+                  // Validate file
+                  if (file) {
+                    const maxSize = 10 * 1024 * 1024 // 10MB
+                    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+
+                    if (file.size > maxSize) {
+                      alert('File exceeds 10MB limit. Please choose a smaller image.')
+                      e.target.value = '' // Clear the input
+                      return
+                    }
+
+                    if (!allowedTypes.includes(file.type)) {
+                      alert('File type not supported. Please use JPG, PNG, GIF, or WebP.')
+                      e.target.value = '' // Clear the input
+                      return
+                    }
+                  }
+
                   setCoverImageFile(file)
                   if (file) {
                     const reader = new FileReader()
@@ -112,19 +132,42 @@ export default function CollectionFormModal({ mode, collection, onSubmit, onCanc
             />
           </div>
 
-          <div className="flex items-center justify-between">
-            <Label htmlFor="private" className="cursor-pointer">
-              Private collection
-            </Label>
-            <Switch id="private" checked={isPrivate} onCheckedChange={setIsPrivate} />
+          <div className="flex items-center justify-between p-4 rounded-lg border bg-gradient-to-r from-gray-50 to-gray-100">
+            <div className="flex flex-col">
+              <Label htmlFor="private" className="cursor-pointer font-medium text-gray-900">
+                {isPrivate ? "Private Collection" : "Public Collection"}
+              </Label>
+              <p className="text-sm text-gray-600 mt-1">
+                {isPrivate
+                  ? "Only you can see this collection"
+                  : "Anyone can discover and view this collection"
+                }
+              </p>
+            </div>
+            <Switch
+              id="private"
+              checked={isPrivate}
+              onCheckedChange={setIsPrivate}
+              className="data-[state=checked]:bg-pink-500 data-[state=unchecked]:bg-gray-400"
+            />
           </div>
 
           <div className="flex justify-end space-x-2 pt-4">
             <Button type="button" variant="outline" onClick={onCancel}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!name.trim() || isSubmitting}>
-              {isSubmitting ? "Saving..." : mode === "create" ? "Create" : "Save"}
+            <Button
+              type="submit"
+              disabled={!name.trim() || isSubmitting}
+              className={isSubmitting ? "bg-gradient-to-r from-pink-400 to-purple-400" : "bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600"}
+            >
+              {isSubmitting ? (
+                uploadState === 'uploading' ? "Uploading..." :
+                uploadState === 'creating' ? "Creating..." :
+                "Saving..."
+              ) : (
+                mode === "create" ? "Create Collection" : "Save Changes"
+              )}
             </Button>
           </div>
         </form>

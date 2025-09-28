@@ -84,34 +84,56 @@ export default async function PublicCollectionDetailPage({ params }: CollectionD
         </aside>
       </div>
 
-      <section>
-        <h2 className="text-xl font-semibold text-gray-900">Designs in this collection</h2>
+      <section aria-labelledby="collection-designs-heading">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <h2 id="collection-designs-heading" className="text-xl font-semibold text-gray-900">
+            Designs in this collection
+          </h2>
+          {posts.length > 0 && (
+            <p className="text-sm text-gray-500">{designsLabel} curated for you</p>
+          )}
+        </div>
         {posts.length === 0 ? (
           <div className="mt-6 rounded-lg border border-dashed border-gray-200 py-16 text-center text-gray-500">
             This collection does not have any public posts yet.
           </div>
         ) : (
-          <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {posts.map((post) => (
-              <Link
-                key={post.documentId || post.id}
-                href={post.documentId ? `/post/${post.documentId}` : `/post/${post.id}`}
-                className="group block overflow-hidden rounded-xl border border-gray-200 bg-white transition hover:shadow-lg"
-              >
-                <PostThumbnail post={post} />
-                <div className="p-4">
-                  <p className="text-sm font-medium text-gray-900 group-hover:text-pink-600 transition-colors line-clamp-2">
-                    {post.description || post.title || "Untitled design"}
-                  </p>
-                  <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
-                    <span>@{post.username || post.user?.username || "unknown"}</span>
-                    {typeof post.likesCount === "number" && post.likesCount > 0 && (
-                      <span>{post.likesCount} likes</span>
-                    )}
-                  </div>
-                </div>
-              </Link>
-            ))}
+          <div className="mt-6 grid gap-6 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            {posts.map((post) => {
+              const postLabel = post.description?.trim() || post.title?.trim() || "Untitled design"
+              const authorLabel = post.username?.trim() || post.user?.username?.trim() || "unknown"
+              return (
+                <Link
+                  key={post.documentId || post.id}
+                  href={post.documentId ? `/post/${post.documentId}` : `/post/${post.id}`}
+                  aria-label={`View design ${postLabel}`}
+                  className="group block h-full rounded-3xl focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-pink-200 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                >
+                  <article className="flex h-full flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-[0_20px_45px_-25px_rgba(15,23,42,0.4)] transition-transform duration-300 hover:-translate-y-1 hover:shadow-[0_28px_60px_-28px_rgba(236,72,153,0.45)]">
+                    <PostThumbnail post={post} altText={postLabel} />
+                    <div className="flex flex-1 flex-col gap-3 p-5">
+                      <p className="text-base font-semibold text-gray-900 transition-colors group-hover:text-pink-600 line-clamp-2">
+                        {postLabel}
+                      </p>
+                      <div className="mt-auto flex items-center justify-between text-sm text-gray-500">
+                        <span className="font-medium">@{authorLabel}</span>
+                        {typeof post.likesCount === "number" && post.likesCount > 0 && (
+                          <span
+                            aria-label={`${post.likesCount} likes`}
+                            className="inline-flex items-center gap-1 rounded-full bg-pink-50 px-3 py-1 text-xs font-semibold text-pink-600"
+                          >
+                            <svg aria-hidden="true" className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" />
+                            </svg>
+                            {post.likesCount}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                </Link>
+              )
+            })}
           </div>
         )}
       </section>
@@ -119,25 +141,30 @@ export default async function PublicCollectionDetailPage({ params }: CollectionD
   )
 }
 
-function PostThumbnail({ post }: { post: Post }) {
+function PostThumbnail({ post, altText }: { post: Post; altText: string }) {
   const mediaUrl = post.mediaItems?.[0]?.url || post.media?.[0]?.url || post.image
 
   if (!mediaUrl) {
     return (
-      <div className="flex h-48 items-center justify-center bg-gray-100 text-gray-400">
-        <span>No image</span>
+      <div className="relative aspect-[4/5] w-full overflow-hidden rounded-3xl border border-dashed border-gray-200 bg-gray-50">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm text-gray-500">
+          <span aria-hidden="true" className="text-lg font-semibold text-gray-400">
+            NF
+          </span>
+          <span>No image available</span>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="relative h-48 w-full overflow-hidden bg-gray-100">
+    <div className="relative aspect-[4/5] w-full overflow-hidden rounded-3xl border border-gray-100 bg-gradient-to-br from-pink-50 via-white to-purple-100">
       <Image
         src={mediaUrl}
-        alt="Post preview"
+        alt={altText}
         fill
-        className="object-cover transition duration-300 group-hover:scale-105"
-        sizes="(min-width: 768px) 33vw, 100vw"
+        className="object-contain transition-transform duration-500 ease-out group-hover:scale-[1.03]"
+        sizes="(min-width: 1536px) 20vw, (min-width: 1280px) 24vw, (min-width: 1024px) 30vw, (min-width: 640px) 45vw, 90vw"
         priority={false}
       />
     </div>

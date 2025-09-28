@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     // Get Strapi URL from environment
     const strapiUrl = process.env.API_URL ||
                      process.env.NEXT_PUBLIC_API_URL ||
-                     "https://nailfeed-backend-production.up.railway.app"
+                     "https://api.nailfeed.com"
 
     // Authenticate with Strapi
     const authResponse = await fetch(`${strapiUrl}/api/auth/local`, {

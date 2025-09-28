@@ -57,30 +57,25 @@ export async function createOptimizedPost(formData: FormData) {
       }
     }
 
-    // Get uploaded files data passed from client (already uploaded)
-    const uploadedFilesJson = formData.get("uploadedFiles") as string
-    let uploadedFiles: any[] = []
+    // Get media files from form data for upload after post creation
+    const mediaFiles: File[] = []
 
-    if (uploadedFilesJson) {
-      try {
-        uploadedFiles = JSON.parse(uploadedFilesJson)
-        console.log("[v1] Optimized Server Action: Using pre-uploaded files:", uploadedFiles.length)
-      } catch (error) {
-        console.error("[v1] Optimized Server Action: Error parsing uploaded files:", error)
-        return {
-          success: false,
-          error: "Invalid uploaded files data",
-        }
+    // Extract actual File objects from formData
+    const fileKeys = Array.from(formData.keys()).filter(key => key.startsWith('mediaFiles'))
+    for (const key of fileKeys) {
+      const file = formData.get(key) as File
+      if (file && file instanceof File) {
+        mediaFiles.push(file)
       }
     }
 
-    const hasMediaFiles = uploadedFiles.length > 0
+    const hasMediaFiles = mediaFiles.length > 0
 
     console.log("[v1] Optimized Server Action: Creating post with data:", {
       title,
       contentType,
       hasMediaFiles,
-      mediaCount: uploadedFiles.length,
+      mediaCount: mediaFiles.length,
     })
 
     const apiUrl = process.env.API_URL
@@ -141,49 +136,52 @@ export async function createOptimizedPost(formData: FormData) {
       documentId: postDocumentId,
     })
 
-    // STEP 2: Associate pre-uploaded media with post (if any)
+    // STEP 2: Upload media files using Strapi's native upload endpoint with relations
     let uploadedMedia: any[] = []
     if (hasMediaFiles) {
-      console.log("[v1] Optimized Server Action: Associating pre-uploaded media with post")
+      console.log("[v1] Optimized Server Action: Uploading media files using native Strapi endpoint")
 
       try {
-        // Use the pre-uploaded files data
-        uploadedMedia = uploadedFiles
+        const uploadFormData = new FormData()
 
-        console.log("[v1] Optimized Server Action: Using pre-uploaded media:", {
-          uploadedCount: uploadedMedia.length,
-          files: uploadedMedia.map(f => ({ id: f.id, name: f.name, url: f.url }))
+        // Add files to upload
+        mediaFiles.forEach((file, index) => {
+          uploadFormData.append("files", file, `${index}-${file.name}`)
         })
 
-        // Update post to include media relations
-        const updatePostData = {
-          data: {
-            media: uploadedFiles.map((file: any) => file.id), // Send only IDs to Strapi
-          },
-        }
+        // Strapi v5 relation parameters for automatic media attachment
+        uploadFormData.append("ref", "api::post.post")
+        uploadFormData.append("refId", postDocumentId) // Use documentId for Strapi v5
+        uploadFormData.append("field", "media")
 
-        const updatePostUrl = `${apiUrl}/api/posts/${postDocumentId}`
-        const updateResponse = await fetch(updatePostUrl, {
-          method: "PUT",
+        console.log("[v1] Optimized Server Action: Upload relation parameters:", {
+          ref: "api::post.post",
+          refId: postDocumentId,
+          field: "media"
+        })
+
+        const uploadUrl = `${apiUrl}/api/upload`
+        const uploadResponse = await fetch(uploadUrl, {
+          method: "POST",
           headers: {
-            "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify(updatePostData),
+          body: uploadFormData,
         })
 
-        if (!updateResponse.ok) {
-          const errorText = await updateResponse.text()
-          console.warn("[v1] Optimized Server Action: Media association failed:", errorText)
-          // Continue without failing - post is still created
+        if (!uploadResponse.ok) {
+          const errorText = await uploadResponse.text()
+          console.error("[v1] Optimized Server Action: Media upload failed:", errorText)
+          // Don't fail the entire operation - post is already created
+          console.log("[v1] Optimized Server Action: Continuing without media - post created successfully")
         } else {
-          console.log("[v1] Optimized Server Action: Media associated successfully")
+          uploadedMedia = await uploadResponse.json()
+          console.log("[v1] Optimized Server Action: Media uploaded successfully:", uploadedMedia.length)
         }
 
       } catch (error) {
-        console.error("[v1] Optimized Server Action: Media association failed:", error)
+        console.error("[v1] Optimized Server Action: Media upload error:", error)
         // Post is already created, so we don't fail the entire operation
-        console.log("[v1] Optimized Server Action: Continuing without media association - post created successfully")
       }
     }
 
@@ -243,8 +241,9 @@ export async function createOptimizedPost(formData: FormData) {
         mediaItems: [], // Legacy field for backward compatibility
         createdAt: finalPostData.createdAt || finalPostData.publishedAt || new Date().toISOString(),
         uploadStats: {
-          totalFiles: uploadedFiles.length,
+          totalFiles: mediaFiles.length,
           uploadedFiles: uploadedMedia.length,
+          uploadSuccess: uploadedMedia.length === mediaFiles.length,
           uploadTime: uploadedMedia.length > 0 ? endTime - startTime : 0,
         },
       },

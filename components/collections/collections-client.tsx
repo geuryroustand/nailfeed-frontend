@@ -62,29 +62,50 @@ export default function CollectionsClient({ initialCollections }: CollectionsCli
     setFilteredCollections(filtered)
   }, [searchQuery, collections])
 
-  // Handle create collection
+  // Handle create collection with improved error handling and loading states
   const handleCreateCollection = async (
     name: string,
     description: string,
     isPrivate: boolean,
     coverImageFile?: File | null,
   ) => {
+    let coverImageId: number | undefined
+    let coverImageUrl: string | undefined
+
     try {
-      let coverImageId: number | undefined
-      let coverImageUrl: string | undefined
+      // Step 1: Upload cover image if provided
       if (coverImageFile) {
-        const uploaded = await uploadFiles([coverImageFile])
+        toast({
+          title: "Uploading cover image",
+          description: "Please wait while we process your image...",
+        })
+
+        const uploaded = await uploadFiles([coverImageFile], {
+          timeout: 60000, // 60 seconds
+          maxRetries: 3,
+          retryDelay: 1000
+        })
+
         if (!uploaded.success || !uploaded.files?.[0]) {
           throw new Error(uploaded.error || "Failed to upload cover image")
         }
+
         const uploadedFile = uploaded.files[0]
         coverImageId = uploadedFile.id
         coverImageUrl = normalizeImageUrl(uploadedFile.url)
+
+        console.log("Cover image uploaded successfully:", { id: coverImageId, url: coverImageUrl })
       }
+
+      // Step 2: Create collection
+      toast({
+        title: "Creating collection",
+        description: "Almost done! Setting up your new collection...",
+      })
 
       const newCollection = await createCollection(name, description, isPrivate, coverImageId)
 
-      // Optimistically update the UI
+      // Step 3: Optimistically update the UI
       const hydratedCollection =
         coverImageUrl && !newCollection.coverImage
           ? { ...newCollection, coverImage: coverImageUrl }
@@ -93,14 +114,31 @@ export default function CollectionsClient({ initialCollections }: CollectionsCli
       setCollections((prev) => [...prev, hydratedCollection])
 
       toast({
-        title: "Collection created",
-        description: `"${name}" has been created successfully.`,
+        title: "Collection created successfully!",
+        description: `"${name}" is now ready to use.`,
       })
+
     } catch (error) {
       console.error("Error creating collection:", error)
+
+      // Provide specific error messages
+      let errorMessage = "Something went wrong. Please try again."
+
+      if (error instanceof Error) {
+        if (error.message.includes("upload")) {
+          errorMessage = "Image upload failed. Try a smaller file or check your connection."
+        } else if (error.message.includes("timeout")) {
+          errorMessage = "Request timed out. Please check your internet connection."
+        } else if (error.message.includes("Network error")) {
+          errorMessage = "Network error. Please check your connection and try again."
+        } else if (error.message.includes("validation")) {
+          errorMessage = error.message
+        }
+      }
+
       toast({
-        title: "Error",
-        description: "Failed to create collection. Please try again.",
+        title: "Unable to create collection",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
