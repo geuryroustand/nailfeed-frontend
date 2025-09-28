@@ -1,4 +1,4 @@
-﻿import type React from "react"
+import type React from "react"
 import type { Metadata, Viewport } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
@@ -74,15 +74,12 @@ export default function RootLayout({
       <head>
         {process.env.NODE_ENV === "production" && (
           <>
-            <Script strategy="afterInteractive" src="https://www.googletagmanager.com/gtag/js?id=G-Z3MYDXLS7Y" />
-            <Script id="google-analytics" strategy="afterInteractive">
-              {`
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
-        gtag('js', new Date());
-        gtag('config', 'G-Z3MYDXLS7Y');
-      `}
-            </Script>
+            <Script
+              id="gtag-base"
+              strategy="afterInteractive"
+              src="https://www.googletagmanager.com/gtag/js?id=G-Z3MYDXLS7Y"
+            />
+            <Script id="gtag-init" strategy="afterInteractive" src="/ga-init.js" />
           </>
         )}
       </head>
