@@ -50,8 +50,6 @@ import {
   REACTION_TYPES as REACTION_TYPE_ORDER,
 } from "@/lib/services/reaction-service";
 
-// Import the notification action
-import { createReactionNotification } from "@/lib/actions/notification-actions";
 
 // Add the import for TryOnButton and TryOnModal at the top of the file
 import { TryOnButton } from "@/components/try-on/try-on-button";
@@ -388,42 +386,8 @@ export default function Post({
       // Persist on server
       await ReactionService.addReaction(post.documentId, reactionType);
 
-      if (
-        isNewReaction &&
-        postAuthorId &&
-        postAuthorId.toString() !== user.id.toString()
-      ) {
-        console.log(
-          "[v0] Post component - creating notification record for post author:",
-          postAuthorId
-        );
-        try {
-          await createReactionNotification(
-            post.documentId,
-            postAuthorId.toString(),
-            user.id.toString(),
-            user.displayName || user.username || "Someone",
-            reactionType
-          );
-          console.log(
-            "[v0] Post component - notification record created successfully"
-          );
-        } catch (notificationError) {
-          console.error(
-            "[v0] Post component - failed to create notification record:",
-            notificationError
-          );
-        }
-      } else {
-        console.log(
-          "[v0] Post component - skipping notification - isNewReaction:",
-          isNewReaction,
-          "postAuthorId:",
-          postAuthorId,
-          "isSelfReaction:",
-          postAuthorId?.toString() === user.id.toString()
-        );
-      }
+      // Notifications are now handled entirely by the backend when reactions are created
+      console.log("[v0] Post component - reaction processed, notifications handled by backend");
 
       // Server persisted. UI already updated optimistically above.
     } catch (error) {
@@ -763,7 +727,7 @@ export default function Post({
   return (
     <>
       <div
-        className={`bg-white rounded-xl shadow-sm overflow-hidden mb-4 ${className}`}
+        className={`bg-white rounded-xl shadow-sm overflow-hidden mb-4 mx-4 ${className}`}
       >
         {/* Add direct image test in development mode */}
 

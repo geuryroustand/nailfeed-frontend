@@ -20,6 +20,20 @@ export async function GET(request: NextRequest) {
       params.append(key, value)
     })
 
+    // Force collections to be scoped to the authenticated owner
+    params.delete('filters[owner][id][$eq]')
+    params.delete('filters[owner][email][$eq]')
+    params.delete('filters[owner][username][$eq]')
+
+    const ownerId = Number(session.userId)
+    if (Number.isFinite(ownerId)) {
+      params.set('filters[owner][id][$eq]', ownerId.toString())
+    } else if (session.email) {
+      params.set('filters[owner][email][$eq]', session.email)
+    } else if (session.username) {
+      params.set('filters[owner][username][$eq]', session.username)
+    }
+
     // Default params for collections
     if (!params.has('populate[0]')) {
       params.set('populate[0]', 'coverImage')
@@ -70,13 +84,33 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
 
+    const bodyData = (body && typeof body === 'object' && !Array.isArray(body))
+      ? (body.data && typeof body.data === 'object' ? body.data : body)
+      : {}
+
+    const { owner: _ignoredOwner, ...restData } = bodyData as Record<string, unknown>
+
+    const ownerId = Number(session.userId)
+    if (!Number.isFinite(ownerId)) {
+      return NextResponse.json({ error: 'Unable to resolve authenticated owner' }, { status: 400 })
+    }
+
+    const ownerRelation = { owner: { connect: [ownerId] } }
+
+    const payload = {
+      data: {
+        ...restData,
+        ...ownerRelation,
+      },
+    }
+
     const response = await fetch(`${STRAPI_BASE_URL}/api/collections`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     })
 
     if (!response.ok) {

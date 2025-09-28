@@ -15,11 +15,13 @@ export interface Suggestion {
   description: string;
   votes: number;
   status: "in-review" | "planned" | "in-development" | "released";
+  suggestionStatus?: "in-review" | "planned" | "in-development" | "released";
   createdAt: string;
   updatedAt: string;
   publishedAt: string;
   user: {
     id: number;
+    documentId?: string;
     username: string;
     email: string;
   };
@@ -49,7 +51,7 @@ const getVoteCounts = cache(
             Authorization: `Bearer ${API_TOKEN}`,
           },
           next: {
-            revalidate: 30,
+            revalidate: 0,
             tags: ["suggestion-votes"],
           },
         }
@@ -96,13 +98,13 @@ const getVoteCounts = cache(
 export const getBasicSuggestions = cache(async (): Promise<Suggestion[]> => {
   try {
     const response = await fetch(
-      `${API_URL}/api/suggestions?populate[0]=user&sort=createdAt:desc`,
+      `${API_URL}/api/suggestions?populate=user&sort=createdAt:desc`,
       {
         headers: {
           Authorization: `Bearer ${API_TOKEN}`,
         },
         next: {
-          revalidate: 60,
+          revalidate: 0,
           tags: ["suggestions"],
         },
       }
@@ -118,7 +120,12 @@ export const getBasicSuggestions = cache(async (): Promise<Suggestion[]> => {
     }
 
     const data = await response.json();
-    return data.data || [];
+    // Map suggestionStatus to status for compatibility
+    const suggestions = data.data?.map((suggestion: any) => ({
+      ...suggestion,
+      status: suggestion.suggestionStatus || suggestion.status || "in-review"
+    })) || [];
+    return suggestions;
   } catch (error) {
     console.error("Error fetching basic suggestions:", error);
     return [];
@@ -136,13 +143,13 @@ export const getSuggestions = cache(
       const [suggestionsResponse, votesResponse, currentUser] =
         await Promise.allSettled([
           fetch(
-            `${API_URL}/api/suggestions?populate[0]=user&sort=createdAt:desc`,
+            `${API_URL}/api/suggestions?populate=user&sort=createdAt:desc`,
             {
               headers: {
                 Authorization: `Bearer ${API_TOKEN}`,
               },
               next: {
-                revalidate: 60,
+                revalidate: 0,
                 tags: ["suggestions"],
               },
             }
@@ -154,7 +161,7 @@ export const getSuggestions = cache(
                 Authorization: `Bearer ${API_TOKEN}`,
               },
               next: {
-                revalidate: 30,
+                revalidate: 0,
                 tags: ["suggestion-votes"],
               },
             }
@@ -207,6 +214,7 @@ export const getSuggestions = cache(
         };
         return {
           ...suggestion,
+          status: suggestion.suggestionStatus || suggestion.status || "in-review",
           voteCount: voteData.count,
           userHasVoted: currentUserId ? voteData.userHasVoted : false,
           isCreator: currentUserId

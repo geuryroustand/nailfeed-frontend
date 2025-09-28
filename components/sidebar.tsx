@@ -14,7 +14,7 @@ import {
   Bookmark,
   Palette,
   Lightbulb,
-  Folder,
+  Download,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -52,6 +52,12 @@ export default function Sidebar({ activeItem = "home" }: SidebarProps) {
       label: "Collections",
       href: "/collections",
     },
+    {
+      id: "app-setup",
+      icon: Download,
+      label: "App Setup",
+      href: "/app-setup",
+    },
     // { id: "mood", icon: Palette, label: "Mood", href: "/mood" },
   ];
 
@@ -87,6 +93,10 @@ export default function Sidebar({ activeItem = "home" }: SidebarProps) {
             "/messages",
             "/notifications",
           ].some((path) => item.href.startsWith(path));
+
+          if (!isAuthenticated && requiresAuth) {
+            return null;
+          }
 
           if (requiresAuth) {
             return (
@@ -193,3 +203,4 @@ export default function Sidebar({ activeItem = "home" }: SidebarProps) {
     </div>
   );
 }
+

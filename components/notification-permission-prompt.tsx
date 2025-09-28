@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Bell, BellOff, X } from "lucide-react"
 import { useAuth } from "@/hooks/use-auth"
-import { subscribeToPushNotifications } from "@/lib/actions/notification-actions"
+import { ensureServiceWorkerRegistration, getReadyServiceWorker } from "@/lib/pwa/register-service-worker"
 import { useToast } from "@/hooks/use-toast"
 
 function urlBase64ToUint8Array(base64String: string) {
@@ -47,6 +47,14 @@ export default function NotificationPermissionPrompt() {
     }
   }, [isAuthenticated])
 
+  const persistPromptDismissal = () => {
+    try {
+      sessionStorage.setItem("notification-prompt-dismissed", "true")
+    } catch (error) {
+      console.warn("[v0] Unable to persist notification prompt dismissal", error)
+    }
+  }
+
   const requestNotificationPermission = async () => {
     if (!isSupported || !user) return
 
@@ -62,22 +70,39 @@ export default function NotificationPermissionPrompt() {
       if (permission === "granted") {
         console.log("[v0] ✅ Notification permission granted, setting up push subscription...")
 
-        // Register service worker
-        const registration = await navigator.serviceWorker.register("/sw.js")
-        await navigator.serviceWorker.ready
-
-        const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
-        if (!vapidPublicKey) {
-          throw new Error("VAPID public key not configured")
+        // Ensure we have an active service worker registration available
+        const readyRegistration = await getReadyServiceWorker()
+        const registration = readyRegistration ?? (await ensureServiceWorkerRegistration())
+        if (!registration) {
+          throw new Error("Service workers are not available in this browser")
         }
 
-        console.log("[v0] 📱 Subscribing to push notifications...")
+        // Reuse an existing subscription when possible to avoid duplicates
+        let subscription = await registration.pushManager.getSubscription()
+        if (!subscription) {
+          const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+          if (!vapidPublicKey) {
+            throw new Error("VAPID public key not configured")
+          }
 
-        // Subscribe to push notifications
-        const subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
-        })
+          console.log("[v0] 📱 Creating new push subscription...")
+
+          subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+          })
+        } else {
+          console.log("[v0] ♻️  Reusing existing push subscription")
+        }
+
+        const subscriptionJson = subscription.toJSON()
+        const endpoint = subscriptionJson?.endpoint
+        const p256dh = subscriptionJson?.keys?.p256dh
+        const auth = subscriptionJson?.keys?.auth
+
+        if (!endpoint || !p256dh || !auth) {
+          throw new Error("Invalid push subscription payload")
+        }
 
         // Save subscription to server - use documentId if available, fallback to id
         const userIdentifier = user.documentId || user.id?.toString()
@@ -87,24 +112,33 @@ export default function NotificationPermissionPrompt() {
 
         console.log("[v0] 💾 Saving push subscription to Strapi for user:", userIdentifier)
 
-        const result = await subscribeToPushNotifications(userIdentifier, {
-          endpoint: subscription.endpoint,
-          keys: {
-            p256dh: btoa(String.fromCharCode(...new Uint8Array(subscription.getKey("p256dh")!))),
-            auth: btoa(String.fromCharCode(...new Uint8Array(subscription.getKey("auth")!))),
+        const response = await fetch("/api/push-subscriptions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
           },
+          body: JSON.stringify({
+            userId: userIdentifier,
+            endpoint,
+            p256dh,
+            auth,
+            userAgent: navigator.userAgent,
+          }),
         })
 
-        if (result.success) {
-          console.log("[v0] 🎉 Push subscription saved successfully!")
-          toast({
-            title: "Notifications enabled",
-            description: "You'll now receive notifications for comments and interactions",
-          })
-          setShowPrompt(false)
-        } else {
-          throw new Error(result.error)
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null)
+          throw new Error(payload?.error || "Failed to save push subscription")
         }
+
+        console.log("[v0] 🎉 Push subscription saved successfully!")
+
+        persistPromptDismissal()
+        toast({
+          title: "Notifications enabled",
+          description: "You'll now receive notifications for comments and interactions",
+        })
+        setShowPrompt(false)
       } else {
         console.log("[v0] ❌ Notification permission denied or dismissed")
         toast({
@@ -128,7 +162,7 @@ export default function NotificationPermissionPrompt() {
   const dismissPrompt = () => {
     setShowPrompt(false)
     // Don't show again for this session
-    sessionStorage.setItem("notification-prompt-dismissed", "true")
+    persistPromptDismissal()
   }
 
   // Don't show if not supported, not authenticated, or already granted/denied

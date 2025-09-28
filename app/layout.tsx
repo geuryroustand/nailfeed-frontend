@@ -21,6 +21,7 @@ import Script from "next/script"
 import FirstTimeVisitorNotification from "@/components/first-time-visitor-notification"
 import NotificationPermissionPrompt from "@/components/notification-permission-prompt"
 import NotificationHandler from "@/components/notification-handler"
+import ServiceWorkerManager from "@/components/service-worker-manager"
 
 // Initialize configuration
 config.initialize()
@@ -97,6 +98,7 @@ export default function RootLayout({
                     <ReactionProvider>{children}</ReactionProvider>
                     <ApiStatusIndicator />
                     <Toaster />
+                    <ServiceWorkerManager />
                     <PWAInstaller />
                     <PWAUpdatePrompt />
                     <FirstTimeVisitorNotification />

@@ -49,60 +49,32 @@ export default function PostFeed({
   const { toast } = useToast()
   const router = useRouter()
   const isOffline = useRef(false)
+  const hasHydratedRef = useRef(false)
   const [isConnectionError, setIsConnectionError] = useState(false)
 
-  // Check if we're offline
-  useEffect(() => {
-    const handleOnline = () => {
-      isOffline.current = false
-      setIsConnectionError(false)
-      if (retryCount > 0) {
-        loadInitialPosts()
-      }
-    }
-
-    const handleOffline = () => {
-      isOffline.current = true
-      setIsConnectionError(true)
-      setApiError("You are currently offline. Please check your internet connection.")
-    }
-
-    window.addEventListener("online", handleOnline)
-    window.addEventListener("offline", handleOffline)
-
-    // Initial check
-    if (!navigator.onLine) {
-      isOffline.current = true
-      setIsConnectionError(true)
-      setApiError("You are currently offline. Please check your internet connection.")
-    }
-
-    return () => {
-      window.removeEventListener("online", handleOnline)
-      window.removeEventListener("offline", handleOffline)
-    }
-  }, [retryCount])
-
-  const loadInitialPosts = useCallback(async () => {
-    // Don't reload if we already have initial posts and no error
-    if (initialPosts && initialPosts.length > 0 && !initialError && retryCount === 0) {
+  const loadInitialPosts = useCallback(
+  async (
+    { force = false, background = false }: { force?: boolean; background?: boolean } = {},
+  ) => {
+    if (!force && initialPosts && initialPosts.length > 0 && !initialError && retryCount === 0) {
       return
     }
 
-    // Don't attempt to load if we're offline
     if (isOffline.current) {
       setApiError("You are currently offline. Please check your internet connection.")
       setIsConnectionError(true)
       return
     }
 
-    // If we're retrying after a rate limit, add exponential backoff
-    if (initialError?.code === 429 && retryCount > 0) {
-      const backoffTime = Math.min(1000 * Math.pow(2, retryCount - 1), 10000)
+    if (initialError?.code === 429 && (retryCount > 0 || force)) {
+      const backoffTime = Math.min(1000 * Math.pow(2, Math.max(retryCount, 1) - 1), 10000)
       await new Promise((resolve) => setTimeout(resolve, backoffTime))
     }
 
-    setIsLoading(true)
+    if (!background) {
+      setIsLoading(true)
+    }
+
     setApiError(null)
     setIsConnectionError(false)
 
@@ -112,15 +84,15 @@ export default function PostFeed({
       console.log("[v0] PostFeed loadInitialPosts - Fetching posts", {
         mode: isAuthenticated ? "authenticated" : "guest",
         userId: currentUserId,
+        background,
+        force,
       })
       const response = await getPosts(6, 0, currentUserId)
       console.log("[v0] PostFeed loadInitialPosts - Posts response:", response)
 
-      // Handle errors
       if (response.error) {
         setApiError(response.error.message || "Error loading posts")
 
-        // If we have posts despite the error (fallback data), show them
         if (response.posts && response.posts.length > 0) {
           setPosts(response.posts)
           setHasMore(false)
@@ -128,9 +100,7 @@ export default function PostFeed({
           return
         }
 
-        // Handle rate limit errors
         if (response.error.code === 429) {
-          // Schedule a retry with backoff
           const retryDelay = Math.min(2000 * Math.pow(2, retryCount), 30000)
           setTimeout(() => {
             setRetryCount((prev) => prev + 1)
@@ -140,10 +110,8 @@ export default function PostFeed({
         return
       }
 
-      // Ensure each post has a documentId
       const postsWithDocumentId = response.posts.map((post) => {
         if (!post.documentId) {
-          // If documentId is missing, create one based on the post ID
           return {
             ...post,
             documentId: `post-${post.id}`,
@@ -156,14 +124,12 @@ export default function PostFeed({
       setHasMore(response.hasMore)
       setNextPage(response.nextPage || 1)
 
-      // Reset retry count on success
       if (retryCount > 0) {
         setRetryCount(0)
       }
     } catch (error) {
       setApiError("Failed to load posts. Please try again later.")
 
-      // Check if it's a network error
       if (
         error instanceof Error &&
         (error.message.includes("network") || error.message.includes("fetch") || error.message.includes("connection"))
@@ -180,18 +146,75 @@ export default function PostFeed({
         variant: "destructive",
       })
     } finally {
-      setIsLoading(false)
+      if (!background) {
+        setIsLoading(false)
+      }
     }
-  }, [initialPosts, initialError, retryCount, toast, user, isAuthenticated])
+  },
+  [initialPosts, initialError, retryCount, toast, user, isAuthenticated],
+)
+  useEffect(() => {
+    const handleOnline = () => {
+      isOffline.current = false
+      setIsConnectionError(false)
+      if (retryCount > 0) {
+        loadInitialPosts({ force: true, background: true }).catch(console.error)
+      }
+    }
+
+    const handleOffline = () => {
+      isOffline.current = true
+      setIsConnectionError(true)
+      setApiError("You are currently offline. Please check your internet connection.")
+    }
+
+    window.addEventListener("online", handleOnline)
+    window.addEventListener("offline", handleOffline)
+
+    if (!navigator.onLine) {
+      isOffline.current = true
+      setIsConnectionError(true)
+      setApiError("You are currently offline. Please check your internet connection.")
+    }
+
+    return () => {
+      window.removeEventListener("online", handleOnline)
+      window.removeEventListener("offline", handleOffline)
+    }
+  }, [retryCount, loadInitialPosts])
 
   useEffect(() => {
+    if (hasHydratedRef.current) {
+      return
+    }
+
+    hasHydratedRef.current = true
+
+    if (initialPosts && initialPosts.length > 0) {
+      loadInitialPosts({ force: true, background: true }).catch(console.error)
+    }
+  }, [initialPosts, loadInitialPosts])
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadInitialPosts({ force: true, background: true }).catch(console.error)
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+    }
+  }, [loadInitialPosts])
+  useEffect(() => {
     if (!initialPosts || initialPosts.length === 0 || initialError) {
-      loadInitialPosts()
+      loadInitialPosts({ force: true })
     }
   }, [initialPosts, initialError, loadInitialPosts])
 
     useEffect(() => {
-    loadInitialPosts()
+    loadInitialPosts({ force: true, background: true })
   }, [isAuthenticated, user?.id, loadInitialPosts])
 
 
@@ -341,7 +364,7 @@ export default function PostFeed({
     // to ensure the UI is in sync with the backend
     // This is done without blocking the UI
     setTimeout(() => {
-      loadInitialPosts().catch(console.error)
+      loadInitialPosts({ force: true, background: true }).catch(console.error)
     }, 2000)
   }
 
@@ -379,7 +402,7 @@ export default function PostFeed({
 
   const handleRetry = () => {
     setRetryCount((prev) => prev + 1)
-    loadInitialPosts()
+    loadInitialPosts({ force: true })
   }
 
   // Don't show the regular feed if search results are being displayed
@@ -542,3 +565,14 @@ export default function PostFeed({
     </div>
   )
 }
+
+
+
+
+
+
+
+
+
+
+

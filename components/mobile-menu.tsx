@@ -13,7 +13,7 @@ import {
   Bookmark,
   Palette,
   Lightbulb,
-  Folder,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -73,6 +73,12 @@ export default function MobileMenu({
       label: "Collections",
       href: "/collections",
     },
+    {
+      id: "app-setup",
+      icon: Download,
+      label: "App Setup",
+      href: "/app-setup",
+    },
     ...(isAuthenticated ? [] : []),
     // { id: "mood", icon: Palette, label: "Mood", href: "/mood" },
   ];
@@ -119,6 +125,16 @@ export default function MobileMenu({
               {menuItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = activeItem === item.id;
+                const requiresAuth = [
+                  "/me",
+                  "/mood",
+                  "/messages",
+                  "/notifications",
+                ].some((path) => item.href.startsWith(path));
+
+                if (!isAuthenticated && requiresAuth) {
+                  return null;
+                }
 
                 return (
                   <Link

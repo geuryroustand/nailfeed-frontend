@@ -500,69 +500,81 @@ export default function CreatePostModal({
       formData.append("tags", JSON.stringify(extractedTags));
 
       // STEP 1: Create post with basic data only
-      console.log("[CreatePost] Creating post with basic data...")
+      console.log("[CreatePost] Creating post with basic data...");
       const postResponse = await createPostBasic(formData);
 
       if (!postResponse.success) {
-        throw new Error(postResponse.error || "Failed to create post")
+        throw new Error(postResponse.error || "Failed to create post");
       }
 
-      const createdPost = postResponse.post
+      const createdPost = postResponse.post;
       console.log("[CreatePost] Post created:", {
         id: createdPost.id,
-        documentId: createdPost.documentId
-      })
+        documentId: createdPost.documentId,
+      });
 
       // STEP 2: Upload media files with post references (if any)
       if (mediaItems.length > 0) {
-        console.log("[CreatePost] Uploading media files to post...")
+        console.log("[CreatePost] Uploading media files to post...");
 
         const filesToUpload = mediaItems
-          .map(item => item.file)
-          .filter(file => file instanceof File || file instanceof Blob) as File[]
+          .map((item) => item.file)
+          .filter(
+            (file) => file instanceof File || file instanceof Blob
+          ) as File[];
 
         if (filesToUpload.length > 0) {
           // CRITICAL: Use numeric ID for Strapi relations, not documentId
-          const uploadResult = await uploadPostMedia(filesToUpload, createdPost.id)
+          const uploadResult = await uploadPostMedia(
+            filesToUpload,
+            createdPost.id
+          );
 
           if (!uploadResult.success) {
-            console.warn("[CreatePost] Media upload failed:", uploadResult.error)
+            console.warn(
+              "[CreatePost] Media upload failed:",
+              uploadResult.error
+            );
           } else {
-            console.log("[CreatePost] Media upload completed")
+            console.log("[CreatePost] Media upload completed");
 
             // STEP 3: Fetch updated post data with media relations
-            console.log("[CreatePost] Fetching updated post data with media...")
+            console.log(
+              "[CreatePost] Fetching updated post data with media..."
+            );
             try {
               // Use auth-proxy GET to handle authentication correctly
-              const endpoint = `/api/posts/${createdPost.documentId}`
+              const endpoint = `/api/posts/${createdPost.documentId}`;
               const params = new URLSearchParams({
-                'populate[user][populate]': 'profileImage',
-                'populate': 'media'
-              })
-              const updatedPostUrl = `/api/auth-proxy?endpoint=${encodeURIComponent(endpoint)}&${params.toString()}`
+                "populate[user][populate]": "profileImage",
+                populate: "media",
+              });
+              const updatedPostUrl = `/api/auth-proxy?endpoint=${encodeURIComponent(
+                endpoint
+              )}&${params.toString()}`;
 
-              console.log("[CreatePost] Fetching from:", updatedPostUrl)
+              console.log("[CreatePost] Fetching from:", updatedPostUrl);
 
               const updatedPostResponse = await fetch(updatedPostUrl, {
-                method: 'GET',
-              })
+                method: "GET",
+              });
 
               if (updatedPostResponse.ok) {
-                const updatedPostData = await updatedPostResponse.json()
-                const updatedPost = updatedPostData.data
+                const updatedPostData = await updatedPostResponse.json();
+                const updatedPost = updatedPostData.data;
 
                 console.log("[CreatePost] Updated post data:", {
                   id: updatedPost.id,
-                  mediaCount: updatedPost.media?.length || 0
-                })
+                  mediaCount: updatedPost.media?.length || 0,
+                });
 
                 // Update the created post with fresh media data
-                createdPost.media = updatedPost.media || []
+                createdPost.media = updatedPost.media || [];
               } else {
-                console.warn("[CreatePost] Failed to fetch updated post data")
+                console.warn("[CreatePost] Failed to fetch updated post data");
               }
             } catch (error) {
-              console.error("[CreatePost] Error fetching updated post:", error)
+              console.error("[CreatePost] Error fetching updated post:", error);
             }
           }
         }
@@ -701,10 +713,7 @@ export default function CreatePostModal({
         <div className="p-4 flex-shrink-0">
           <div className="flex items-center gap-3 mb-2">
             <Avatar className="h-10 w-10">
-              <AvatarImage
-                src={user?.profileImage?.url || "/diverse-user-avatars.png"}
-                alt="Your profile"
-              />
+              <AvatarImage src={user?.profileImage?.url} alt="Your profile" />
               <AvatarFallback>
                 {user?.username?.substring(0, 2).toUpperCase() || "YO"}
               </AvatarFallback>

@@ -1,42 +1,63 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
+import { ensureServiceWorkerRegistration } from "@/lib/pwa/register-service-worker"
 import { Button } from "@/components/ui/button"
 import { RefreshCw, X } from "lucide-react"
+
+const WAITING_EVENT = "pwa:waiting"
+const RELOADED_EVENT = "pwa:reloaded"
 
 export default function PWAUpdatePrompt() {
   const [showUpdatePrompt, setShowUpdatePrompt] = useState(false)
   const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null)
 
   useEffect(() => {
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.getRegistration().then((reg) => {
-        if (!reg) return
+    if (!("serviceWorker" in navigator)) {
+      return
+    }
 
-        // Check for waiting service worker
-        if (reg.waiting) {
-          setWaitingWorker(reg.waiting)
+    let isMounted = true
+
+    const waitingListener: EventListener = (event) => {
+      if (!isMounted) return
+      const worker = (event as CustomEvent<ServiceWorker>).detail
+      setWaitingWorker(worker)
+      setShowUpdatePrompt(true)
+    }
+
+    const reloadedListener = () => {
+      if (!isMounted) return
+      setShowUpdatePrompt(false)
+      setWaitingWorker(null)
+    }
+
+    window.addEventListener(WAITING_EVENT, waitingListener)
+    window.addEventListener(RELOADED_EVENT, reloadedListener)
+
+    ensureServiceWorkerRegistration()
+      .then((registration) => {
+        if (!isMounted || !registration) return
+        if (registration.waiting) {
+          setWaitingWorker(registration.waiting)
           setShowUpdatePrompt(true)
         }
-
-        // Listen for new service worker
-        reg.addEventListener("updatefound", () => {
-          const newWorker = reg.installing
-          if (!newWorker) return
-
-          newWorker.addEventListener("statechange", () => {
-            if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
-              setWaitingWorker(newWorker)
-              setShowUpdatePrompt(true)
-            }
-          })
-        })
+      })
+      .catch((error) => {
+        console.warn("[PWA] Unable to check service worker status", error)
       })
 
-      // Listen for controller change (new SW activated)
-      navigator.serviceWorker.addEventListener("controllerchange", () => {
-        window.location.reload()
-      })
+    const handleControllerChange = () => {
+      window.location.reload()
+    }
+
+    navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange)
+
+    return () => {
+      isMounted = false
+      window.removeEventListener(WAITING_EVENT, waitingListener)
+      window.removeEventListener(RELOADED_EVENT, reloadedListener)
+      navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange)
     }
   }, [])
 

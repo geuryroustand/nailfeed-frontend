@@ -15,6 +15,10 @@ import ErrorBoundaryWrapper from "@/components/error-boundary-wrapper"
 // Loading fallbacks
 const LoadingFallback = () => <div className="animate-pulse h-64 bg-gray-200 rounded-xl"></div>
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
+
 export default function HomePage() {
   // We'll determine authentication status on the server in a real app
   const isAuthenticated = false
@@ -90,3 +94,5 @@ export default function HomePage() {
     </ErrorBoundaryWrapper>
   )
 }
+
+

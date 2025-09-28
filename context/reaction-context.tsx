@@ -4,7 +4,6 @@ import type React from "react"
 import { createContext, useContext, useState, useCallback } from "react"
 import { useAuth } from "@/context/auth-context"
 import { ReactionService, type ReactionType } from "@/lib/services/reaction-service"
-import { createReactionNotification } from "@/lib/actions/notification-actions"
 
 interface ReactionContextType {
   getUserReaction: (postId: number | string) => Promise<{ id: string; type: ReactionType } | null>
@@ -70,30 +69,8 @@ export function ReactionProvider({ children }: { children: React.ReactNode }) {
           userDocumentId || user.documentId,
         )
 
-        if (isNewReaction && result && postAuthorId && postAuthorId.toString() !== (userId || user.id).toString()) {
-          console.log("[v0] Creating notification record for post author:", postAuthorId)
-          try {
-            await createReactionNotification(
-              postId.toString(),
-              postAuthorId.toString(),
-              (userId || user.id).toString(),
-              user.displayName || user.username || "Someone",
-              type,
-            )
-            console.log("[v0] Notification record created successfully (no push notification sent)")
-          } catch (notificationError) {
-            console.error("[v0] Failed to create notification record:", notificationError)
-          }
-        } else {
-          console.log(
-            "[v0] Skipping notification - isNewReaction:",
-            isNewReaction,
-            "postAuthorId:",
-            postAuthorId,
-            "isSelfReaction:",
-            postAuthorId?.toString() === (userId || user.id).toString(),
-          )
-        }
+        // Notifications are now handled entirely by the backend when reactions are created/updated
+        console.log("[v0] Reaction processed - notifications handled by backend")
 
         setCache((prev) => {
           const newCache = { ...prev }

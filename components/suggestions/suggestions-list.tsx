@@ -7,14 +7,19 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { voteSuggestion, type Suggestion } from "@/app/actions/suggestion-actions"
+
+// Extend the interface for backwards compatibility
+interface ExtendedSuggestion extends Suggestion {
+  suggestionStatus?: "in-review" | "planned" | "in-development" | "released";
+}
 import { EditSuggestionModal } from "./edit-suggestion-modal"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { cn } from "@/lib/utils"
 
 interface SuggestionsListProps {
-  initialSuggestions: Suggestion[]
-  onAddSuggestion?: (suggestion: Suggestion) => void
+  initialSuggestions: ExtendedSuggestion[]
+  onAddSuggestion?: (suggestion: ExtendedSuggestion) => void
 }
 
 export default function SuggestionsList({ initialSuggestions, onAddSuggestion }: SuggestionsListProps) {
@@ -136,8 +141,10 @@ export default function SuggestionsList({ initialSuggestions, onAddSuggestion }:
           </div>
         </div>
 
-        {suggestions.map((suggestion, index) => {
-          const StatusIcon = statusConfig[suggestion.status].icon
+        {suggestions.filter(suggestion => suggestion && (suggestion.status || suggestion.suggestionStatus)).map((suggestion, index) => {
+          const status = suggestion.status || suggestion.suggestionStatus || "in-review"
+          const statusInfo = getStatusConfig(status)
+          const StatusIcon = statusInfo.icon
           const hasVoted = suggestion.userHasVoted || false
           const voteCount = suggestion.voteCount || 0
           const isCreator = suggestion.isCreator || false
@@ -233,9 +240,9 @@ export default function SuggestionsList({ initialSuggestions, onAddSuggestion }:
                           </TooltipContent>
                         </Tooltip>
                       )}
-                      <Badge className={cn(statusConfig[suggestion.status].color)}>
+                      <Badge className={cn(statusInfo.color)}>
                         <StatusIcon className="h-3 w-3 mr-1" />
-                        {statusConfig[suggestion.status].label}
+                        {statusInfo.label}
                       </Badge>
                     </div>
                   </div>
@@ -273,4 +280,8 @@ const statusConfig = {
   planned: { label: "Planned", icon: CheckCircle, color: "bg-blue-100 text-blue-800" },
   "in-development": { label: "In Development", icon: Wrench, color: "bg-purple-100 text-purple-800" },
   released: { label: "Released", icon: Rocket, color: "bg-green-100 text-green-800" },
+} as const
+
+const getStatusConfig = (status: string) => {
+  return statusConfig[status as keyof typeof statusConfig] || statusConfig["in-review"]
 }

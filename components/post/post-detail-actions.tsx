@@ -20,85 +20,33 @@ import AddToCollectionDialog from "@/components/collections/add-to-collection-di
 import { useCollections } from "@/context/collections-context"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
+import type { Post } from "@/lib/post-data"
+import type { ReactionType } from "@/lib/services/reaction-service"
 
 interface PostDetailActionsProps {
-
-  postId: string
-
-  authorId: string
-
+  postId?: string | number
+  authorId?: string | number
   imageUrl?: string
-
   designTitle?: string
-
   onEdit?: () => void
-
   onDelete?: () => void
-
   onReport?: () => void
-
   // Add additional props to handle different image URL sources
-
-  post?: {
-
-    id?: number
-
-    documentId?: string
-
-    imageUrl?: string
-
-    media?: Array<{ url: string }>
-
-    image?: string
-
-    images?: string[]
-
-    likes?: Array<{
-
-      id: number
-
-      documentId: string
-
-      type: string
-
-      user?: {
-
-        id: number
-
-        documentId: string
-
-        username: string
-
-      }
-
-    }>
-
-  }
-
+  post?: Post
 }
 
 
 
 export function PostDetailActions({
-
   postId,
-
   authorId,
-
   imageUrl,
-
   designTitle = "Nail Design",
-
   onEdit,
-
   onDelete,
-
   onReport,
-
   post,
-
 }: PostDetailActionsProps) {
-
   const { isOwner } = usePostOwnership(authorId)
 
   const { isAuthenticated } = useAuth()
@@ -126,9 +74,165 @@ export function PostDetailActions({
       return post.id.toString()
     }
 
-    return null
+    if (typeof postId === "number" && Number.isFinite(postId)) {
+      return postId.toString()
+    }
 
+    return null
   }, [post?.documentId, post?.id, postId])
+
+  const reactionSummaryPostId = useMemo(() => {
+    if (normalizedPostId) {
+      return normalizedPostId
+    }
+
+    if (typeof postId === "number" && Number.isFinite(postId)) {
+      return postId
+    }
+
+    if (typeof postId === "string" && postId.length > 0) {
+      return postId
+    }
+
+    if (typeof post?.id === "number" && Number.isFinite(post.id)) {
+      return post.id
+    }
+
+    return null
+  }, [normalizedPostId, postId, post?.id])
+
+  const totalReactions = useMemo(() => {
+    if (typeof post?.likes === "number") {
+      return post.likes
+    }
+
+    if (typeof post?.likesCount === "number") {
+      return post.likesCount
+    }
+
+    if (post?.reactions && post.reactions.length > 0) {
+      return post.reactions.reduce((sum, reaction) => sum + (reaction.count || 0), 0)
+    }
+
+    if (Array.isArray(post?.likesList)) {
+      return post.likesList.length
+    }
+
+    return 0
+  }, [post?.likes, post?.likesCount, post?.reactions, post?.likesList])
+
+  const reactionButtonDocumentId = useMemo(() => {
+    if (normalizedPostId) {
+      return normalizedPostId
+    }
+
+    if (typeof postId === "string" && postId.length > 0) {
+      return postId
+    }
+
+    if (typeof postId === "number" && Number.isFinite(postId)) {
+      return postId.toString()
+    }
+
+    if (typeof post?.id === "string" && post.id.length > 0) {
+      return post.id
+    }
+
+    if (typeof post?.id === "number" && Number.isFinite(post.id)) {
+      return post.id.toString()
+    }
+
+    return ""
+  }, [normalizedPostId, postId, post?.id])
+
+  const reactionButtonPostId = useMemo(() => {
+    if (normalizedPostId) {
+      return normalizedPostId
+    }
+
+    if (typeof postId !== "undefined" && postId !== null) {
+      return postId
+    }
+
+    if (typeof post?.id !== "undefined" && post?.id !== null) {
+      return post.id
+    }
+
+    return ""
+  }, [normalizedPostId, postId, post?.id])
+
+  const reactionButtonAuthorId = useMemo(() => {
+    if (typeof authorId === "string" && authorId.length > 0) {
+      return authorId
+    }
+
+    if (typeof authorId === "number" && Number.isFinite(authorId)) {
+      return authorId.toString()
+    }
+
+    if (typeof post?.user?.documentId === "string" && post.user.documentId.length > 0) {
+      return post.user.documentId
+    }
+
+    if (typeof post?.user?.id === "string" && post.user.id.length > 0) {
+      return post.user.id
+    }
+
+    if (typeof post?.user?.id === "number" && Number.isFinite(post.user.id)) {
+      return post.user.id.toString()
+    }
+
+    if (typeof post?.userId === "string" && post.userId.length > 0) {
+      return post.userId
+    }
+
+    if (typeof post?.userId === "number" && Number.isFinite(post.userId)) {
+      return post.userId.toString()
+    }
+
+    return undefined
+  }, [authorId, post?.user?.documentId, post?.user?.id, post?.userId])
+
+  const reactionButtonReactions = useMemo(() => {
+    if (!Array.isArray(post?.reactions)) {
+      return []
+    }
+
+    const validTypes: ReactionType[] = ["like", "love", "haha", "wow", "sad", "angry"]
+
+    return post.reactions
+      .map((reaction) => {
+        const reactionType = typeof reaction.type === "string" ? (reaction.type.toLowerCase() as ReactionType) : undefined
+
+        if (!reactionType || !validTypes.includes(reactionType)) {
+          return null
+        }
+
+        return {
+          type: reactionType,
+          emoji: reaction.emoji,
+          count: reaction.count,
+        }
+      })
+      .filter((reaction): reaction is { type: ReactionType; emoji: string; count: number } => reaction !== null)
+  }, [post?.reactions])
+
+  const normalizedUserReaction = useMemo<ReactionType | null>(() => {
+    if (!post?.userReaction) {
+      return null
+    }
+
+    const rawValue = typeof post.userReaction === "string" ? post.userReaction : (post.userReaction as { type?: string })?.type
+
+    if (!rawValue || typeof rawValue !== "string") {
+      return null
+    }
+
+    const value = rawValue.toLowerCase() as ReactionType
+    const validTypes: ReactionType[] = ["like", "love", "haha", "wow", "sad", "angry"]
+
+    return validTypes.includes(value) ? value : null
+  }, [post?.userReaction])
 
   const isPostSaved = normalizedPostId !== null ? isSaved(normalizedPostId) : false
 
@@ -233,19 +337,15 @@ export function PostDetailActions({
     <div className="px-4 sm:px-6 pb-4 sm:pb-6">
 
       <div className="mb-4">
-
-        <ReactionSummary
-
-          postId={post?.documentId || postId}
-
-          showViewButton={true}
-
-          className="cursor-pointer"
-
-          likes={post?.likes}
-
-        />
-
+        {reactionSummaryPostId ? (
+          <ReactionSummary
+            postId={reactionSummaryPostId}
+            showViewButton={true}
+            className="cursor-pointer"
+            reactions={post?.reactions}
+            totalCount={totalReactions}
+          />
+        ) : null}
       </div>
 
 
@@ -255,23 +355,17 @@ export function PostDetailActions({
         <div className="flex items-center space-x-2 flex-1">
 
           <ReactionButton
-
-            postId={post?.documentId || postId}
-
-            postDocumentId={post?.documentId || postId}
-
-            postAuthorId={authorId}
-
+            postId={reactionButtonPostId}
+            postDocumentId={reactionButtonDocumentId}
+            postAuthorId={reactionButtonAuthorId}
+            reactions={reactionButtonReactions}
+            likesCount={totalReactions}
+            userReaction={normalizedUserReaction}
             onReactionChange={(type) => {
-
               console.log("[v0] Reaction changed to:", type)
-
             }}
-
             showCount={false}
-
             className="flex-1 justify-center"
-
           />
 
 

@@ -2,21 +2,12 @@
 
 import { getCurrentUser } from "./auth-actions"
 import { revalidatePath } from "next/cache"
-import { sendNotificationToUser, getPostAuthor } from "@/lib/services/web-push-service"
 
 const API_URL =
   process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
 
 export type ReactionType = "like" | "love" | "haha" | "wow" | "sad" | "angry"
 
-const REACTION_EMOJIS: Record<ReactionType, string> = {
-  like: "👍",
-  love: "❤️",
-  haha: "😂",
-  wow: "😮",
-  sad: "😢",
-  angry: "😠",
-}
 
 export async function getUserReaction(postId: string | number): Promise<{ id: string; type: ReactionType } | null> {
   try {
@@ -116,35 +107,8 @@ export async function addReaction(
     const data = await response.json()
 
     if (data.data) {
-      try {
-        // Get the post author
-        const postAuthor = await getPostAuthor(postDocumentId || postId)
-
-        if (postAuthor && postAuthor.id !== user.id.toString()) {
-          // Don't send notification if user is reacting to their own post
-          console.log(`[v0] Sending reaction notification from user ${user.id} to post author ${postAuthor.id}`)
-
-          const notificationPayload = {
-            title: `New reaction from ${user.displayName || user.username} 💅`,
-            body: `${user.displayName || user.username} reacted ${REACTION_EMOJIS[type]} to your post. Open to see it.`,
-            url: `/post/${postDocumentId || postId}`,
-            icon: "/icon-192x192.png",
-            badge: "/icon-192x192.png",
-          }
-
-          // Send notification asynchronously (don't wait for it to complete)
-          sendNotificationToUser(postAuthor.id, notificationPayload).catch((error) => {
-            console.error("[v0] Failed to send push notification:", error)
-          })
-        } else if (postAuthor?.id === user.id.toString()) {
-          console.log(`[v0] Skipping self-notification for user ${user.id}`)
-        } else {
-          console.log(`[v0] Could not find post author for post ${postDocumentId || postId}`)
-        }
-      } catch (notificationError) {
-        // Log the error but don't fail the reaction creation
-        console.error("[v0] Error sending push notification:", notificationError)
-      }
+      // All notifications (database records + push notifications) are now handled by the backend
+      console.log("[v0] Reaction created successfully - notifications handled by backend")
 
       revalidatePath("/")
       return {

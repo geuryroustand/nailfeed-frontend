@@ -1,36 +1,9 @@
 // next.config.js
-const withPWA = require("@ducanh2912/next-pwa").default({
-  dest: "public",
-  cacheOnFrontEndNav: true,
-  aggressiveFrontEndNavCaching: true,
-  reloadOnOnline: true,
-  swcMinify: true,
-  disable: process.env.NODE_ENV === "development",
-  workboxOptions: {
-    disableDevLogs: true,
-    runtimeCaching: [
-      // No cache para API (Network First)
-      {
-        urlPattern: /^https?.*\/api\/.*$/,
-        handler: "NetworkFirst",
-        options: {
-          cacheName: "api-cache",
-          networkTimeoutSeconds: 10,
-          expiration: { maxEntries: 16, maxAgeSeconds: 86400 },
-        },
-      },
-      // Imágenes (Cache First)
-      {
-        urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp)$/,
-        handler: "CacheFirst",
-        options: {
-          cacheName: "images",
-          expiration: { maxEntries: 64, maxAgeSeconds: 86400 },
-        },
-      },
-    ],
-  },
-});
+// Deshabilitar PWA temporalmente para usar service worker personalizado
+// const withPWA = require("@ducanh2912/next-pwa").default({
+//   dest: "public",
+//   disable: true, // Deshabilitado para usar SW personalizado
+// });
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -94,4 +67,5 @@ const nextConfig = {
   },
 };
 
-module.exports = withPWA(nextConfig);
+// module.exports = withPWA(nextConfig);
+module.exports = nextConfig;

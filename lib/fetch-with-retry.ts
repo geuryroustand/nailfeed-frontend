@@ -10,12 +10,17 @@ export async function safeJsonParse(response: Response) {
   }
 }
 
+type NextFetchConfig = {
+  revalidate?: number
+  tags?: string[]
+}
+
 /**
  * Fetch with retry functionality
  */
 export async function fetchWithRetry(
   url: string,
-  options: RequestInit = {},
+  options: (RequestInit & { next?: NextFetchConfig }) = {},
   maxRetries = 3,
   retryDelay = 1000,
 ): Promise<Response> {
@@ -46,3 +51,4 @@ export async function fetchWithRetry(
 
   throw lastError || new Error(`Failed to fetch ${url} after ${maxRetries} attempts`)
 }
+

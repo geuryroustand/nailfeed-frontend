@@ -1,6 +1,8 @@
 "use server"
 
+import { revalidateTag } from "next/cache"
 import { validateSession } from "@/lib/auth/session"
+import { CACHE_TAGS } from "@/lib/cache-tags"
 import { uploadMediaToPost, validateFiles, uploadWithRetry } from "@/lib/services/optimized-media-upload-server"
 import type { ContentType, GalleryLayout } from "@/lib/services/post-service"
 import type { BackgroundType } from "@/components/post-background-selector"
@@ -210,6 +212,14 @@ export async function createOptimizedPost(formData: FormData) {
     const endTime = Date.now()
     console.log(`[v1] Optimized Server Action: Post creation completed in ${endTime - startTime}ms`)
 
+    revalidateTag(CACHE_TAGS.posts)
+    if (postDocumentId) {
+      revalidateTag(CACHE_TAGS.post(postDocumentId))
+    }
+    if (postId) {
+      revalidateTag(CACHE_TAGS.post(postId))
+    }
+
 
     // Return optimized response
     return {
@@ -301,6 +311,10 @@ export async function addMediaToPost(postDocumentId: string, files: File[]) {
       () => uploadMediaToPost(validFiles, String(postId), session.strapiJWT)
     )
 
+    revalidateTag(CACHE_TAGS.posts)
+    revalidateTag(CACHE_TAGS.post(postDocumentId))
+    revalidateTag(CACHE_TAGS.post(postId))
+
     return {
       success: true,
       uploadedMedia,
@@ -314,3 +328,8 @@ export async function addMediaToPost(postDocumentId: string, files: File[]) {
     }
   }
 }
+
+
+
+
+

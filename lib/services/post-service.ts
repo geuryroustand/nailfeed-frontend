@@ -1,6 +1,7 @@
 import qs from "qs";
 import { fetchWithRetry, safeJsonParse } from "../fetch-with-retry";
 import { API_URL, REQUEST_CONFIG, getServerApiToken } from "../config";
+import { CACHE_TAGS } from "../cache-tags";
 
 // Runtime helpers
 const isServer = typeof window === "undefined";
@@ -45,22 +46,24 @@ const directJson = async (
   fullUrl: string,
   method = "GET",
   headers: HeadersInit = {},
-  body?: any
+  body?: any,
+  requestInit: (RequestInit & { next?: { revalidate?: number; tags?: string[] } }) = {},
 ) => {
-  return fetchWithRetry(
-    fullUrl,
-    {
-      method,
-      headers,
-      body:
-        body !== undefined
-          ? typeof body === "string"
-            ? body
-            : JSON.stringify(body)
-          : undefined,
-    },
-    2
-  );
+  const init: RequestInit & { next?: { revalidate?: number; tags?: string[] } } = {
+    method,
+    headers,
+    ...requestInit,
+  }
+
+  if (body !== undefined && init.body === undefined) {
+    init.body = typeof body === "string" ? body : JSON.stringify(body)
+  }
+
+  if (method === "GET") {
+    init.cache = init.cache ?? "no-store"
+  }
+
+  return fetchWithRetry(fullUrl, init, 2)
 };
 
 export type ContentType =
@@ -160,7 +163,13 @@ export class PostService {
         //   "fallback server token:",
         //   !!serverToken
         // );
-        resp = await directJson(fullUrl, "GET", headers);
+        resp = await directJson(
+          fullUrl,
+          "GET",
+          headers,
+          undefined,
+          { cache: "no-store", next: { revalidate: 0, tags: [CACHE_TAGS.posts] } },
+        );
       }
 
       if (resp.status === 429) {
@@ -340,6 +349,10 @@ export class PostService {
       const sessionJwt =
         !useProxy && isServer ? await getServerSessionJWT() : null;
 
+      const cacheTags = Array.from(
+        new Set([CACHE_TAGS.posts, CACHE_TAGS.post(identifier)]),
+      );
+
       const fetchEndpoint = async (endpoint: string) => {
         if (useProxy) {
           return proxyJson(endpoint, "GET");
@@ -354,7 +367,12 @@ export class PostService {
           headers["Authorization"] = `Bearer ${serverToken}`;
         }
 
-        return fetchWithRetry(fullUrl, { method: "GET", headers });
+        return fetchWithRetry(fullUrl, {
+          method: "GET",
+          headers,
+          cache: "no-store",
+          next: { revalidate: 0, tags: cacheTags },
+        });
       };
 
       console.log("[v0] PostService.getPost - Fetching:", directEndpoint);
@@ -575,3 +593,15 @@ export class PostService {
     minRequestInterval: REQUEST_CONFIG.minRequestInterval,
   };
 }
+
+
+
+
+
+
+
+
+
+
+
+
