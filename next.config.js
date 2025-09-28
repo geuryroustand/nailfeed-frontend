@@ -1,9 +1,4 @@
 // next.config.js
-// Deshabilitar PWA temporalmente para usar service worker personalizado
-// const withPWA = require("@ducanh2912/next-pwa").default({
-//   dest: "public",
-//   disable: true, // Deshabilitado para usar SW personalizado
-// });
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -16,7 +11,19 @@ const nextConfig = {
     remotePatterns: [
       {
         protocol: "https",
+        hostname: "api.nailfeed.com",
+        port: "",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
         hostname: "nailfeed-backend-production.up.railway.app",
+        port: "",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "res.cloudinary.com",
         port: "",
         pathname: "/**",
       },
@@ -44,23 +51,6 @@ const nextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "X-DNS-Prefetch-Control", value: "on" },
-          {
-            key: "Content-Security-Policy",
-            value: [
-              "default-src 'self' https:",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:",
-              "style-src 'self' 'unsafe-inline' https:",
-              "img-src 'self' data: blob: https: http:",
-              "font-src 'self' data: https:",
-              "connect-src 'self' https: http: wss: ws:",
-              "media-src 'self' blob: https:",
-              "object-src 'none'",
-              "base-uri 'self'",
-              "form-action 'self' https:",
-              "frame-ancestors 'none'"
-            ].join("; ")
-          },
         ],
       },
       {
@@ -76,7 +66,7 @@ const nextConfig = {
           },
           {
             key: "Service-Worker-Allowed",
-            value: "/"
+            value: "/",
           },
         ],
       },
