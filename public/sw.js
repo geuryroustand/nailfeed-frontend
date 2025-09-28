@@ -1,21 +1,10 @@
 // Enhanced Service Worker for NailFeed
 // Provides network-first navigation, stale-while-revalidate for assets, and offline fallback
 
-const STATIC_CACHE = "nailfeed-static-v3";
+const STATIC_CACHE = "nailfeed-static-v2";
 const RUNTIME_CACHE = "nailfeed-runtime-v1";
 const OFFLINE_URL = "/offline.html";
-const STATIC_ASSETS = [
-  OFFLINE_URL,
-  "/icon-192x192.png",
-  "/icon-512x512.png",
-  "/placeholder.jpg",
-];
-const ANALYTICS_HOSTS = new Set([
-  "www.google-analytics.com",
-  "region1.google-analytics.com",
-  "www.googletagmanager.com",
-  "stats.g.doubleclick.net",
-]);
+const STATIC_ASSETS = [OFFLINE_URL, "/icon-192x192.png", "/icon-512x512.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -54,26 +43,25 @@ self.addEventListener("fetch", (event) => {
 
   const requestUrl = new URL(request.url);
 
-  if (ANALYTICS_HOSTS.has(requestUrl.hostname)) {
-    event.respondWith(fetchAnalytics(request));
-    return;
-  }
-
+  // Skip proxying API requests so the app can control caching headers
   if (requestUrl.pathname.startsWith("/api/")) {
     return;
   }
 
+  // Navigation requests: prefer network, fall back to cache/offline shell
   if (request.mode === "navigate") {
     event.respondWith(networkFirst(request));
     return;
   }
 
+  // Same-origin static assets use stale-while-revalidate
   if (requestUrl.origin === self.location.origin && isStaticAsset(request)) {
     event.respondWith(staleWhileRevalidate(request));
     return;
   }
 
-  event.respondWith(fetchWithFallback(request));
+  // Default: try network, fall back to cache when offline
+  event.respondWith(fetch(request).catch(() => caches.match(request)));
 });
 
 self.addEventListener("push", (event) => {
@@ -89,6 +77,8 @@ self.addEventListener("push", (event) => {
       badge: data.badge || "/icon-192x192.png",
       data: data.data || {},
       requireInteraction: false,
+      // TODO  check if tag is needed to prevent multiple notifications
+      // tag: data.tag || 'nailfeed-notification',
       actions: data.actions || [],
     };
 
@@ -142,10 +132,8 @@ self.addEventListener("message", (event) => {
 async function networkFirst(request) {
   try {
     const response = await fetch(request);
-    if (response && response.ok) {
-      const cache = await caches.open(RUNTIME_CACHE);
-      cache.put(request, response.clone());
-    }
+    const cache = await caches.open(RUNTIME_CACHE);
+    cache.put(request, response.clone());
     return response;
   } catch (error) {
     const cached = await caches.match(request);
@@ -153,16 +141,14 @@ async function networkFirst(request) {
       return cached;
     }
 
-    const offlineShell = await caches.match(OFFLINE_URL);
-    if (offlineShell) {
-      return offlineShell;
+    if (request.mode === "navigate") {
+      const offlineShell = await caches.match(OFFLINE_URL);
+      if (offlineShell) {
+        return offlineShell;
+      }
     }
 
-    return new Response("Offline", {
-      status: 503,
-      statusText: "Service Unavailable",
-      headers: { "Content-Type": "text/plain" },
-    });
+    throw error;
   }
 }
 
@@ -171,7 +157,7 @@ async function staleWhileRevalidate(request) {
   const cachedResponse = await cache.match(request);
   const networkFetch = fetch(request)
     .then((response) => {
-      if (response && response.ok) {
+      if (response && response.status === 200) {
         cache.put(request, response.clone());
       }
       return response;
@@ -179,66 +165,6 @@ async function staleWhileRevalidate(request) {
     .catch(() => cachedResponse);
 
   return cachedResponse || networkFetch;
-}
-
-async function fetchWithFallback(request) {
-  try {
-    const response = await fetch(request);
-    if (response && shouldCacheRuntime(request, response)) {
-      const cache = await caches.open(RUNTIME_CACHE);
-      await cache.put(request, response.clone());
-    }
-    return response;
-  } catch (error) {
-    const cached = await caches.match(request);
-    if (cached) {
-      return cached;
-    }
-
-    return offlineResponseFor(request);
-  }
-}
-
-async function fetchAnalytics(request) {
-  try {
-    return await fetch(request);
-  } catch (error) {
-    return new Response(null, { status: 204 });
-  }
-}
-
-async function offlineResponseFor(request) {
-  if (request.destination === "document") {
-    const offlineShell = await caches.match(OFFLINE_URL);
-    if (offlineShell) {
-      return offlineShell;
-    }
-  }
-
-  if (request.destination === "image") {
-    const fallbackImage = await caches.match("/placeholder.jpg");
-    if (fallbackImage) {
-      return fallbackImage;
-    }
-  }
-
-  return new Response("Offline", {
-    status: 503,
-    statusText: "Service Unavailable",
-    headers: { "Content-Type": "text/plain" },
-  });
-}
-
-function shouldCacheRuntime(request, response) {
-  if (!response || !response.ok) {
-    return false;
-  }
-
-  if (request.url.startsWith(self.location.origin)) {
-    return ["style", "script", "image", "font"].includes(request.destination);
-  }
-
-  return false;
 }
 
 function isStaticAsset(request) {
