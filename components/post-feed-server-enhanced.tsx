@@ -5,7 +5,7 @@ import { ErrorBoundary } from "react-error-boundary"
 import { getPosts } from "@/lib/post-data"
 import PostFeedOptimized from "./post-feed/post-feed-optimized"
 import PostFeedSkeleton from "./post-feed/post-feed-skeleton"
-import { FEATURES } from "@/lib/config"
+import { FEATURES, PAGINATION } from "@/lib/config"
 
 // Error fallback component
 function PostFeedErrorFallback({ error, resetErrorBoundary }: { error: Error; resetErrorBoundary: () => void }) {
@@ -25,8 +25,8 @@ function PostFeedErrorFallback({ error, resetErrorBoundary }: { error: Error; re
 
 export default async function PostFeedServerEnhanced() {
   try {
-    // Fetch initial posts with reduced limit for better performance
-    const { posts, hasMore, nextPage, error } = await getPosts(5, 0)
+    // Fetch initial posts with optimized limit for better UX
+    const { posts, hasMore, nextPage, error } = await getPosts(PAGINATION.INITIAL_POST_LIMIT, 0)
 
     // Handle API errors with fallback data
     if (error && posts.length > 0 && FEATURES.useFallbackData) {

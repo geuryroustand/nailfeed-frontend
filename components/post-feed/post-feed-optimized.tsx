@@ -8,6 +8,8 @@ import { useSearch } from "@/context/search-context"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { fetchPostsAction, refreshPostsAction } from "@/lib/actions/post-server-actions"
+import { PAGINATION } from "@/lib/config"
+import { usePreloadManager } from "@/hooks/use-preload-manager"
 
 // Code split non-critical components
 const CreatePostModal = dynamic(() => import("@/components/create-post-modal"), {
@@ -27,6 +29,8 @@ import PostFeedCreateButton from "./post-feed-create-button"
 import PostFeedEmptyState from "./post-feed-empty-state"
 import PostFeedSkeleton from "./post-feed-skeleton"
 import PostList from "./post-list"
+import { InfiniteScrollDebug } from "@/components/infinite-scroll-debug"
+import { PreloadDebug } from "@/components/preload-debug"
 
 interface PostFeedOptimizedProps {
   initialPosts?: PostType[]
@@ -61,6 +65,21 @@ export default function PostFeedOptimized({
   const { toast } = useToast()
   const router = useRouter()
   const isOffline = useRef(false)
+
+  // Preload manager for intelligent content loading
+  const preloadManager = usePreloadManager({
+    enabled: !isSearching, // Disable during search
+    currentPage: nextPage - 1, // Current page is nextPage - 1
+    hasMore,
+    onPreloadSuccess: (page, preloadedPosts) => {
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[PreloadManager] Successfully preloaded page ${page} with ${preloadedPosts.length} posts`)
+      }
+    },
+    onPreloadError: (page, error) => {
+      console.warn(`[PreloadManager] Failed to preload page ${page}:`, error)
+    },
+  })
 
   // Network status monitoring
   useEffect(() => {
@@ -182,14 +201,40 @@ export default function PostFeedOptimized({
     }
   }, [initialPosts, initialError, retryCount, toast, invalidateServiceWorkerCache])
 
-  // Load more posts
+  // Load more posts with intelligent caching
   const loadMorePosts = async () => {
     if (!hasMore || isLoading || isOffline.current) return
 
+    // Check if we have cached posts for this page
+    const cachedPosts = preloadManager.getCachedPosts(nextPage)
+
+    if (cachedPosts && cachedPosts.length > 0) {
+      // Use cached posts instantly
+      const existingIds = new Set(posts.map((post) => post.id))
+      const newPosts = cachedPosts.filter((post) => !existingIds.has(post.id))
+
+      if (newPosts.length > 0) {
+        const newPostsWithDocumentId = newPosts.map((post) => ({
+          ...post,
+          documentId: post.documentId || `post-${post.id}`,
+        }))
+
+        setPosts((prevPosts) => [...prevPosts, ...newPostsWithDocumentId])
+        setHasMore(newPosts.length === PAGINATION.LOAD_MORE_POST_LIMIT) // Assume more if we got a full page
+        setNextPage(nextPage + 1)
+
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[LoadMore] Used cached posts for page ${nextPage}`)
+        }
+        return
+      }
+    }
+
+    // Fallback to network request if no cache
     setIsLoading(true)
     try {
-      const offset = (nextPage - 1) * 6
-      const response = await fetchPostsAction(6, offset)
+      const offset = (nextPage - 1) * PAGINATION.LOAD_MORE_POST_LIMIT
+      const response = await fetchPostsAction(PAGINATION.LOAD_MORE_POST_LIMIT, offset)
 
       if (response.error) {
         setApiError(response.error.message || "Error loading more posts")
@@ -337,7 +382,7 @@ export default function PostFeedOptimized({
         <PostFeedCreateButton onClick={handleCreatePostClick} disabled={isConnectionError} />
 
         {isLoading && posts.length === 0 ? (
-          <PostFeedSkeleton />
+          <PostFeedSkeleton count={PAGINATION.INITIAL_POST_LIMIT} viewMode={viewMode} />
         ) : posts.length > 0 ? (
           <PostList
             posts={posts}
@@ -355,6 +400,14 @@ export default function PostFeedOptimized({
       {isCreatePostModalOpen && (
         <CreatePostModal onClose={() => setIsCreatePostModalOpen(false)} onPostCreated={handlePostCreated} />
       )}
+
+      {/* Debug components for development */}
+      <InfiniteScrollDebug isLoading={isLoading} hasMore={hasMore} totalPosts={posts.length} />
+      <PreloadDebug
+        preloadManager={preloadManager}
+        currentPage={nextPage - 1}
+        totalPosts={posts.length}
+      />
     </div>
   )
 }

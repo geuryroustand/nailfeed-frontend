@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useRef } from "react"
 import { Loader2 } from "lucide-react"
+import { useInfiniteScroll } from "@/hooks/use-infinite-scroll"
 
 interface LoadMorePostsProps {
   onLoadMore: () => void
@@ -10,30 +10,11 @@ interface LoadMorePostsProps {
 }
 
 export default function LoadMorePosts({ onLoadMore, hasMore = false, isLoading }: LoadMorePostsProps) {
-  const observerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const observerElement = observerRef.current
-
-    if (!observerElement || !hasMore) return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasMore && !isLoading) {
-          onLoadMore()
-        }
-      },
-      { threshold: 1.0 },
-    )
-
-    observer.observe(observerElement)
-
-    return () => {
-      if (observerElement) {
-        observer.unobserve(observerElement)
-      }
-    }
-  }, [onLoadMore, hasMore, isLoading])
+  const observerRef = useInfiniteScroll({
+    onLoadMore,
+    hasMore,
+    isLoading,
+  })
 
   return (
     <div ref={observerRef} className="w-full flex justify-center items-center py-8" aria-hidden="true">

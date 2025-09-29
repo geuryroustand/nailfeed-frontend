@@ -2,7 +2,8 @@ import { Suspense } from "react"
 import { cookies } from "next/headers"
 import { getPosts } from "@/lib/post-data"
 import PostFeed from "./post-feed"
-import { FEATURES } from "@/lib/config"
+import PostFeedSkeleton from "./post-feed/post-feed-skeleton"
+import { FEATURES, PAGINATION } from "@/lib/config"
 
 export default async function PostFeedServer() {
   try {
@@ -10,8 +11,8 @@ export default async function PostFeedServer() {
     // Let the client handle user-specific data loading after authentication
     const currentUserId = null;
 
-    // Fetch initial posts on the server with a smaller limit to reduce chance of rate limiting
-    const { posts, hasMore, nextPage, error } = await getPosts(5, 0, currentUserId)
+    // Fetch initial posts on the server with optimized limit for better UX
+    const { posts, hasMore, nextPage, error } = await getPosts(PAGINATION.INITIAL_POST_LIMIT, 0, currentUserId)
 
     // If we hit an error but have fallback posts, still show them
     if (error && posts.length > 0 && FEATURES.useFallbackData) {
@@ -73,12 +74,3 @@ export default async function PostFeedServer() {
   }
 }
 
-function PostFeedSkeleton() {
-  return (
-    <div className="space-y-4">
-      {[1, 2, 3].map((i) => (
-        <div key={i} className="bg-gray-100 rounded-xl h-64 animate-pulse" />
-      ))}
-    </div>
-  )
-}
