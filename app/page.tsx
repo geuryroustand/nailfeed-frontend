@@ -13,7 +13,11 @@ import { SearchProvider } from "@/context/search-context"
 import ErrorBoundaryWrapper from "@/components/error-boundary-wrapper"
 
 // Loading fallbacks
+import PostFeedSkeleton from "@/components/post-feed/post-feed-skeleton"
+import { PAGINATION } from "@/lib/config"
+
 const LoadingFallback = () => <div className="animate-pulse h-64 bg-gray-200 rounded-xl"></div>
+const PostFeedLoadingFallback = () => <PostFeedSkeleton count={PAGINATION.INITIAL_POST_LIMIT} />
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -59,7 +63,7 @@ export default function HomePage() {
                       <FeaturedStories />
                     </Suspense>
 
-                    <Suspense fallback={<LoadingFallback />}>
+                    <Suspense fallback={<PostFeedLoadingFallback />}>
                       <PostFeedServer />
                     </Suspense>
                   </div>

@@ -25,6 +25,34 @@ export const REQUEST_CONFIG: RequestConfig = {
 // Server-only token (not exposed to client)
 const API_TOKEN = process.env.API_TOKEN || "";
 
+// Pagination configuration
+// These values are optimized for UX and performance balance
+export const PAGINATION = {
+  INITIAL_POST_LIMIT: 8,    // More initial content for better first impression
+  LOAD_MORE_POST_LIMIT: 6,  // Smaller chunks for smooth infinite scroll
+};
+
+// Infinite scroll configuration
+// Optimized for smooth, predictive loading experience
+export const INFINITE_SCROLL = {
+  THRESHOLD: 0.3,           // Trigger when 30% of trigger element is visible
+  ROOT_MARGIN: '200px',     // Start loading 200px before reaching the trigger
+  DEBOUNCE_MS: 100,         // Prevent excessive API calls
+};
+
+// Aggressive preloading configuration
+// Advanced predictive loading based on user behavior
+export const PRELOADING = {
+  ENABLED: true,                    // Master switch for preloading
+  VELOCITY_THRESHOLD: 100,          // px/s - minimum velocity to trigger preloading
+  FAST_SCROLL_THRESHOLD: 300,       // px/s - considered fast scrolling
+  PRELOAD_DISTANCE: 3,              // Number of pages to preload ahead
+  CACHE_SIZE: 50,                   // Maximum posts to keep in cache
+  CACHE_TTL: 5 * 60 * 1000,        // 5 minutes cache TTL
+  NETWORK_AWARE: true,              // Adjust behavior based on connection
+  SCROLL_PREDICTION_SAMPLES: 10,    // Number of scroll samples for velocity calculation
+};
+
 // Feature flags
 export const FEATURES = {
   enableDetailedLogging: true,

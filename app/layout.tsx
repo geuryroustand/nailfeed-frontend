@@ -70,7 +70,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         {process.env.NODE_ENV === "production" && (
           <>
@@ -86,7 +86,7 @@ export default function RootLayout({
           </>
         )}
       </head>
-      <body className={inter.className}>
+      <body className={inter.className} suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <QueryProvider>
             <AuthProviderServer>

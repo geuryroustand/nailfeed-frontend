@@ -2,9 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { getPosts, type Post } from "@/lib/post-data";
+import { PAGINATION } from "@/lib/config";
 
 export async function fetchPostsAction(
-  limit = 6,
+  limit = PAGINATION.LOAD_MORE_POST_LIMIT,
   offset = 0
 ): Promise<{
   posts: Post[];
@@ -46,7 +47,7 @@ export async function refreshPostsAction(): Promise<{
     revalidatePath("/me");
     revalidatePath("/explore");
 
-    const response = await getPosts(6, 0);
+    const response = await getPosts(PAGINATION.INITIAL_POST_LIMIT, 0);
     return response;
   } catch (error) {
     console.error("Error in refreshPostsAction:", error);
