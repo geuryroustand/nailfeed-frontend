@@ -80,6 +80,7 @@ export type Post = {
   shareCount?: number;
   postStatus?: string;
   userReaction?: string | null;
+  userSaved?: boolean;
 };
 
 export type PaginatedPostsResponse = {
@@ -226,6 +227,9 @@ export function transformStrapiPost(post: any, currentUserId?: string | number):
     // userReaction is calculated by backend when user is authenticated
     const userReaction = base.userReaction !== undefined ? base.userReaction : null;
 
+    // userSaved is calculated by backend when user is authenticated
+    const userSaved = base.userSaved !== undefined ? base.userSaved : false;
+
     const rawReactions = Array.isArray(base.reactions)
       ? base.reactions
       : Array.isArray(base.reactions?.data)
@@ -280,6 +284,7 @@ export function transformStrapiPost(post: any, currentUserId?: string | number):
       shareCount: base.shareCount ?? 0,
       postStatus: base.postStatus ?? "published",
       userReaction,
+      userSaved,
     };
   } catch (error) {
     console.error("Error transforming post data:", error, "Post data:", post);

@@ -73,6 +73,9 @@ function transformStrapiPost(post: any): Post {
     const userReactionRaw = post.userReaction ?? null
     const userReactionType = typeof userReactionRaw === "string" ? userReactionRaw : userReactionRaw?.type ?? null
 
+    // userSaved is calculated by backend when user is authenticated
+    const userSaved = post.userSaved !== undefined ? post.userSaved : false
+
     // Get the first media item URL or use a placeholder
     let imageUrl = "/intricate-nail-art.png"
 
@@ -235,6 +238,7 @@ function transformStrapiPost(post: any): Post {
       likesList: processedLikes as any,
       reactions: reactionSummaries,
       userReaction: userReactionType,
+      userSaved,
       comments: [],
       timestamp,
       tags,

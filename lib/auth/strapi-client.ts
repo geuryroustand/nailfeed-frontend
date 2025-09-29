@@ -71,3 +71,17 @@ export async function getCurrentUserId(): Promise<number | null> {
   const session = await verifySession()
   return session ? Number(session.userId) : null
 }
+
+/**
+ * Get current user documentId from session by fetching user data
+ */
+export async function getCurrentUserDocumentId(): Promise<string | null> {
+  try {
+    const strapiClient = await createStrapiClient()
+    const user = await strapiClient.get('/api/users/me')
+    return user.documentId || null
+  } catch (error) {
+    console.error('Error getting current user documentId:', error)
+    return null
+  }
+}

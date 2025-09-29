@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useMemo,
+  useCallback,
+} from "react";
 import { Button } from "@/components/ui/button";
 import {
   MessageCircle,
@@ -13,6 +19,7 @@ import {
   BookmarkPlus,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,7 +28,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { BackgroundType } from "./post-background-selector";
 import type { MediaItem, MediaGalleryLayout } from "@/types/media";
-import { getPostMedia, toMediaItems, hasMedia, getMediaCount, getPrimaryMedia, type PostWithMedia } from "@/lib/media-utils";
+import {
+  getPostMedia,
+  toMediaItems,
+  hasMedia,
+  getMediaCount,
+  getPrimaryMedia,
+  type PostWithMedia,
+} from "@/lib/media-utils";
 import { ShareMenu } from "./share-menu";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -34,6 +48,7 @@ import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import FeedCommentSection from "@/components/comments/feed-comment-section";
 import EditPostModal from "@/components/edit-post-modal";
 import { ReportContentModal } from "@/components/report-content-modal";
+import SavePostButton from "@/components/save-post-button";
 
 // Import the hook
 import { usePostDeletion } from "@/hooks/use-post-deletion";
@@ -49,7 +64,6 @@ import {
   type ReactionType,
   REACTION_TYPES as REACTION_TYPE_ORDER,
 } from "@/lib/services/reaction-service";
-
 
 // Add the import for TryOnButton and TryOnModal at the top of the file
 import { TryOnButton } from "@/components/try-on/try-on-button";
@@ -143,15 +157,24 @@ export default function Post({
     (post.userReaction as Reaction) || null
   );
   const [showReactions, setShowReactions] = useState(false);
-  const [likeCount, setLikeCount] = useState<number>(post.likesCount || post.likes || 0);
+  const [likeCount, setLikeCount] = useState<number>(
+    post.likesCount || post.likes || 0
+  );
   const [commentOpen, setCommentOpen] = useState(false);
   const [commentCount, setCommentCount] = useState(() => {
     // Use backend's commentsCount first, then fallback to legacy fields
-    return post.commentsCount || post.comments_count || (Array.isArray(post.comments) ? post.comments.length : 0) || 0;
+    return (
+      post.commentsCount ||
+      post.comments_count ||
+      (Array.isArray(post.comments) ? post.comments.length : 0) ||
+      0
+    );
   });
+  const [postUserSaved, setPostUserSaved] = useState(post.userSaved || false);
   const reactionsRef = useRef<HTMLDivElement>(null);
   const likeButtonRef = useRef<HTMLButtonElement>(null);
   const { toast } = useToast();
+  const router = useRouter();
   const [showDebug, setShowDebug] = useState(false);
   const [imageError, setImageError] = useState(false);
   const { user, isAuthenticated } = useAuth() || {
@@ -174,9 +197,14 @@ export default function Post({
 
     return null;
   }, [post.documentId, post.id]);
-  const isPostSaved = normalizedPostId !== null ? isSaved(normalizedPostId) : false;
-  const [lastSavedCollection, setLastSavedCollection] = useState<string | null>(null);
-  const saveFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isPostSaved =
+    normalizedPostId !== null ? isSaved(normalizedPostId) : false;
+  const [lastSavedCollection, setLastSavedCollection] = useState<string | null>(
+    null
+  );
+  const saveFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
   const [showComments, setShowComments] = useState(false);
   const [isReactionLoading, setIsReactionLoading] = useState(false); // Declare isReactionLoading
   const [totalReactionCount, setTotalReactionCount] = useState<number>(
@@ -235,7 +263,9 @@ export default function Post({
     if (post.reactions && Array.isArray(post.reactions)) {
       post.reactions.forEach((reaction) => {
         // Find reaction type by emoji
-        const type = REACTION_TYPE_ORDER.find(t => ReactionService.getEmoji(t) === reaction.emoji);
+        const type = REACTION_TYPE_ORDER.find(
+          (t) => ReactionService.getEmoji(t) === reaction.emoji
+        );
         if (type) {
           base[type] = reaction.count || 0;
         }
@@ -250,7 +280,10 @@ export default function Post({
       });
     }
 
-    if (post.userReaction && base[post.userReaction as ReactionType] !== undefined) {
+    if (
+      post.userReaction &&
+      base[post.userReaction as ReactionType] !== undefined
+    ) {
       const type = post.userReaction as ReactionType;
       base[type] = Math.max(base[type], 1);
     }
@@ -258,34 +291,34 @@ export default function Post({
     return base;
   });
 
-  const reactionSummary = useMemo(
-    () => {
-      // Use backend's reactions data if available
-      if (post.reactions && Array.isArray(post.reactions)) {
-        return post.reactions
-          .filter(reaction => reaction.count > 0)
-          .map(reaction => {
-            const type = REACTION_TYPE_ORDER.find(t => ReactionService.getEmoji(t) === reaction.emoji) || 'like';
-            return {
-              type: type as ReactionType,
-              emoji: reaction.emoji,
-              label: reaction.label,
-              count: reaction.count,
-              users: reaction.users || [],
-            };
-          });
-      }
+  const reactionSummary = useMemo(() => {
+    // Use backend's reactions data if available
+    if (post.reactions && Array.isArray(post.reactions)) {
+      return post.reactions
+        .filter((reaction) => reaction.count > 0)
+        .map((reaction) => {
+          const type =
+            REACTION_TYPE_ORDER.find(
+              (t) => ReactionService.getEmoji(t) === reaction.emoji
+            ) || "like";
+          return {
+            type: type as ReactionType,
+            emoji: reaction.emoji,
+            label: reaction.label,
+            count: reaction.count,
+            users: reaction.users || [],
+          };
+        });
+    }
 
-      // Fallback to computed counts
-      return REACTION_TYPE_ORDER.map((type) => ({
-        type,
-        emoji: ReactionService.getEmoji(type) || "👍",
-        label: type,
-        count: reactionCounts[type],
-      }));
-    },
-    [reactionCounts, post.reactions]
-  );
+    // Fallback to computed counts
+    return REACTION_TYPE_ORDER.map((type) => ({
+      type,
+      emoji: ReactionService.getEmoji(type) || "👍",
+      label: type,
+      count: reactionCounts[type],
+    }));
+  }, [reactionCounts, post.reactions]);
 
   const handleReactionSummaryUpdate = useCallback(
     (counts: Record<ReactionType, number>, total: number) => {
@@ -387,7 +420,9 @@ export default function Post({
       await ReactionService.addReaction(post.documentId, reactionType);
 
       // Notifications are now handled entirely by the backend when reactions are created
-      console.log("[v0] Post component - reaction processed, notifications handled by backend");
+      console.log(
+        "[v0] Post component - reaction processed, notifications handled by backend"
+      );
 
       // Server persisted. UI already updated optimistically above.
     } catch (error) {
@@ -587,7 +622,7 @@ export default function Post({
   };
 
   // Render post content based on contentType
-  const renderPostContent = () => {
+  const renderPostContent = (routerInstance: any) => {
     const contentType = post.contentType || "text";
 
     switch (contentType) {
@@ -603,7 +638,7 @@ export default function Post({
               <p
                 className={`text-xl font-semibold text-center ${getTextColorForBackground()}`}
               >
-                {formatDescriptionWithHashtags(post)}
+                {formatDescriptionWithHashtags(post, routerInstance)}
               </p>
             </div>
           );
@@ -611,7 +646,9 @@ export default function Post({
         // Fallback if no background data
         return (
           <div className="mb-3">
-            <p className="text-sm">{formatDescriptionWithHashtags(post)}</p>
+            <p className="text-sm">
+              {formatDescriptionWithHashtags(post, routerInstance)}
+            </p>
           </div>
         );
 
@@ -622,18 +659,23 @@ export default function Post({
           <>
             {/* Description for media posts */}
             <div className="mb-3">
-              <p className="text-sm">{formatDescriptionWithHashtags(post)}</p>
+              <p className="text-sm">
+                {formatDescriptionWithHashtags(post, routerInstance)}
+              </p>
             </div>
             {/* Media content */}
             {hasMedia(post) && (
               <div className="mb-3 w-full">
-                <Link href={getPostUrl()} className="block w-full">
+                <div
+                  className="block w-full cursor-pointer hover:opacity-90 transition-opacity"
+                  onClick={() => routerInstance.push(getPostUrl())}
+                >
                   <MediaGallery
                     items={toMediaItems(post)}
                     layout={post.galleryLayout || "grid"}
                     maxHeight={400}
                   />
-                </Link>
+                </div>
               </div>
             )}
           </>
@@ -643,7 +685,9 @@ export default function Post({
       default:
         return (
           <div className="mb-3">
-            <p className="text-sm">{formatDescriptionWithHashtags(post)}</p>
+            <p className="text-sm">
+              {formatDescriptionWithHashtags(post, routerInstance)}
+            </p>
           </div>
         );
     }
@@ -720,9 +764,26 @@ export default function Post({
   // Update comment count when post changes (use backend's commentsCount)
   useEffect(() => {
     // Use backend's commentsCount directly - no need to fetch or calculate
-    const newCount = post.commentsCount || post.comments_count || (Array.isArray(post.comments) ? post.comments.length : 0) || 0;
+    const newCount =
+      post.commentsCount ||
+      post.comments_count ||
+      (Array.isArray(post.comments) ? post.comments.length : 0) ||
+      0;
     setCommentCount(newCount);
   }, [post.commentsCount, post.comments_count, post.comments]);
+
+  // Update userSaved state when post changes
+  useEffect(() => {
+    setPostUserSaved(post.userSaved || false);
+  }, [post.userSaved]);
+
+  // Handle save state change from SavePostButton
+  const handleSaveStateChange = useCallback(
+    (postId: number, isSaved: boolean) => {
+      setPostUserSaved(isSaved);
+    },
+    []
+  );
 
   return (
     <>
@@ -733,7 +794,10 @@ export default function Post({
 
         <div className="p-4">
           <div className="flex items-center justify-between mb-3">
-            <Link href={getProfileUrl(post)} className="flex items-center group">
+            <Link
+              href={getProfileUrl(post)}
+              className="flex items-center group"
+            >
               <EnhancedAvatar
                 src={post.userImage}
                 alt={post.username}
@@ -762,7 +826,11 @@ export default function Post({
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-full"
+                >
                   <MoreHorizontal className="h-5 w-5 text-gray-500" />
                 </Button>
               </DropdownMenuTrigger>
@@ -773,9 +841,14 @@ export default function Post({
                     postTitle={post.title || post.description}
                     onCollectionAdded={handleCollectionAdded}
                     trigger={
-                      <DropdownMenuItem className="flex items-center" onSelect={(event) => event.preventDefault()}>
+                      <DropdownMenuItem
+                        className="flex items-center"
+                        onSelect={(event) => event.preventDefault()}
+                      >
                         <BookmarkPlus className="h-4 w-4 mr-2" />
-                        {isPostSaved ? "Manage collections" : "Add to collection"}
+                        {isPostSaved
+                          ? "Manage collections"
+                          : "Add to collection"}
                       </DropdownMenuItem>
                     }
                   />
@@ -811,20 +884,22 @@ export default function Post({
           </div>
         </div>
 
-        {/* Post content area - wrapped in Link for navigation */}
-        <Link href={getPostUrl()} className="block">
-          {/* Post title - only display if it exists */}
+        {/* Post content area */}
+        <div>
+          {/* Post title - clickable for navigation */}
           {post.title && (
             <div className="mb-2">
-              <h2 className="text-lg font-bold text-gray-900 hover:text-pink-600 transition-colors">{post.title}</h2>
+              <Link href={getPostUrl()}>
+                <h2 className="text-lg font-bold text-gray-900 hover:text-pink-600 transition-colors cursor-pointer">
+                  {post.title}
+                </h2>
+              </Link>
             </div>
           )}
 
           {/* Content rendering based on contentType */}
-          <div className="hover:opacity-90 transition-opacity">
-            {renderPostContent()}
-          </div>
-        </Link>
+          <div>{renderPostContent(router)}</div>
+        </div>
 
         {/* Enhanced Dedicated Reactions Section */}
         <div className="mt-3 mb-2">
@@ -962,6 +1037,20 @@ export default function Post({
             <span className="text-sm font-medium md:hidden">Comments</span>
           </button>
 
+          <SavePostButton
+            postId={
+              typeof post.id === "number"
+                ? post.id
+                : parseInt(post.id.toString())
+            }
+            postDocumentId={post.documentId}
+            userSaved={postUserSaved}
+            onSaveStateChange={handleSaveStateChange}
+            variant="ghost"
+            size="default"
+            className="flex-1 justify-center py-2 h-auto rounded-md hover:bg-gray-100 transition-colors text-gray-500"
+            showLabel={true}
+          />
 
           <ShareMenu
             url={getPostUrl()}
@@ -1095,21 +1184,25 @@ function getImageUrl(post: any) {
 }
 
 // Function to format post description to highlight hashtags
-function formatDescriptionWithHashtags(post: any) {
+function formatDescriptionWithHashtags(post: any, router?: any) {
   if (!post.description) return null;
 
   const parts = post.description.split(/(#\w+)/g);
   return parts.map((part, index) => {
     if (part.startsWith("#")) {
       return (
-        <Link
-          href={`/explore?tag=${part.substring(1)}`}
+        <span
           key={index}
-          className="text-pink-500 font-medium hover:underline"
-          onClick={(e) => e.stopPropagation()} // Prevent triggering parent link
+          className="text-pink-500 font-medium hover:underline cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation(); // Prevent triggering parent click
+            if (router) {
+              router.push(`/explore?tag=${part.substring(1)}`);
+            }
+          }}
         >
           {part}
-        </Link>
+        </span>
       );
     }
     return part;
@@ -1122,28 +1215,31 @@ function getBackgroundStyle(background: any) {
 
   // Map background value to actual CSS styles as fallback
   const backgroundMap: Record<string, string> = {
-    'bg-red-500': '#ef4444',
-    'bg-blue-500': '#3b82f6',
-    'bg-green-500': '#10b981',
-    'bg-yellow-500': '#f59e0b',
-    'bg-purple-500': '#8b5cf6',
-    'bg-pink-500': '#ec4899',
-    'bg-indigo-500': '#6366f1',
-    'bg-gray-500': '#6b7280',
-    'bg-orange-500': '#f97316',
-    'bg-teal-500': '#14b8a6',
+    "bg-red-500": "#ef4444",
+    "bg-blue-500": "#3b82f6",
+    "bg-green-500": "#10b981",
+    "bg-yellow-500": "#f59e0b",
+    "bg-purple-500": "#8b5cf6",
+    "bg-pink-500": "#ec4899",
+    "bg-indigo-500": "#6366f1",
+    "bg-gray-500": "#6b7280",
+    "bg-orange-500": "#f97316",
+    "bg-teal-500": "#14b8a6",
   };
 
-  if (background.type === 'color' && backgroundMap[background.value]) {
+  if (background.type === "color" && backgroundMap[background.value]) {
     return { backgroundColor: backgroundMap[background.value] };
   }
 
-  if (background.type === 'gradient') {
+  if (background.type === "gradient") {
     // Handle gradient backgrounds
     const gradientMap: Record<string, string> = {
-      'bg-gradient-to-r from-blue-500 to-purple-600': 'linear-gradient(to right, #3b82f6, #9333ea)',
-      'bg-gradient-to-br from-pink-500 via-red-500 to-yellow-500': 'linear-gradient(to bottom right, #ec4899, #ef4444, #f59e0b)',
-      'bg-gradient-to-r from-green-400 to-blue-500': 'linear-gradient(to right, #4ade80, #3b82f6)',
+      "bg-gradient-to-r from-blue-500 to-purple-600":
+        "linear-gradient(to right, #3b82f6, #9333ea)",
+      "bg-gradient-to-br from-pink-500 via-red-500 to-yellow-500":
+        "linear-gradient(to bottom right, #ec4899, #ef4444, #f59e0b)",
+      "bg-gradient-to-r from-green-400 to-blue-500":
+        "linear-gradient(to right, #4ade80, #3b82f6)",
     };
 
     if (gradientMap[background.value]) {
@@ -1165,22 +1261,3 @@ function getProfileUrl(post: any) {
   // Fallback to username if documentId is not available
   return `/profile/${post.username}`;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

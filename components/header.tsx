@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, MessageCircle } from "lucide-react";
+import { Bell, MessageCircle, BookOpen, Bookmark, FolderHeart, ChevronRight, ChevronDown } from "lucide-react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -27,6 +27,7 @@ export default function Header() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
+  const [lookBookExpanded, setLookBookExpanded] = useState(false);
 
   // Set mounted state to true after component mounts
   useEffect(() => {
@@ -146,7 +147,7 @@ export default function Header() {
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent align="end" className="w-56">
               {isAuthenticated ? (
                 <>
                   <DropdownMenuItem>
@@ -154,19 +155,55 @@ export default function Header() {
                       Profile
                     </Link>
                   </DropdownMenuItem>
-                  {/* <DropdownMenuItem>
-                    <Link href="/me/saved" className="flex items-center w-full">
-                      Saved Posts
-                    </Link>
-                  </DropdownMenuItem> */}
-                  <DropdownMenuItem>
-                    <Link
-                      href="/me/collections"
-                      className="flex items-center w-full"
-                    >
-                      My Collections
-                    </Link>
+
+                  <DropdownMenuSeparator />
+
+                  {/* Look Book Section - Expandable */}
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setLookBookExpanded(!lookBookExpanded);
+                    }}
+                    className="cursor-pointer"
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center gap-2">
+                        <BookOpen className="h-4 w-4" />
+                        Look Book
+                      </div>
+                      {lookBookExpanded ? (
+                        <ChevronDown className="h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4" />
+                      )}
+                    </div>
                   </DropdownMenuItem>
+
+                  {/* Look Book Submenu */}
+                  {lookBookExpanded && (
+                    <>
+                      <DropdownMenuItem className="pl-8">
+                        <Link href="/me/saved" className="flex items-center w-full gap-2">
+                          <Bookmark className="h-4 w-4" />
+                          Saved Posts
+                        </Link>
+                      </DropdownMenuItem>
+
+                      <DropdownMenuItem className="pl-8">
+                        <Link
+                          href="/me/collections"
+                          className="flex items-center w-full gap-2"
+                        >
+                          <FolderHeart className="h-4 w-4" />
+                          My Collections
+                        </Link>
+                      </DropdownMenuItem>
+                    </>
+                  )}
+
+                  <DropdownMenuSeparator />
+
                   <DropdownMenuItem>
                     <Link
                       href="/me/settings"

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo } from "react"
+import { useCallback, useMemo, useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { MessageCircle, BookmarkPlus, MoreHorizontal, Flag, Trash, Edit, Download } from "lucide-react"
 import {
@@ -17,9 +17,9 @@ import { ReactionButton } from "@/components/reaction-button"
 import { ReactionSummary } from "@/components/reaction-summary"
 import { useAuth } from "@/hooks/use-auth"
 import AddToCollectionDialog from "@/components/collections/add-to-collection-dialog"
-import { useCollections } from "@/context/collections-context"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
+import SavePostButton from "@/components/save-post-button"
 import type { Post } from "@/lib/post-data"
 import type { ReactionType } from "@/lib/services/reaction-service"
 
@@ -51,11 +51,18 @@ export function PostDetailActions({
 
   const { isAuthenticated } = useAuth()
 
-  const { isSaved } = useCollections()
 
   const { toast } = useToast()
 
   const router = useRouter()
+
+  // Local state for userSaved to handle updates (same as in post.tsx)
+  const [postUserSaved, setPostUserSaved] = useState(post?.userSaved || false);
+
+  // Update userSaved state when post changes
+  useEffect(() => {
+    setPostUserSaved(post?.userSaved || false);
+  }, [post?.userSaved]);
 
   const normalizedPostId = useMemo(() => {
     if (typeof post?.documentId === "string" && post.documentId.length > 0) {
@@ -234,7 +241,6 @@ export function PostDetailActions({
     return validTypes.includes(value) ? value : null
   }, [post?.userReaction])
 
-  const isPostSaved = normalizedPostId !== null ? isSaved(normalizedPostId) : false
 
   const handleCollectionAdded = useCallback((collectionName: string) => {
 
@@ -250,7 +256,10 @@ export function PostDetailActions({
 
   const collectionPostTitle = post?.imageUrl || post?.image || designTitle
 
-
+  // Handle save state change from SavePostButton
+  const handleSaveStateChange = useCallback((postId: number, isSaved: boolean) => {
+    setPostUserSaved(isSaved);
+  }, []);
 
   const handleDownload = () => {
 
@@ -378,7 +387,16 @@ export function PostDetailActions({
 
           </Button>
 
-
+          <SavePostButton
+            postId={typeof post?.id === 'number' ? post.id : parseInt((post?.id || postId)?.toString() || '0')}
+            postDocumentId={post?.documentId || (typeof postId === 'string' ? postId : undefined)}
+            userSaved={postUserSaved}
+            onSaveStateChange={handleSaveStateChange}
+            variant="ghost"
+            size="default"
+            className="flex-1 justify-center py-2 h-auto"
+            showLabel={true}
+          />
 
           <div className="flex-1 flex justify-center">
 
@@ -412,9 +430,9 @@ export function PostDetailActions({
 
                   variant="ghost"
 
-                  className={`flex-1 justify-center gap-2 ${isPostSaved ? "text-pink-500" : ""}`}
+                  className={`flex-1 justify-center gap-2 ${postUserSaved ? "text-pink-500" : ""}`}
 
-                  aria-label={isPostSaved ? "Manage collections" : "Save to collection"}
+                  aria-label={postUserSaved ? "Manage collections" : "Save to collection"}
 
                 >
 
@@ -422,7 +440,7 @@ export function PostDetailActions({
 
                   <span className="text-sm font-medium hidden md:inline-block">
 
-                    {isPostSaved ? "Manage collections" : "Save"}
+                    {postUserSaved ? "Manage Collections" : "Save Collection"}
 
                   </span>
 
@@ -448,7 +466,7 @@ export function PostDetailActions({
 
               <BookmarkPlus className="h-5 w-5" />
 
-              <span className="text-sm font-medium hidden md:inline-block">Save</span>
+              <span className="text-sm font-medium hidden md:inline-block">Save Collection</span>
 
             </Button>
 
@@ -494,7 +512,7 @@ export function PostDetailActions({
 
                         <BookmarkPlus className="h-4 w-4 mr-2" />
 
-                        {isPostSaved ? "Manage collections" : "Add to collection"}
+                        {postUserSaved ? "Manage Collections" : "Add to Collection"}
 
                       </DropdownMenuItem>
 
