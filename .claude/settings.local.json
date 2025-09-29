@@ -21,7 +21,13 @@
       "Bash(timeout 30 npm run dev:*)",
       "Bash(timeout 45 npm run dev)",
       "Bash(npx web-push:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(timeout 15 npm run dev)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(timeout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
