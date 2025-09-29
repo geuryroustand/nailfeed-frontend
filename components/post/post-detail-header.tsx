@@ -1,73 +1,97 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { ArrowLeft, MoreHorizontal, Download, Trash2, Edit, Flag, AlertCircle, BookmarkPlus } from "lucide-react"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
+import Link from "next/link";
+import {
+  ArrowLeft,
+  MoreHorizontal,
+  Download,
+  Trash2,
+  Edit,
+  Flag,
+  AlertCircle,
+  BookmarkPlus,
+} from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
-import { usePostDeletion } from "@/hooks/use-post-deletion"
-import { useAuth } from "@/hooks/use-auth"
-import { useRouter } from "next/navigation"
-import { useCallback, useMemo, useState } from "react"
-import { formatDate, formatBackendDate } from "@/lib/date-utils"
-import type { Post } from "@/lib/post-data"
-import EditPostModal from "@/components/edit-post-modal"
-import AddToCollectionDialog from "@/components/collections/add-to-collection-dialog"
-import { useCollections } from "@/context/collections-context"
-import { useToast } from "@/hooks/use-toast"
+} from "@/components/ui/dropdown-menu";
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
+import { usePostDeletion } from "@/hooks/use-post-deletion";
+import { useAuth } from "@/hooks/use-auth";
+import { useRouter } from "next/navigation";
+import { useCallback, useMemo, useState } from "react";
+import { formatDate, formatBackendDate } from "@/lib/date-utils";
+import type { Post } from "@/lib/post-data";
+import EditPostModal from "@/components/edit-post-modal";
+import AddToCollectionDialog from "@/components/collections/add-to-collection-dialog";
+import { useCollections } from "@/context/collections-context";
+import { useToast } from "@/hooks/use-toast";
 
 interface PostDetailHeaderProps {
-  post: Post
-  onEdit?: () => void
-  onReport?: () => void
+  post: Post;
+  onEdit?: () => void;
+  onReport?: () => void;
 }
 
-export default function PostDetailHeader({ post, onEdit, onReport }: PostDetailHeaderProps) {
+export default function PostDetailHeader({
+  post,
+  onEdit,
+  onReport,
+}: PostDetailHeaderProps) {
   const [editModalOpen, setEditModalOpen] = useState(false);
 
   // Internal handlers for Edit and Report when not provided
-  const handleEdit = onEdit || (() => {
-    setEditModalOpen(true);
-  });
+  const handleEdit =
+    onEdit ||
+    (() => {
+      setEditModalOpen(true);
+    });
 
-  const handleReport = onReport || (() => {
-    // TODO: Implement report functionality
-    console.log("Report functionality not implemented yet");
-  });
-  const { user, isAuthenticated } = useAuth() || { user: null, isAuthenticated: false }
-  const router = useRouter()
-  const { isSaved } = useCollections()
-  const { toast } = useToast()
+  const handleReport =
+    onReport ||
+    (() => {
+      // TODO: Implement report functionality
+      console.log("Report functionality not implemented yet");
+    });
+  const { user, isAuthenticated } = useAuth() || {
+    user: null,
+    isAuthenticated: false,
+  };
+  const router = useRouter();
+  const { isSaved } = useCollections();
+  const { toast } = useToast();
   const normalizedPostId = useMemo(() => {
     if (typeof post?.documentId === "string" && post.documentId.length > 0) {
-      return post.documentId
+      return post.documentId;
     }
 
     if (typeof post?.id === "string" && post.id.length > 0) {
-      return post.id
+      return post.id;
     }
 
     if (typeof post?.id === "number" && Number.isFinite(post.id)) {
-      return post.id.toString()
+      return post.id.toString();
     }
 
-    return null
-  }, [post?.documentId, post?.id])
-  const isPostSaved = normalizedPostId !== null ? isSaved(normalizedPostId) : false
-  const postTitle = post.title || post.description
-  const handleCollectionAdded = useCallback((collectionName: string) => {
-    toast({
-      title: "Saved to collection",
-      description: `Added to ${collectionName}`,
-    })
-  }, [toast])
+    return null;
+  }, [post?.documentId, post?.id]);
+  const isPostSaved =
+    normalizedPostId !== null ? isSaved(normalizedPostId) : false;
+  const postTitle = post.title || post.description;
+  const handleCollectionAdded = useCallback(
+    (collectionName: string) => {
+      toast({
+        title: "Saved to collection",
+        description: `Added to ${collectionName}`,
+      });
+    },
+    [toast]
+  );
 
   // Post deletion hook
   const {
@@ -79,9 +103,9 @@ export default function PostDetailHeader({ post, onEdit, onReport }: PostDetailH
   } = usePostDeletion({
     onPostDeleted: (postId: number) => {
       // Redirect to home after deletion
-      router.push('/')
+      router.push("/");
     },
-  })
+  });
 
   // Check if the current user is the post owner
   const isPostOwner = () => {
@@ -113,25 +137,30 @@ export default function PostDetailHeader({ post, onEdit, onReport }: PostDetailH
 
   // Handle download
   const handleDownload = () => {
-    const imageUrl = post?.image || post?.media?.[0]?.url
+    const imageUrl = post?.image || post?.media?.[0]?.url;
     if (imageUrl && !imageUrl.includes("placeholder.svg")) {
-      const link = document.createElement("a")
-      link.href = imageUrl
-      link.download = `nail-design-${post.documentId || post.id}.jpg`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
+      const link = document.createElement("a");
+      link.href = imageUrl;
+      link.download = `nail-design-${post.documentId || post.id}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
-  }
+  };
 
   // Format the timestamp - check for both createdAt (backend format) and timestamp
-  const formattedDate = post.createdAt ? formatBackendDate(post.createdAt) : formatDate(post.timestamp)
+  const formattedDate = post.createdAt
+    ? formatBackendDate(post.createdAt)
+    : formatDate(post.timestamp);
 
   return (
     <>
       {/* Back button */}
       <div className="mb-4">
-        <Link href="/" className="inline-flex items-center text-gray-600 hover:text-gray-900 transition-colors">
+        <Link
+          href="/"
+          className="inline-flex items-center text-gray-600 hover:text-gray-900 transition-colors"
+        >
           <ArrowLeft className="h-4 w-4 mr-2" />
           <span>Back to feed</span>
         </Link>
@@ -141,7 +170,10 @@ export default function PostDetailHeader({ post, onEdit, onReport }: PostDetailH
       <div className="p-4 sm:p-6 border-b bg-white rounded-t-xl shadow-sm mb-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center">
-            <Link href={`/profile/${post.user?.documentId || post.username}`} aria-label={`View ${post.username}'s profile`}>
+            <Link
+              href={`/profile/${post.user?.documentId || post.username}`}
+              aria-label={`View ${post.username}'s profile`}
+            >
               <Avatar className="h-12 w-12 sm:h-14 sm:w-14 transition-transform hover:scale-105">
                 <AvatarImage
                   src={post.userImage || "/abstract-user-icon.png"}
@@ -150,7 +182,9 @@ export default function PostDetailHeader({ post, onEdit, onReport }: PostDetailH
                   height={56}
                   loading="eager"
                 />
-                <AvatarFallback>{post.username?.substring(0, 2).toUpperCase() || "UN"}</AvatarFallback>
+                <AvatarFallback>
+                  {post.username?.substring(0, 2).toUpperCase() || "UN"}
+                </AvatarFallback>
               </Avatar>
             </Link>
             <div className="ml-3">
@@ -183,7 +217,9 @@ export default function PostDetailHeader({ post, onEdit, onReport }: PostDetailH
                         onSelect={(event) => event.preventDefault()}
                       >
                         <BookmarkPlus className="h-4 w-4 mr-2" />
-                        {isPostSaved ? "Manage collections" : "Add to collection"}
+                        {isPostSaved
+                          ? "Manage collections"
+                          : "Add to collection"}
                       </DropdownMenuItem>
                     }
                   />
@@ -191,12 +227,13 @@ export default function PostDetailHeader({ post, onEdit, onReport }: PostDetailH
                 </>
               )}
               {/* Download button - always visible if image exists */}
-              {(post?.image || post?.media?.[0]?.url) && !post?.image?.includes("placeholder.svg") && (
-                <DropdownMenuItem onClick={handleDownload}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Download
-                </DropdownMenuItem>
-              )}
+              {(post?.image || post?.media?.[0]?.url) &&
+                !post?.image?.includes("placeholder.svg") && (
+                  <DropdownMenuItem onClick={handleDownload}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Download
+                  </DropdownMenuItem>
+                )}
 
               {/* Owner-only actions */}
               {isPostOwner() && (
@@ -274,6 +311,5 @@ export default function PostDetailHeader({ post, onEdit, onReport }: PostDetailH
         />
       )}
     </>
-  )
+  );
 }
-
