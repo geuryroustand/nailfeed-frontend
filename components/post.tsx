@@ -693,7 +693,7 @@ export default function Post({
                     <QuickFollowButton
                       username={post.username}
                       userDocumentId={post.userDocumentId || post.user?.documentId}
-                      initialIsFollowing={false}
+                      initialIsFollowing={post.isFollowing || false}
                     />
                   )}
                 </div>

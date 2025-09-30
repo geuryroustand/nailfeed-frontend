@@ -119,6 +119,7 @@ export class PostService {
           "viewsCount",
           "shareCount",
           "postStatus",
+          "isFollowing",
         ],
         populate: {
           user: {
@@ -238,6 +239,7 @@ export class PostService {
           "viewsCount",
           "shareCount",
           "postStatus",
+          "isFollowing",
         ],
         populate: {
           user: {

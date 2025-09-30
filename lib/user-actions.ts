@@ -195,19 +195,16 @@ export async function toggleFollow(
 
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    // Get updated follower count
-    const newFollowerCount = await getFollowerCount(apiUrl, token, userId);
     const newIsFollowing = !existingFollow; // Toggle the state
 
     console.log(
-      `[v0] Final result - isFollowing: ${newIsFollowing}, followerCount: ${newFollowerCount}`
+      `[v0] Final result - isFollowing: ${newIsFollowing}`
     );
 
     // Return success response with the new state
     const result: FollowActionResult = {
       success: true,
       isFollowing: newIsFollowing,
-      newFollowerCount,
       message: newIsFollowing
         ? `Now following ${username}`
         : `Unfollowed ${username}`,
@@ -225,64 +222,6 @@ export async function toggleFollow(
       isFollowing: false,
       message: "Failed to update follow status",
     };
-  }
-}
-
-// Helper function to get follower count
-async function getFollowerCount(
-  apiUrl: string,
-  token: string,
-  userId: string | number
-): Promise<number> {
-  try {
-    const userResponse = await safeFetch(
-      `${apiUrl}/api/users/${userId}?populate=followers`,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-
-    const userData = await userResponse.json();
-
-    // Handle different response formats
-    const followers =
-      userData.data?.attributes?.followers?.data || userData.followers || [];
-    return Array.isArray(followers) ? followers.length : 0;
-  } catch (error) {
-    console.error("Error getting follower count:", error);
-    return 0;
-  }
-}
-
-// Helper function to get following count
-async function getFollowingCount(
-  apiUrl: string,
-  token: string,
-  userId: string | number
-): Promise<number> {
-  try {
-    const userResponse = await safeFetch(
-      `${apiUrl}/api/users/${userId}?populate=following`,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-
-    const userData = await userResponse.json();
-
-    // Handle different response formats
-    const following =
-      userData.data?.attributes?.following?.data || userData.following || [];
-    return Array.isArray(following) ? following.length : 0;
-  } catch (error) {
-    console.error("Error getting following count:", error);
-    return 0;
   }
 }
 
