@@ -1,4 +1,4 @@
-﻿import type { ReactNode } from "react"
+import type { ReactNode } from "react"
 import { unstable_noStore as noStore } from "next/cache"
 import { AuthProvider } from "@/context/auth-context"
 import { validateSession } from "@/lib/auth/session"

@@ -1,0 +1,23 @@
+{
+  "collectionName": "components_tutorial_materials",
+  "info": {
+    "displayName": "Tutorial Material",
+    "description": "Material or tool needed for a tutorial"
+  },
+  "options": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true,
+      "maxLength": 200
+    },
+    "brand": {
+      "type": "string",
+      "maxLength": 100
+    },
+    "optional": {
+      "type": "boolean",
+      "default": false
+    }
+  }
+}

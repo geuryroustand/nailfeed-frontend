@@ -228,4 +228,3 @@ export default function EditPostModal({ post, onClose, onPostUpdated }: EditPost
     </motion.div>
   )
 }
-

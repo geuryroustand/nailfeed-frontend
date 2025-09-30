@@ -1,0 +1,104 @@
+{
+  "kind": "collectionType",
+  "collectionName": "tutorials",
+  "info": {
+    "singularName": "tutorial",
+    "pluralName": "tutorials",
+    "displayName": "Tutorial",
+    "description": "Nail art tutorials with step-by-step instructions"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "title": {
+      "type": "string",
+      "required": true,
+      "maxLength": 200
+    },
+    "slug": {
+      "type": "uid",
+      "targetField": "title",
+      "required": true
+    },
+    "description": {
+      "type": "text",
+      "required": true,
+      "maxLength": 1000
+    },
+    "level": {
+      "type": "enumeration",
+      "enum": ["beginner", "intermediate", "advanced"],
+      "required": true,
+      "default": "beginner"
+    },
+    "technique": {
+      "type": "enumeration",
+      "enum": ["acrylic", "gel", "stamping", "hand-painted", "ombre", "3d", "french", "marble", "chrome", "other"],
+      "required": true
+    },
+    "duration": {
+      "type": "integer",
+      "required": true,
+      "min": 1,
+      "max": 300,
+      "description": "Duration in minutes"
+    },
+    "videoUrl": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "Optional video URL (YouTube, Vimeo, or direct link)"
+    },
+    "thumbnail": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": ["images"]
+    },
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user",
+      "inversedBy": "tutorials"
+    },
+    "steps": {
+      "type": "component",
+      "repeatable": true,
+      "component": "tutorial.step",
+      "required": true,
+      "min": 1
+    },
+    "materials": {
+      "type": "component",
+      "repeatable": true,
+      "component": "tutorial.material"
+    },
+    "tags": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::tag.tag",
+      "inversedBy": "tutorials"
+    },
+    "likesCount": {
+      "type": "integer",
+      "default": 0,
+      "min": 0
+    },
+    "commentsCount": {
+      "type": "integer",
+      "default": 0,
+      "min": 0
+    },
+    "savesCount": {
+      "type": "integer",
+      "default": 0,
+      "min": 0
+    },
+    "viewsCount": {
+      "type": "integer",
+      "default": 0,
+      "min": 0
+    }
+  }
+}

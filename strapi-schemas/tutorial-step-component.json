@@ -1,0 +1,36 @@
+{
+  "collectionName": "components_tutorial_steps",
+  "info": {
+    "displayName": "Tutorial Step",
+    "description": "Individual step in a tutorial"
+  },
+  "options": {},
+  "attributes": {
+    "stepNumber": {
+      "type": "integer",
+      "required": true,
+      "min": 1
+    },
+    "title": {
+      "type": "string",
+      "required": true,
+      "maxLength": 200
+    },
+    "description": {
+      "type": "text",
+      "required": true,
+      "maxLength": 1000
+    },
+    "estimatedDuration": {
+      "type": "integer",
+      "min": 1,
+      "description": "Estimated duration in minutes for this step"
+    },
+    "image": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": ["images"]
+    }
+  }
+}

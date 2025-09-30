@@ -327,8 +327,3 @@ export async function addMediaToPost(postDocumentId: string, files: File[]) {
     }
   }
 }
-
-
-
-
-

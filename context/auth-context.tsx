@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
@@ -121,7 +121,3 @@ export function useAuth() {
   }
   return context
 }
-
-
-
-

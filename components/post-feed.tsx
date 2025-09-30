@@ -565,14 +565,3 @@ export default function PostFeed({
     </div>
   )
 }
-
-
-
-
-
-
-
-
-
-
-

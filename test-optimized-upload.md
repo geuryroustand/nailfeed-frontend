@@ -27,19 +27,19 @@ I have successfully implemented the optimized media upload solution using Strapi
 ### 📈 Performance Improvements
 
 **Before (Complex Flow):**
-```
+\`\`\`
 POST /api/posts → 1 query (post creation)
 + processMediaItems() → N queries (media items)
 + relation updates → N queries (connections)
 = 1 + 2N database operations
-```
+\`\`\`
 
 **After (Optimized Flow):**
-```
+\`\`\`
 POST /api/posts → 1 query (post creation)
 POST /api/upload → 1 operation (media + relations)
 = 2 operations total (regardless of file count)
-```
+\`\`\`
 
 **Performance Gains:**
 - 50-80% fewer database operations
@@ -78,7 +78,7 @@ The backend already supports:
 ### 📝 Usage Examples
 
 **Using the new optimized service:**
-```typescript
+\`\`\`typescript
 // Upload media directly to a post
 const uploadedFiles = await OptimizedMediaUploadService.uploadMediaToPost(
   files,
@@ -87,15 +87,15 @@ const uploadedFiles = await OptimizedMediaUploadService.uploadMediaToPost(
 
 // Create post with the new action
 const result = await createOptimizedPost(formData)
-```
+\`\`\`
 
 **Using the new component:**
-```tsx
+\`\`\`tsx
 <OptimizedPostCreation
   onPostCreated={handlePostCreated}
   onClose={handleClose}
 />
-```
+\`\`\`
 
 ### 🧪 Testing Status
 
