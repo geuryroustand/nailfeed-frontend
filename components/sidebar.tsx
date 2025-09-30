@@ -1,8 +1,8 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import { useAuth } from "@/hooks/use-auth";
-import { motion } from "framer-motion";
+import { useState } from "react"
+import { useAuth } from "@/hooks/use-auth"
+import { motion } from "framer-motion"
 import {
   Home,
   Search,
@@ -12,25 +12,25 @@ import {
   User,
   Menu,
   Bookmark,
-  Palette,
   Lightbulb,
   Download,
-} from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import Link from "next/link";
-import { useRouter, usePathname } from "next/navigation";
+  BookOpen,
+} from "lucide-react"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
+import Link from "next/link"
+import { useRouter, usePathname } from "next/navigation"
 
 interface SidebarProps {
-  activeItem?: string;
+  activeItem?: string
 }
 
 export default function Sidebar({ activeItem = "home" }: SidebarProps) {
-  const [collapsed, setCollapsed] = useState(false);
-  const { isAuthenticated } = useAuth();
-  const router = useRouter();
-  const pathname = usePathname();
+  const [collapsed, setCollapsed] = useState(false)
+  const { isAuthenticated } = useAuth()
+  const router = useRouter()
+  const pathname = usePathname()
 
   const menuItems = [
     { id: "home", icon: Home, label: "Home", href: "/" },
@@ -41,6 +41,12 @@ export default function Sidebar({ activeItem = "home" }: SidebarProps) {
       icon: Lightbulb,
       label: "Community Ideas",
       href: "/suggestions",
+    },
+    {
+      id: "tutorials",
+      icon: BookOpen,
+      label: "Tutorials",
+      href: "/tutorials",
     },
     { id: "messages", icon: MessageCircle, label: "Messages", href: "/" },
     { id: "notifications", icon: Heart, label: "Notifications", href: "/" },
@@ -59,13 +65,13 @@ export default function Sidebar({ activeItem = "home" }: SidebarProps) {
       href: "/app-setup",
     },
     // { id: "mood", icon: Palette, label: "Mood", href: "/mood" },
-  ];
+  ]
 
   return (
     <div
       className={cn(
         "h-full flex flex-col bg-white py-6 transition-all duration-300",
-        collapsed ? "items-center" : "items-start"
+        collapsed ? "items-center" : "items-start",
       )}
     >
       <div className="px-4 mb-8">
@@ -84,14 +90,14 @@ export default function Sidebar({ activeItem = "home" }: SidebarProps) {
 
       <div className="flex-1 w-full">
         {menuItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeItem === item.id;
+          const Icon = item.icon
+          const isActive = activeItem === item.id
 
           // Items that require authentication
-          const requiresAuth = ["messages", "notifications"].includes(item.id);
+          const requiresAuth = ["messages", "notifications"].includes(item.id)
 
           if (!isAuthenticated && requiresAuth) {
-            return null;
+            return null
           }
 
           if (requiresAuth) {
@@ -100,29 +106,25 @@ export default function Sidebar({ activeItem = "home" }: SidebarProps) {
                 <motion.div
                   className={cn(
                     "flex items-center w-full px-4 py-3 mb-1 rounded-lg transition-colors cursor-pointer",
-                    isActive
-                      ? "font-medium text-pink-500"
-                      : "text-gray-700 hover:bg-gray-100",
-                    collapsed ? "justify-center" : "justify-start"
+                    isActive ? "font-medium text-pink-500" : "text-gray-700 hover:bg-gray-100",
+                    collapsed ? "justify-center" : "justify-start",
                   )}
                   whileHover={{ x: collapsed ? 0 : 4 }}
                   whileTap={{ scale: 0.97 }}
                   onClick={() => {
                     if (isAuthenticated) {
-                      router.push(item.href);
+                      router.push(item.href)
                     } else {
-                      const callbackUrl = encodeURIComponent(item.href);
-                      router.push(`/auth?callbackUrl=${callbackUrl}`);
+                      const callbackUrl = encodeURIComponent(item.href)
+                      router.push(`/auth?callbackUrl=${callbackUrl}`)
                     }
                   }}
                 >
-                  <Icon
-                    className={cn("h-6 w-6", isActive && "text-pink-500")}
-                  />
+                  <Icon className={cn("h-6 w-6", isActive && "text-pink-500")} />
                   {!collapsed && <span className="ml-4">{item.label}</span>}
                 </motion.div>
               </div>
-            );
+            )
           }
 
           // For public routes, use regular Link
@@ -131,10 +133,8 @@ export default function Sidebar({ activeItem = "home" }: SidebarProps) {
               <motion.div
                 className={cn(
                   "flex items-center w-full px-4 py-3 mb-1 rounded-lg transition-colors",
-                  isActive
-                    ? "font-medium text-pink-500"
-                    : "text-gray-700 hover:bg-gray-100",
-                  collapsed ? "justify-center" : "justify-start"
+                  isActive ? "font-medium text-pink-500" : "text-gray-700 hover:bg-gray-100",
+                  collapsed ? "justify-center" : "justify-start",
                 )}
                 whileHover={{ x: collapsed ? 0 : 4 }}
                 whileTap={{ scale: 0.97 }}
@@ -143,7 +143,7 @@ export default function Sidebar({ activeItem = "home" }: SidebarProps) {
                 {!collapsed && <span className="ml-4">{item.label}</span>}
               </motion.div>
             </Link>
-          );
+          )
         })}
       </div>
 
@@ -151,12 +151,7 @@ export default function Sidebar({ activeItem = "home" }: SidebarProps) {
         {isAuthenticated ? (
           <>
             <Link href="/me" className="w-full block">
-              <div
-                className={cn(
-                  "flex items-center px-4 py-3",
-                  collapsed ? "justify-center" : "justify-start"
-                )}
-              >
+              <div className={cn("flex items-center px-4 py-3", collapsed ? "justify-center" : "justify-start")}>
                 <Avatar className="h-8 w-8">
                   <AvatarFallback>YP</AvatarFallback>
                 </Avatar>
@@ -196,5 +191,5 @@ export default function Sidebar({ activeItem = "home" }: SidebarProps) {
         )}
       </div>
     </div>
-  );
+  )
 }
