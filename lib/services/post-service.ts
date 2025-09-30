@@ -593,15 +593,3 @@ export class PostService {
     minRequestInterval: REQUEST_CONFIG.minRequestInterval,
   };
 }
-
-
-
-
-
-
-
-
-
-
-
-

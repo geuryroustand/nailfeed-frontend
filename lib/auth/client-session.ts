@@ -1,4 +1,4 @@
-﻿let cachedAuthState: { value: boolean; expiresAt: number } | null = null
+let cachedAuthState: { value: boolean; expiresAt: number } | null = null
 let inflightRequest: Promise<boolean> | null = null
 
 interface ClientSessionOptions {

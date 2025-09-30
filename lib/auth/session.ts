@@ -1,4 +1,4 @@
-﻿"use server"
+"use server"
 
 import { cookies } from "next/headers"
 import { SignJWT } from "jose"
@@ -203,4 +203,3 @@ export async function validateSession(): Promise<{ user: User | null; session: S
 
   return { user, session }
 }
-

@@ -654,11 +654,3 @@ export function ProfileGalleryClient({ posts: initialPosts, username }: ProfileG
     </div>
   )
 }
-
-
-
-
-
-
-
-

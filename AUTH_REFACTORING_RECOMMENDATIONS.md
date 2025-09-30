@@ -25,7 +25,7 @@ After analyzing the authentication implementation as a senior developer, I've id
   - `app/api/auth/logout/route.ts` (enhance)
   - `app/auth/actions.ts` (refactor)
 - **Implementation**:
-  ```typescript
+  \`\`\`typescript
   // Set secure HttpOnly cookie
   cookies().set('session', jwt, {
     httpOnly: true,
@@ -34,7 +34,7 @@ After analyzing the authentication implementation as a senior developer, I've id
     maxAge: rememberMe ? 60 * 60 * 24 * 30 : 60 * 60 * 24, // 30d or 1d
     path: '/'
   })
-  ```
+  \`\`\`
 
 #### Task 1.2: Create Server-Side Session Validation Middleware
 - **Goal**: Centralize auth validation on the server
@@ -164,7 +164,7 @@ After analyzing the authentication implementation as a senior developer, I've id
 ## Technical Specifications
 
 ### New File Structure
-```
+\`\`\`
 lib/
   auth/
     ├── session.ts          # Server-side session management
@@ -182,10 +182,10 @@ app/api/auth/
 components/auth/
   ├── auth-provider-server.tsx  # Server auth provider
   └── session-manager.tsx       # Session management UI
-```
+\`\`\`
 
 ### Environment Variables Required
-```
+\`\`\`
 # Server-side only (already exists)
 JWT_SECRET=your-jwt-secret
 REFRESH_TOKEN_SECRET=your-refresh-secret
@@ -193,7 +193,7 @@ REFRESH_TOKEN_SECRET=your-refresh-secret
 # Session configuration
 SESSION_MAX_AGE=86400
 REFRESH_TOKEN_MAX_AGE=604800
-```
+\`\`\`
 
 ### Breaking Changes
 1. **localStorage JWT removal**: Applications relying on client-side JWT access will need updates

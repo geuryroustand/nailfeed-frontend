@@ -1,4 +1,4 @@
-﻿import { getClientSessionStatus } from "@/lib/auth/client-session"
+import { getClientSessionStatus } from "@/lib/auth/client-session"
 import qs from "qs";
 
 export interface NetworkUser {
@@ -271,4 +271,3 @@ export async function toggleFollowStatus(
     };
   }
 }
-

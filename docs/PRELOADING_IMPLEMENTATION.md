@@ -25,7 +25,7 @@ This document describes the implementation of an advanced, intelligent preloadin
 
 ### 1. Multi-Layer Preloading Strategy
 
-```typescript
+\`\`\`typescript
 // lib/config.ts - Advanced Configuration
 export const PRELOADING = {
   ENABLED: true,                    // Master switch
@@ -37,11 +37,11 @@ export const PRELOADING = {
   NETWORK_AWARE: true,              // Adjust based on connection
   SCROLL_PREDICTION_SAMPLES: 10,    // Velocity calculation samples
 };
-```
+\`\`\`
 
 ### 2. Scroll Velocity Analysis Hook
 
-```typescript
+\`\`\`typescript
 // hooks/use-scroll-velocity.ts
 export function useScrollVelocity(): ScrollMetrics {
   // Real-time velocity calculation
@@ -50,7 +50,7 @@ export function useScrollVelocity(): ScrollMetrics {
   // Fast scroll detection
   // Memory-efficient sample tracking
 }
-```
+\`\`\`
 
 **Features:**
 - ✅ **60fps Velocity Tracking**: Using RAF for smooth calculations
@@ -61,7 +61,7 @@ export function useScrollVelocity(): ScrollMetrics {
 
 ### 3. Intelligent Preload Manager
 
-```typescript
+\`\`\`typescript
 // hooks/use-preload-manager.ts
 export function usePreloadManager(): PreloadInterface {
   // Scroll-based triggering
@@ -70,7 +70,7 @@ export function usePreloadManager(): PreloadInterface {
   // LRU eviction policy
   // Performance metrics
 }
-```
+\`\`\`
 
 **Advanced Features:**
 - ✅ **Scroll Velocity Triggering**: Preload based on scroll speed
@@ -84,7 +84,7 @@ export function usePreloadManager(): PreloadInterface {
 ### Scroll Velocity Tracking
 
 #### Advanced Velocity Calculation
-```typescript
+\`\`\`typescript
 // Real-time velocity with smoothing
 const currentVelocity = timeDiff > 0 ? (positionDiff / timeDiff) * 1000 : 0
 const absoluteVelocity = Math.abs(currentVelocity)
@@ -95,7 +95,7 @@ const acceleration = currentVelocity - lastVelocityRef.current
 // Direction and speed classification
 const direction = positionDiff >= 0 ? 'down' : 'up'
 const isFastScrolling = absoluteVelocity > fastThreshold
-```
+\`\`\`
 
 #### Performance Optimizations
 - **RAF-based updates**: 60fps smooth tracking
@@ -106,7 +106,7 @@ const isFastScrolling = absoluteVelocity > fastThreshold
 ### Network-Aware Loading
 
 #### Connection Type Adaptation
-```typescript
+\`\`\`typescript
 const adjustedPreloadDistance = useMemo(() => {
   if (!PRELOADING.NETWORK_AWARE) return PRELOADING.PRELOAD_DISTANCE
 
@@ -124,7 +124,7 @@ const adjustedPreloadDistance = useMemo(() => {
 
   return PRELOADING.PRELOAD_DISTANCE
 }, [networkInfo])
-```
+\`\`\`
 
 #### Data Usage Optimization
 | Connection Type | Preload Distance | Behavior |
@@ -138,7 +138,7 @@ const adjustedPreloadDistance = useMemo(() => {
 ### Smart Cache Management
 
 #### LRU Cache with TTL
-```typescript
+\`\`\`typescript
 // Automatic cache cleanup
 const cleanExpiredCache = useCallback(() => {
   const now = Date.now()
@@ -166,7 +166,7 @@ const evictLRUIfNeeded = useCallback(() => {
     return Object.fromEntries(toKeep)
   })
 }, [])
-```
+\`\`\`
 
 #### Cache Performance Metrics
 - **Hit Rate Tracking**: Monitor cache effectiveness
@@ -177,7 +177,7 @@ const evictLRUIfNeeded = useCallback(() => {
 ### Intelligent Triggering Logic
 
 #### Multi-Factor Preload Decision
-```typescript
+\`\`\`typescript
 const triggerPreloading = useCallback(() => {
   if (!enabled || !hasMore) return
 
@@ -207,12 +207,12 @@ const triggerPreloading = useCallback(() => {
     }
   }
 }, [/* dependencies */])
-```
+\`\`\`
 
 ### Integration with Feed Component
 
 #### Cache-First Loading Strategy
-```typescript
+\`\`\`typescript
 // Enhanced loadMorePosts with cache integration
 const loadMorePosts = async () => {
   // Check cache first for instant loading
@@ -227,7 +227,7 @@ const loadMorePosts = async () => {
   // Fallback to network request
   await loadFromNetwork()
 }
-```
+\`\`\`
 
 ## Performance Metrics
 
@@ -261,13 +261,13 @@ const loadMorePosts = async () => {
 ### Debug Components
 
 #### Preload Debug Panel (Development Only)
-```typescript
+\`\`\`typescript
 <PreloadDebug
   preloadManager={preloadManager}
   currentPage={currentPage}
   totalPosts={posts.length}
 />
-```
+\`\`\`
 
 **Features:**
 - Real-time preload status
@@ -280,7 +280,7 @@ const loadMorePosts = async () => {
 ### Configuration Management
 
 #### Environment-Specific Tuning
-```typescript
+\`\`\`typescript
 // Development: Aggressive preloading for testing
 const DEV_PRELOADING = {
   ...PRELOADING,
@@ -294,7 +294,7 @@ const PROD_PRELOADING = {
   PRELOAD_DISTANCE: 3,
   CACHE_SIZE: 50,
 }
-```
+\`\`\`
 
 ## Testing Strategy
 
@@ -329,7 +329,7 @@ const PROD_PRELOADING = {
 ## Usage Guide
 
 ### Basic Integration
-```typescript
+\`\`\`typescript
 import { usePreloadManager } from '@/hooks/use-preload-manager'
 
 function FeedComponent() {
@@ -355,10 +355,10 @@ function FeedComponent() {
     </div>
   )
 }
-```
+\`\`\`
 
 ### Advanced Configuration
-```typescript
+\`\`\`typescript
 // Custom preload behavior for different sections
 const searchPreloadManager = usePreloadManager({
   enabled: isSearchActive,
@@ -367,7 +367,7 @@ const searchPreloadManager = usePreloadManager({
   // Custom thresholds for search
   onPreloadSuccess: handleSearchPreload,
 })
-```
+\`\`\`
 
 ## Network Optimization
 
@@ -388,7 +388,7 @@ const searchPreloadManager = usePreloadManager({
 ### Planned Features
 
 #### Machine Learning Integration
-```typescript
+\`\`\`typescript
 // Future: ML-based preload prediction
 const PRELOADING_ML = {
   USER_BEHAVIOR_ANALYSIS: true,    // Learn from user patterns
@@ -396,7 +396,7 @@ const PRELOADING_ML = {
   TIME_BASED_PATTERNS: true,       // Daily/weekly usage patterns
   COLLABORATIVE_FILTERING: true,   // Community-based predictions
 }
-```
+\`\`\`
 
 #### Advanced Caching
 - **Service Worker integration**: Persistent cache

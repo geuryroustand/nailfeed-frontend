@@ -1,4 +1,4 @@
-﻿import type { CSSProperties } from "react";
+import type { CSSProperties } from "react";
 
 type GradientPalette = {
   colors: readonly [string, string, string?];

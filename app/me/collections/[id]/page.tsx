@@ -534,4 +534,3 @@ function CollectionPostItem({ post, viewMode, onRemove }: CollectionPostItemProp
     </motion.div>
   )
 }
-
