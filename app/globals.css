@@ -316,6 +316,26 @@
   .scroll-mt-4 {
     scroll-margin-top: 1rem;
   }
+
+  /* Custom cursor blink animation for textarea editor */
+  @keyframes blink {
+    0%, 50% {
+      opacity: 1;
+    }
+    51%, 100% {
+      opacity: 0;
+    }
+  }
+
+  .animate-blink {
+    animation: blink 1s step-end infinite;
+  }
+
+  /* Selection highlight for custom textarea */
+  .text-selection {
+    background-color: rgba(59, 130, 246, 0.3);
+    border-radius: 2px;
+  }
 }
 /* Ensure crop handles are always visible */
 .ReactCrop__crop-selection {

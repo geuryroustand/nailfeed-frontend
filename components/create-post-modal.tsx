@@ -79,6 +79,8 @@ export default function CreatePostModal({
   const router = useRouter();
   const [showTrendingTags, setShowTrendingTags] = useState(false);
   const [cursorPosition, setCursorPosition] = useState(0);
+  const [selectionStart, setSelectionStart] = useState(0);
+  const [selectionEnd, setSelectionEnd] = useState(0);
   const [isFocused, setIsFocused] = useState(false);
   const mounted = useRef(true);
   const [title, setTitle] = useState("");
@@ -269,10 +271,52 @@ export default function CreatePostModal({
     setShowTrendingTags(false);
   };
 
-  // Format content to highlight hashtags
+  // Format content to highlight hashtags and selection
   const formatContentWithHashtags = () => {
     if (!content) return null;
 
+    // If there's a selection, split content into three parts: before, selected, after
+    if (selectionStart !== selectionEnd) {
+      const beforeSelection = content.substring(0, selectionStart);
+      const selectedText = content.substring(selectionStart, selectionEnd);
+      const afterSelection = content.substring(selectionEnd);
+
+      const formatPart = (text: string, key: string, isSelected = false) => {
+        const parts = text.split(/(#\w+)/g);
+        return parts.map((part, index) => {
+          if (part.startsWith("#")) {
+            return (
+              <span
+                key={`${key}-${index}`}
+                className={`text-pink-500 font-medium ${
+                  isSelected ? "bg-blue-200" : ""
+                }`}
+              >
+                {part}
+              </span>
+            );
+          }
+          return (
+            <span
+              key={`${key}-${index}`}
+              className={isSelected ? "bg-blue-200" : ""}
+            >
+              {part}
+            </span>
+          );
+        });
+      };
+
+      return (
+        <>
+          {formatPart(beforeSelection, "before")}
+          {formatPart(selectedText, "selected", true)}
+          {formatPart(afterSelection, "after")}
+        </>
+      );
+    }
+
+    // No selection, just format hashtags
     const parts = content.split(/(#\w+)/g);
     return parts.map((part, index) => {
       if (part.startsWith("#")) {
@@ -698,6 +742,8 @@ export default function CreatePostModal({
   const updateCursorPosition = () => {
     if (textareaRef.current) {
       setCursorPosition(textareaRef.current.selectionStart);
+      setSelectionStart(textareaRef.current.selectionStart);
+      setSelectionEnd(textareaRef.current.selectionEnd);
     }
   };
 
@@ -737,44 +783,31 @@ export default function CreatePostModal({
                   background.animation || ""
                 } relative min-h-[200px] flex items-center justify-center`}
               >
-                <div
-                  className={`w-full text-xl font-semibold border-none focus:outline-none focus:ring-0 p-0 bg-transparent text-center relative ${
+                <textarea
+                  ref={textareaRef}
+                  placeholder="What's on your mind?"
+                  value={content}
+                  onChange={(e) => {
+                    setContent(e.target.value);
+                    updateCursorPosition();
+                  }}
+                  onSelect={updateCursorPosition}
+                  onKeyUp={updateCursorPosition}
+                  onMouseUp={updateCursorPosition}
+                  onClick={updateCursorPosition}
+                  onFocus={() => {
+                    setIsFocused(true);
+                    updateCursorPosition();
+                  }}
+                  onBlur={() => setIsFocused(false)}
+                  className={`w-full text-xl font-semibold resize-none border-none focus:outline-none focus:ring-0 p-0 bg-transparent text-center selection:bg-blue-300 caret-white ${
                     background.type === "color" ||
                     background.type === "gradient"
-                      ? "text-white"
-                      : "text-black"
+                      ? "text-white placeholder:text-white/60"
+                      : "text-black placeholder:text-black/60"
                   }`}
-                >
-                  <div className="relative">
-                    {formatContentWithHashtags()}
-                    {/* Blinking cursor indicator */}
-                    <div
-                      className="absolute inline-block w-0.5 h-5 bg-current animate-blink"
-                      style={{
-                        left: `${getCursorPosition()}px`,
-                        top: "0.25rem",
-                        display: isFocused ? "block" : "none",
-                      }}
-                    />
-                  </div>
-                  <textarea
-                    ref={textareaRef}
-                    placeholder="What's on your mind?"
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    onKeyUp={updateCursorPosition}
-                    onMouseUp={updateCursorPosition}
-                    onFocus={() => setIsFocused(true)}
-                    onBlur={() => setIsFocused(false)}
-                    className={`w-full text-xl font-semibold resize-none border-none focus:outline-none focus:ring-0 p-0 bg-transparent text-center absolute top-0 left-0 opacity-0 z-10 ${
-                      background.type === "color" ||
-                      background.type === "gradient"
-                        ? "text-white"
-                        : "text-black"
-                    }`}
-                    style={{ minHeight: "100px" }}
-                  />
-                </div>
+                  style={{ minHeight: "100px" }}
+                />
                 <Button
                   variant="ghost"
                   size="icon"
@@ -785,34 +818,26 @@ export default function CreatePostModal({
                 </Button>
               </div>
             ) : (
-              <div className="relative">
-                <div className="w-full text-base resize-none border-none focus:outline-none focus:ring-0 p-0 overflow-hidden min-h-[100px] relative">
-                  <div className="relative">
-                    {formatContentWithHashtags()}
-                    {/* Blinking cursor indicator */}
-                    <div
-                      className="absolute inline-block w-0.5 h-5 bg-gray-800 animate-blink"
-                      style={{
-                        left: `${getCursorPosition()}px`,
-                        top: "0.25rem",
-                        display: isFocused ? "block" : "none",
-                      }}
-                    />
-                  </div>
-                </div>
-                <textarea
-                  ref={textareaRef}
-                  placeholder="What's on your mind? Use #hashtags to tag your post!"
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  onKeyUp={updateCursorPosition}
-                  onMouseUp={updateCursorPosition}
-                  onFocus={() => setIsFocused(true)}
-                  onBlur={() => setIsFocused(false)}
-                  className="w-full text-base resize-none border-none focus:outline-none focus:ring-0 p-0 overflow-hidden absolute top-0 left-0 opacity-0 z-10"
-                  style={{ minHeight: "100px" }}
-                />
-              </div>
+              <textarea
+                ref={textareaRef}
+                placeholder="What's on your mind? Use #hashtags to tag your post!"
+                value={content}
+                onChange={(e) => {
+                  setContent(e.target.value);
+                  updateCursorPosition();
+                }}
+                onSelect={updateCursorPosition}
+                onKeyUp={updateCursorPosition}
+                onMouseUp={updateCursorPosition}
+                onClick={updateCursorPosition}
+                onFocus={() => {
+                  setIsFocused(true);
+                  updateCursorPosition();
+                }}
+                onBlur={() => setIsFocused(false)}
+                className="w-full text-base resize-none border-none focus:outline-none focus:ring-0 p-0 overflow-hidden selection:bg-blue-300 caret-gray-800 placeholder:text-gray-400"
+                style={{ minHeight: "100px" }}
+              />
             )}
 
             {showBackgroundSelector && mediaItems.length === 0 && (
