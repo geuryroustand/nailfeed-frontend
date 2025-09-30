@@ -20,13 +20,15 @@ export async function GET(request: NextRequest) {
       params.append(key, value)
     })
 
-    // Force collections to be scoped to the authenticated owner
+    // Force collections to be scoped to the authenticated owner (Strapi v5)
     params.delete('filters[owner][id][$eq]')
+    params.delete('filters[owner][documentId][$eq]')
     params.delete('filters[owner][email][$eq]')
     params.delete('filters[owner][username][$eq]')
 
     const ownerId = Number(session.userId)
     if (Number.isFinite(ownerId)) {
+      // Use numeric ID for Strapi v5 owner relation
       params.set('filters[owner][id][$eq]', ownerId.toString())
     } else if (session.email) {
       params.set('filters[owner][email][$eq]', session.email)
@@ -34,7 +36,12 @@ export async function GET(request: NextRequest) {
       params.set('filters[owner][username][$eq]', session.username)
     }
 
-    // Default params for collections
+    // Ensure we get published collections only (Strapi v5)
+    if (!params.has('publicationState')) {
+      params.set('publicationState', 'live')
+    }
+
+    // Default params for collections (Strapi v5 optimized)
     if (!params.has('populate[0]')) {
       params.set('populate[0]', 'coverImage')
       params.set('populate[1]', 'owner')
@@ -42,8 +49,24 @@ export async function GET(request: NextRequest) {
       params.set('populate[3]', 'shares')
     }
 
+    // Ensure essential fields are included
+    if (!params.has('fields[0]')) {
+      params.set('fields[0]', 'name')
+      params.set('fields[1]', 'description')
+      params.set('fields[2]', 'visibility')
+      params.set('fields[3]', 'shareToken')
+      params.set('fields[4]', 'createdAt')
+      params.set('fields[5]', 'updatedAt')
+      params.set('fields[6]', 'publishedAt')
+    }
+
     if (!params.has('sort')) {
       params.set('sort', 'updatedAt:desc')
+    }
+
+    // Add pagination for better performance
+    if (!params.has('pagination[limit]')) {
+      params.set('pagination[limit]', '100')
     }
 
     const response = await fetch(`${STRAPI_BASE_URL}/api/collections?${params}`, {

@@ -114,6 +114,7 @@ export interface CreateCollectionShareData {
 
 // Transform Strapi collection to frontend format
 function transformCollection(strapiCollection: StrapiCollection): Collection {
+  // Handle Strapi v5 owner relation properly
   const ownerSource = (strapiCollection as any).owner?.data ?? (strapiCollection as any).owner
   const owner = ownerSource
     ? {
@@ -132,8 +133,14 @@ function transformCollection(strapiCollection: StrapiCollection): Collection {
       }
     : undefined
 
+  // Ensure we have a valid documentId for Strapi v5
+  const collectionId = strapiCollection.documentId ?? strapiCollection.id?.toString()
+  if (!collectionId) {
+    throw new Error(`Collection missing documentId: ${JSON.stringify(strapiCollection)}`)
+  }
+
   return {
-    id: strapiCollection.documentId,
+    id: collectionId,
     name: strapiCollection.name,
     description: strapiCollection.description,
     coverImage: strapiCollection.coverImage?.url
@@ -183,12 +190,27 @@ export class CollectionsService {
   // Get all user collections
   static async getUserCollections(): Promise<Collection[]> {
     const headers = await getAuthHeaders();
+    const session = await verifySession();
+
+    if (!session?.userId) {
+      throw new Error("User authentication required");
+    }
 
     const params = new URLSearchParams({
       "populate[0]": "coverImage",
       "populate[1]": "owner",
       "populate[2]": "posts",
       "populate[3]": "shares",
+      "filters[owner][id][$eq]": session.userId.toString(),
+      "fields[0]": "name",
+      "fields[1]": "description",
+      "fields[2]": "visibility",
+      "fields[3]": "shareToken",
+      "fields[4]": "createdAt",
+      "fields[5]": "updatedAt",
+      "fields[6]": "publishedAt",
+      "publicationState": "live",
+      "pagination[limit]": "100",
       sort: "updatedAt:desc",
     });
 
@@ -197,14 +219,14 @@ export class CollectionsService {
       {
         method: "GET",
         headers,
-        cache: "no-store", // Force fresh data
+        cache: "no-store", // Force fresh data for user collections
       }
     );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Strapi collections error:", response.status, errorText);
-      throw new Error(`Failed to fetch collections: ${response.status}`);
+      console.error("Strapi getUserCollections error:", response.status, errorText);
+      throw new Error(`Failed to fetch user collections: ${response.status}`);
     }
 
     const data = await response.json();

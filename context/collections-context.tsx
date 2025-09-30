@@ -279,14 +279,16 @@ export function CollectionsProvider({ children }: { children: ReactNode }) {
     try {
       const params = new URLSearchParams({
         "populate[0]": "coverImage",
-        "populate[1]": "posts",
-        "populate[2]": "shares",
+        "populate[1]": "owner",
+        "populate[2]": "posts",
+        "populate[3]": "shares",
         "fields[0]": "name",
         "fields[1]": "description",
         "fields[2]": "visibility",
         "fields[3]": "shareToken",
         "fields[4]": "createdAt",
         "fields[5]": "updatedAt",
+        "publicationState": "live",
         sort: "updatedAt:desc"
       })
 

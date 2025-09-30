@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic"
 export const revalidate = 0
 
 export default async function PublicCollectionDetailPage({ params }: CollectionDetailPageProps) {
-  const { id } = params
+  const { id } = await params
   let collection = null
   try {
     collection = await getPublicCollectionWithPostsAction(id)
