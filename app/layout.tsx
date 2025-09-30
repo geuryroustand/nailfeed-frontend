@@ -22,6 +22,7 @@ import FirstTimeVisitorNotification from "@/components/first-time-visitor-notifi
 import NotificationPermissionPrompt from "@/components/notification-permission-prompt"
 import NotificationHandler from "@/components/notification-handler"
 import ServiceWorkerManager from "@/components/service-worker-manager"
+import { NuqsAdapter } from "nuqs/adapters/next/app"
 
 // Initialize configuration
 config.initialize()
@@ -93,17 +94,19 @@ export default function RootLayout({
               <ProfileProvider>
                 <CollectionsProvider>
                   <MoodProvider>
-                    <ClientHeaderWrapper />
-                    {/* Wrap with ReactionProvider */}
-                    <ReactionProvider>{children}</ReactionProvider>
-                    <ApiStatusIndicator />
-                    <Toaster />
-                    <ServiceWorkerManager />
-                    <PWAInstaller />
-                    <PWAUpdatePrompt />
-                    <FirstTimeVisitorNotification />
-                    <NotificationPermissionPrompt />
-                    <NotificationHandler />
+                    <NuqsAdapter>
+                      <ClientHeaderWrapper />
+                      {/* Wrap with ReactionProvider */}
+                      <ReactionProvider>{children}</ReactionProvider>
+                      <ApiStatusIndicator />
+                      <Toaster />
+                      <ServiceWorkerManager />
+                      <PWAInstaller />
+                      <PWAUpdatePrompt />
+                      <FirstTimeVisitorNotification />
+                      <NotificationPermissionPrompt />
+                      <NotificationHandler />
+                    </NuqsAdapter>
                   </MoodProvider>
                 </CollectionsProvider>
               </ProfileProvider>
