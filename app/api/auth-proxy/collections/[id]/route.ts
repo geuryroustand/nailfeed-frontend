@@ -1,7 +1,7 @@
-import { type NextRequest, NextResponse } from 'next/server'
-import { verifySession } from '@/lib/auth/session'
+import { type NextRequest, NextResponse } from "next/server"
+import { verifySession } from "@/lib/auth/session"
 
-const STRAPI_BASE_URL = process.env.STRAPI_BASE_URL || process.env.NEXT_PUBLIC_API_URL
+const API_BASE_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL
 
 interface RouteParams {
   id: string
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const token = session?.strapiJWT
 
     if (!session || !token) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 })
     }
 
     const { id } = await resolveParams(context)
@@ -33,37 +33,31 @@ export async function GET(request: NextRequest, context: RouteContext) {
     })
 
     // Default params for collections
-    if (!queryParams.has('populate[0]')) {
-      queryParams.set('populate[0]', 'coverImage')
-      queryParams.set('populate[1]', 'owner')
-      queryParams.set('populate[2]', 'posts')
-      queryParams.set('populate[3]', 'shares')
+    if (!queryParams.has("populate[0]")) {
+      queryParams.set("populate[0]", "coverImage")
+      queryParams.set("populate[1]", "owner")
+      queryParams.set("populate[2]", "posts")
+      queryParams.set("populate[3]", "shares")
     }
 
-    const response = await fetch(`${STRAPI_BASE_URL}/api/collections/${id}?${queryParams}`, {
-      method: 'GET',
+    const response = await fetch(`${API_BASE_URL}/api/collections/${id}?${queryParams}`, {
+      method: "GET",
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
       },
     })
 
     if (!response.ok) {
-      console.error('Strapi collection error:', response.status, await response.text())
-      return NextResponse.json(
-        { error: 'Failed to fetch collection' },
-        { status: response.status }
-      )
+      console.error("Strapi collection error:", response.status, await response.text())
+      return NextResponse.json({ error: "Failed to fetch collection" }, { status: response.status })
     }
 
     const data = await response.json()
     return NextResponse.json(data)
   } catch (error) {
-    console.error('Collection proxy error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    console.error("Collection proxy error:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
 
@@ -73,37 +67,31 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const token = session?.strapiJWT
 
     if (!session || !token) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 })
     }
 
     const { id } = await resolveParams(context)
     const body = await request.json()
 
-    const response = await fetch(`${STRAPI_BASE_URL}/api/collections/${id}`, {
-      method: 'PUT',
+    const response = await fetch(`${API_BASE_URL}/api/collections/${id}`, {
+      method: "PUT",
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
     })
 
     if (!response.ok) {
-      console.error('Strapi update collection error:', response.status, await response.text())
-      return NextResponse.json(
-        { error: 'Failed to update collection' },
-        { status: response.status }
-      )
+      console.error("Strapi update collection error:", response.status, await response.text())
+      return NextResponse.json({ error: "Failed to update collection" }, { status: response.status })
     }
 
     const data = await response.json()
     return NextResponse.json(data)
   } catch (error) {
-    console.error('Update collection proxy error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    console.error("Update collection proxy error:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
 
@@ -113,33 +101,27 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     const token = session?.strapiJWT
 
     if (!session || !token) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 })
     }
 
     const { id } = await resolveParams(context)
 
-    const response = await fetch(`${STRAPI_BASE_URL}/api/collections/${id}`, {
-      method: 'DELETE',
+    const response = await fetch(`${API_BASE_URL}/api/collections/${id}`, {
+      method: "DELETE",
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
       },
     })
 
     if (!response.ok) {
-      console.error('Strapi delete collection error:', response.status, await response.text())
-      return NextResponse.json(
-        { error: 'Failed to delete collection' },
-        { status: response.status }
-      )
+      console.error("Strapi delete collection error:", response.status, await response.text())
+      return NextResponse.json({ error: "Failed to delete collection" }, { status: response.status })
     }
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Delete collection proxy error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    console.error("Delete collection proxy error:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
