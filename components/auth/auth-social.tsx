@@ -22,7 +22,7 @@ export default function AuthSocial() {
   return (
     <div className="grid grid-cols-1 gap-3 mt-4">
       <a
-        href={`${baseURL}/api/connect/google`}
+        href={`/auth/google?origin=web`}
         className="w-full text-xs sm:text-sm flex items-center justify-center px-4 py-2 relative border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
         onClick={() => handleLinkClick("google")}
       >
