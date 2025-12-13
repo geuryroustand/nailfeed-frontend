@@ -7,11 +7,13 @@ export async function GET(request: NextRequest) {
     const access_token = searchParams.get("access_token")
     const id_token = searchParams.get("id_token")
     const error = searchParams.get("error")
+    const isMobile = searchParams.get("mobile") === "true"
 
     console.log("Google redirect callback received:", {
       access_token: !!access_token,
       id_token: !!id_token,
       error,
+      isMobile,
     })
 
     if (error) {
@@ -85,6 +87,18 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(new URL("/auth?error=no_jwt", request.url))
       }
 
+      // If mobile, redirect to React page that handles deep link
+      if (isMobile) {
+        console.log("Mobile detected, redirecting to mobile page")
+        const redirectUrl = new URL("/connect/google/mobile-redirect", request.url)
+        redirectUrl.searchParams.set("jwt", data.jwt)
+        redirectUrl.searchParams.set("userId", data.user.id.toString())
+        redirectUrl.searchParams.set("username", data.user.username)
+
+        return NextResponse.redirect(redirectUrl)
+      }
+
+      // Web flow - create session and redirect to home
       await createSession(data.user, data.jwt, false)
 
       console.log("Session created, redirecting to home")
