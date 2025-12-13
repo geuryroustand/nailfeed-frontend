@@ -7,13 +7,17 @@ export async function GET(request: NextRequest) {
     const access_token = searchParams.get("access_token")
     const id_token = searchParams.get("id_token")
     const error = searchParams.get("error")
-    const isMobile = searchParams.get("mobile") === "true"
+
+    // Check User-Agent to detect mobile app
+    const userAgent = request.headers.get("user-agent") || ""
+    const isMobile = userAgent.includes("Expo") || searchParams.get("mobile") === "true"
 
     console.log("Google redirect callback received:", {
       access_token: !!access_token,
       id_token: !!id_token,
       error,
       isMobile,
+      userAgent: userAgent.substring(0, 100),
     })
 
     if (error) {
