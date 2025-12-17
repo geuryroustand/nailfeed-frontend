@@ -10,21 +10,19 @@ export async function GET(request: NextRequest) {
     process.env.NODE_ENV === "development"
       ? "http://localhost:1337"
       : process.env.NEXT_PUBLIC_API_URL || "https://api.nailfeed.com";
-
-  const redirectToStrapi = `${strapiUrl}/api/connect/google`;
+  const frontendUrl = request.nextUrl.origin;
+  const redirectUrl = `${frontendUrl}/connect/google/redirect?origin=${encodeURIComponent(
+    origin
+  )}`;
+  const redirectToStrapi = `${strapiUrl}/api/connect/google?redirectUrl=${encodeURIComponent(
+    redirectUrl
+  )}`;
 
   console.log("Redirecting to Strapi Google connect:", {
     origin,
     redirectToStrapi,
+    redirectUrl,
   });
 
-  const response = NextResponse.redirect(redirectToStrapi);
-
-  response.cookies.set("login_origin", origin, {
-    path: "/",
-    httpOnly: true,
-    sameSite: "lax",
-  });
-
-  return response;
+  return NextResponse.redirect(redirectToStrapi);
 }

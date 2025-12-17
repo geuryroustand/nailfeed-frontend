@@ -8,12 +8,16 @@ export async function GET(request: NextRequest) {
     const id_token = searchParams.get("id_token");
     const error = searchParams.get("error");
     const state = searchParams.get("state");
-    const origin = request.cookies.get("login_origin")?.value || "web";
+    const originParam = searchParams.get("origin");
+    const origin =
+      originParam || request.cookies.get("login_origin")?.value || "web";
 
     console.log("Google redirect callback received:", {
       access_token: !!access_token,
       id_token: !!id_token,
       error,
+      originParam,
+      origin,
     });
 
     if (error) {
