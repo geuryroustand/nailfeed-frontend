@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
       }
 
       if (origin === "app") {
-        const appUrl = `nailfeedapp://auth?jwt=${encodeURIComponent(
+        const appUrl = `nailfeedapp://auth/google/callback?jwt=${encodeURIComponent(
           data.jwt
         )}&userId=${encodeURIComponent(
           data.user?.id ?? ""
