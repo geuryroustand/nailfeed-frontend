@@ -110,14 +110,14 @@ export async function GET(request: NextRequest) {
       }
 
       if (origin === "app") {
-        const appUrl = `nailfeedapp://auth/google/callback?jwt=${encodeURIComponent(
-          data.jwt
-        )}&userId=${encodeURIComponent(
-          data.user?.id ?? ""
-        )}&username=${encodeURIComponent(data.user?.username ?? "")}`;
+        // Redirect to mobile-callback page for client-side deep link
+        const mobileCallbackUrl = new URL('/connect/google/mobile-callback', request.url);
+        mobileCallbackUrl.searchParams.set('jwt', data.jwt);
+        mobileCallbackUrl.searchParams.set('userId', data.user?.id ?? '');
+        mobileCallbackUrl.searchParams.set('username', data.user?.username ?? '');
 
-        console.log("Redirecting to Expo app deep link:", appUrl);
-        return NextResponse.redirect(appUrl);
+        console.log("Redirecting to mobile callback page");
+        return NextResponse.redirect(mobileCallbackUrl);
       }
 
       await createSession(data.user, data.jwt, false);
