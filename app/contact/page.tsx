@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -31,11 +31,16 @@ const contactSchema = z.object({
 type ContactFormData = z.infer<typeof contactSchema>;
 type FieldErrors = Partial<Record<keyof ContactFormData, string>>;
 
-// Hoist static API URL computation
-const API_URL =
-  typeof window !== "undefined" && process.env.NODE_ENV === "development"
-    ? "http://localhost:1337"
-    : process.env.NEXT_PUBLIC_API_URL || "https://api.nailfeed.com";
+// Hoist static JSX outside component (rendering-hoist-jsx)
+const SuccessIcon = <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />;
+const HeaderIcon = (
+  <div className="inline-flex items-center justify-center w-16 h-16 bg-pink-100 rounded-full mb-4">
+    <Mail className="h-8 w-8 text-pink-500" />
+  </div>
+);
+const SendIcon = <Send className="mr-2 h-4 w-4" />;
+const LoadingIcon = <Loader2 className="mr-2 h-4 w-4 animate-spin" />;
+
 
 export default function ContactPage() {
   const [isPending, startTransition] = useTransition();
@@ -51,6 +56,17 @@ export default function ContactPage() {
       return rest;
     });
   }, []);
+
+  // Memoize onChange handlers to prevent recreation on each render (rerender-memo-with-default-value)
+  const fieldHandlers = useMemo(
+    () => ({
+      name: () => clearFieldError("name"),
+      email: () => clearFieldError("email"),
+      subject: () => clearFieldError("subject"),
+      message: () => clearFieldError("message"),
+    }),
+    [clearFieldError]
+  );
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent<HTMLFormElement>) => {
@@ -87,10 +103,10 @@ export default function ContactPage() {
       // Use startTransition for non-urgent update (rerender-transitions)
       startTransition(async () => {
         try {
-          const response = await fetch(`${API_URL}/api/conctacts`, {
+          const response = await fetch("/api/contact", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ data: result.data }),
+            body: JSON.stringify(result.data),
           });
 
           if (!response.ok) {
@@ -113,7 +129,7 @@ export default function ContactPage() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-xl shadow-sm p-8 text-center">
-          <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
+          {SuccessIcon}
           <h1 className="text-2xl font-bold mb-2">Message Sent!</h1>
           <p className="text-gray-600 mb-6">
             Thank you for contacting us. We'll get back to you as soon as
@@ -134,9 +150,7 @@ export default function ContactPage() {
       <div className="max-w-2xl mx-auto">
         <div className="bg-white rounded-xl shadow-sm p-6 sm:p-8">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-pink-100 rounded-full mb-4">
-              <Mail className="h-8 w-8 text-pink-500" />
-            </div>
+            {HeaderIcon}
             <h1 className="text-2xl sm:text-3xl font-bold">Contact Us</h1>
             <p className="text-gray-600 mt-2">
               Have a question or feedback? We'd love to hear from you.
@@ -154,7 +168,7 @@ export default function ContactPage() {
                   aria-invalid={fieldErrors.name ? "true" : "false"}
                   aria-describedby={fieldErrors.name ? "name-error" : undefined}
                   className={fieldErrors.name ? "border-red-500" : ""}
-                  onChange={() => clearFieldError("name")}
+                  onChange={fieldHandlers.name}
                 />
                 {fieldErrors.name ? (
                   <p id="name-error" className="text-sm text-red-600">
@@ -172,7 +186,7 @@ export default function ContactPage() {
                   aria-invalid={fieldErrors.email ? "true" : "false"}
                   aria-describedby={fieldErrors.email ? "email-error" : undefined}
                   className={fieldErrors.email ? "border-red-500" : ""}
-                  onChange={() => clearFieldError("email")}
+                  onChange={fieldHandlers.email}
                 />
                 {fieldErrors.email ? (
                   <p id="email-error" className="text-sm text-red-600">
@@ -191,7 +205,7 @@ export default function ContactPage() {
                 aria-invalid={fieldErrors.subject ? "true" : "false"}
                 aria-describedby={fieldErrors.subject ? "subject-error" : undefined}
                 className={fieldErrors.subject ? "border-red-500" : ""}
-                onChange={() => clearFieldError("subject")}
+                onChange={fieldHandlers.subject}
               />
               {fieldErrors.subject ? (
                 <p id="subject-error" className="text-sm text-red-600">
@@ -210,7 +224,7 @@ export default function ContactPage() {
                 aria-invalid={fieldErrors.message ? "true" : "false"}
                 aria-describedby={fieldErrors.message ? "message-error" : undefined}
                 className={fieldErrors.message ? "border-red-500" : ""}
-                onChange={() => clearFieldError("message")}
+                onChange={fieldHandlers.message}
               />
               {fieldErrors.message ? (
                 <p id="message-error" className="text-sm text-red-600">
@@ -233,12 +247,12 @@ export default function ContactPage() {
             >
               {isPending ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {LoadingIcon}
                   Sending...
                 </>
               ) : (
                 <>
-                  <Send className="mr-2 h-4 w-4" />
+                  {SendIcon}
                   Send Message
                 </>
               )}
