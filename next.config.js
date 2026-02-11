@@ -39,6 +39,12 @@ const nextConfig = {
         port: "1337",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "ik.imagekit.io",
+        port: "",
+        pathname: "/**",
+      },
     ],
   },
 
