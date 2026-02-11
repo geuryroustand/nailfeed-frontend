@@ -183,7 +183,7 @@ export function TrendingSectionClient({ trendingTags, suggestedUsers, userCollec
           <Link href="/about" className="hover:underline">
             About
           </Link>
-          <Link href="#" className="hover:underline">
+          <Link href="/contact" className="hover:underline">
             Help
           </Link>
           <Link href="/policies/privacy-policy" className="hover:underline">

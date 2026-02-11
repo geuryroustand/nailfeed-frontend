@@ -29,3 +29,8 @@ package-lock.json
 pnpm-lock.yaml
 Todo.md
 certificates
+
+.commandcode
+.claude
+.agent
+.agents

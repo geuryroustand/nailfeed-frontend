@@ -1,40 +1,44 @@
-import webpush from "web-push"
+import webpush from "web-push";
 
 const API_URL =
-  process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "https://nailfeed-backend-production.up.railway.app"
+  process.env.API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "https://nailfeed-backend-production.up.railway.app";
 
 // Configure VAPID keys
 if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT || "mailto:support@nailfeed.com",
+    process.env.VAPID_SUBJECT || "mailto:hello@nailfeed.com",
     process.env.VAPID_PUBLIC_KEY,
     process.env.VAPID_PRIVATE_KEY,
-  )
+  );
 }
 
 export interface PushSubscription {
-  id: string
-  endpoint: string
-  p256dh: string
-  auth: string
-  isActive: boolean
+  id: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  isActive: boolean;
   user: {
-    id: string
-  }
+    id: string;
+  };
 }
 
 export interface NotificationPayload {
-  title: string
-  body: string
-  url: string
-  icon?: string
-  badge?: string
+  title: string;
+  body: string;
+  url: string;
+  icon?: string;
+  badge?: string;
 }
 
 /**
  * Fetch active push subscriptions for a specific user from Strapi
  */
-export async function getUserPushSubscriptions(userId: string): Promise<PushSubscription[]> {
+export async function getUserPushSubscriptions(
+  userId: string,
+): Promise<PushSubscription[]> {
   try {
     const response = await fetch(
       `${API_URL}/api/push-subscriptions?filters[user][id][$eq]=${userId}&filters[isActive][$eq]=true`,
@@ -45,14 +49,14 @@ export async function getUserPushSubscriptions(userId: string): Promise<PushSubs
           Authorization: `Bearer ${process.env.API_TOKEN}`,
         },
       },
-    )
+    );
 
     if (!response.ok) {
-      console.error(`Failed to fetch push subscriptions: ${response.status}`)
-      return []
+      console.error(`Failed to fetch push subscriptions: ${response.status}`);
+      return [];
     }
 
-    const data = await response.json()
+    const data = await response.json();
 
     if (data.data && Array.isArray(data.data)) {
       return data.data.map((sub: any) => ({
@@ -64,13 +68,13 @@ export async function getUserPushSubscriptions(userId: string): Promise<PushSubs
         user: {
           id: sub.attributes?.user?.data?.id || sub.user?.id || userId,
         },
-      }))
+      }));
     }
 
-    return []
+    return [];
   } catch (error) {
-    console.error("Error fetching push subscriptions:", error)
-    return []
+    console.error("Error fetching push subscriptions:", error);
+    return [];
   }
 }
 
@@ -88,7 +92,7 @@ export async function sendPushNotification(
         p256dh: subscription.p256dh,
         auth: subscription.auth,
       },
-    }
+    };
 
     const notificationPayload = JSON.stringify({
       title: payload.title,
@@ -99,47 +103,64 @@ export async function sendPushNotification(
       data: {
         url: payload.url,
       },
-    })
+    });
 
-    await webpush.sendNotification(pushSubscription, notificationPayload)
-    console.log(`[v0] Push notification sent successfully to subscription ${subscription.id}`)
+    await webpush.sendNotification(pushSubscription, notificationPayload);
+    console.log(
+      `[v0] Push notification sent successfully to subscription ${subscription.id}`,
+    );
 
-    return { success: true, shouldCleanup: false }
+    return { success: true, shouldCleanup: false };
   } catch (error: any) {
-    console.error(`[v0] Failed to send push notification to subscription ${subscription.id}:`, error)
+    console.error(
+      `[v0] Failed to send push notification to subscription ${subscription.id}:`,
+      error,
+    );
 
     // Check if we should cleanup this subscription (404/410 errors)
     const shouldCleanup =
       error.statusCode === 404 ||
       error.statusCode === 410 ||
       error.code === "InvalidRegistration" ||
-      error.code === "NotRegistered"
+      error.code === "NotRegistered";
 
-    return { success: false, shouldCleanup }
+    return { success: false, shouldCleanup };
   }
 }
 
 /**
  * Mark a push subscription as inactive or delete it from Strapi
  */
-export async function cleanupPushSubscription(subscriptionId: string): Promise<void> {
+export async function cleanupPushSubscription(
+  subscriptionId: string,
+): Promise<void> {
   try {
     // Delete the subscription from Strapi
-    const response = await fetch(`${API_URL}/api/push-subscriptions/${subscriptionId}`, {
-      method: "DELETE",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.API_TOKEN}`,
+    const response = await fetch(
+      `${API_URL}/api/push-subscriptions/${subscriptionId}`,
+      {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.API_TOKEN}`,
+        },
       },
-    })
+    );
 
     if (!response.ok) {
-      console.error(`Failed to delete push subscription ${subscriptionId}: ${response.status}`)
+      console.error(
+        `Failed to delete push subscription ${subscriptionId}: ${response.status}`,
+      );
     } else {
-      console.log(`[v0] Cleaned up invalid push subscription ${subscriptionId}`)
+      console.log(
+        `[v0] Cleaned up invalid push subscription ${subscriptionId}`,
+      );
     }
   } catch (error) {
-    console.error(`Error cleaning up push subscription ${subscriptionId}:`, error)
+    console.error(
+      `Error cleaning up push subscription ${subscriptionId}:`,
+      error,
+    );
   }
 }
 
@@ -150,73 +171,82 @@ export async function sendNotificationToUser(
   userId: string,
   payload: NotificationPayload,
 ): Promise<{ sent: number; failed: number; cleaned: number }> {
-  const subscriptions = await getUserPushSubscriptions(userId)
+  const subscriptions = await getUserPushSubscriptions(userId);
 
   if (subscriptions.length === 0) {
-    console.log(`[v0] No active push subscriptions found for user ${userId}`)
-    return { sent: 0, failed: 0, cleaned: 0 }
+    console.log(`[v0] No active push subscriptions found for user ${userId}`);
+    return { sent: 0, failed: 0, cleaned: 0 };
   }
 
-  console.log(`[v0] Sending push notifications to ${subscriptions.length} devices for user ${userId}`)
+  console.log(
+    `[v0] Sending push notifications to ${subscriptions.length} devices for user ${userId}`,
+  );
 
-  let sent = 0
-  let failed = 0
-  let cleaned = 0
+  let sent = 0;
+  let failed = 0;
+  let cleaned = 0;
 
   // Send notifications to all subscriptions
   const promises = subscriptions.map(async (subscription) => {
-    const result = await sendPushNotification(subscription, payload)
+    const result = await sendPushNotification(subscription, payload);
 
     if (result.success) {
-      sent++
+      sent++;
     } else {
-      failed++
+      failed++;
 
       if (result.shouldCleanup) {
-        await cleanupPushSubscription(subscription.id)
-        cleaned++
+        await cleanupPushSubscription(subscription.id);
+        cleaned++;
       }
     }
-  })
+  });
 
-  await Promise.all(promises)
+  await Promise.all(promises);
 
-  console.log(`[v0] Push notification results for user ${userId}: ${sent} sent, ${failed} failed, ${cleaned} cleaned`)
+  console.log(
+    `[v0] Push notification results for user ${userId}: ${sent} sent, ${failed} failed, ${cleaned} cleaned`,
+  );
 
-  return { sent, failed, cleaned }
+  return { sent, failed, cleaned };
 }
 
 /**
  * Get post author information from Strapi
  */
-export async function getPostAuthor(postId: string | number): Promise<{ id: string; username: string } | null> {
+export async function getPostAuthor(
+  postId: string | number,
+): Promise<{ id: string; username: string } | null> {
   try {
-    const response = await fetch(`${API_URL}/api/posts/${postId}?populate=user`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.API_TOKEN}`,
+    const response = await fetch(
+      `${API_URL}/api/posts/${postId}?populate=user`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.API_TOKEN}`,
+        },
       },
-    })
+    );
 
     if (!response.ok) {
-      console.error(`Failed to fetch post author: ${response.status}`)
-      return null
+      console.error(`Failed to fetch post author: ${response.status}`);
+      return null;
     }
 
-    const data = await response.json()
+    const data = await response.json();
 
     if (data.data?.attributes?.user?.data) {
-      const user = data.data.attributes.user.data
+      const user = data.data.attributes.user.data;
       return {
         id: user.id.toString(),
         username: user.attributes?.username || "user",
-      }
+      };
     }
 
-    return null
+    return null;
   } catch (error) {
-    console.error("Error fetching post author:", error)
-    return null
+    console.error("Error fetching post author:", error);
+    return null;
   }
 }
